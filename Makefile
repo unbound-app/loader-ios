@@ -5,15 +5,15 @@ TARGET := iphone:clang:latest:11.0
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = Enmity
+TWEAK_NAME = Unbound
 
 $(TWEAK_NAME)_FILES = $(shell find Sources -name "*.x*")
 $(TWEAK_NAME)_CFLAGS = -fobjc-arc
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation
 
-BUNDLE_NAME = EnmityResources
+BUNDLE_NAME = UnboundResources
 
-$(BUNDLE_NAME)_INSTALL_PATH = "/Library/Application\ Support/Enmity"
+$(BUNDLE_NAME)_INSTALL_PATH = "/Library/Application\ Support/Unbound"
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk

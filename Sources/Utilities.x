@@ -13,7 +13,7 @@
 		}
 
 		// Attempt to get the bundle from an exact path
-		NSString *exact = @"/Library/Application Support/Enmity/EnmityResources.bundle";
+		NSString *exact = @"/Library/Application Support/Unbound/UnboundResources.bundle";
 		if ([FileSystem exists:exact]) {
 			bundle = exact;
 			return exact;
@@ -21,7 +21,7 @@
 
 		// Fall back to a relative path on non-jailbroken devices
 		NSURL *url = [[NSBundle mainBundle] bundleURL];
-		NSString *relative = [NSString stringWithFormat:@"%@/EnmityResources.bundle", [url path]];
+		NSString *relative = [NSString stringWithFormat:@"%@/UnboundResources.bundle", [url path]];
 		if ([FileSystem exists:relative]) {
 			bundle = relative;
 			return relative;
@@ -59,7 +59,7 @@
 	}
 
 	+ (void) alert:(NSString*)message {
-		return [Utilities alert:message title:@"Enmity"];
+		return [Utilities alert:message title:@"Unbound"];
 	}
 
 	+ (void) alert:(NSString*)message title:(NSString*)title {

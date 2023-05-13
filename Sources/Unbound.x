@@ -1,18 +1,18 @@
-#import "../Headers/Enmity.h"
+#import "../Headers/Unbound.h"
 
 %hook RCTCxxBridge
 	- (void) executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async {
 		NSString *BUNDLE = [NSString pathWithComponents:@[FileSystem.documents, @"bundle.js"]];
-		NSURL *SOURCE = [NSURL URLWithString:@"enmity"];
+		NSURL *SOURCE = [NSURL URLWithString:@"unbound"];
 
 		// Don't load bundle if not configured to do so.
-		if (![Settings getBoolean:@"enmity" key:@"loader.enabled" def:YES]) {
+		if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES]) {
 			NSLog(@"Loader is disabled");
 			return %orig;
 		}
 
 		// Apply React DevTools patch if its enabled
-		if ([Settings getBoolean:@"enmity" key:@"loader.devtools" def:NO]) {
+		if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO]) {
 			@try {
 				NSData *bundle = [Utilities getResource:@"devtools" data:true];
 
@@ -33,7 +33,7 @@
 			NSLog(@"Modules patch injection failed, expect issues. %@", e);
 		}
 
-		// Preload Enmity's settings, plugins & themes
+		// Preload Unbound's settings, plugins & themes
 		@try {
 			NSString *bundle = [Utilities getResource:@"preload"];
 			NSString *settings = [Settings getSettings];
@@ -72,21 +72,21 @@
 			}
 		}
 
-		// Check if Enmity was downloaded properly
+		// Check if Unbound was downloaded properly
 		if (![FileSystem exists:BUNDLE]) {
 			return [Utilities alert:@"Bundle not found, please report this to the developers."];
 		}
 
-		// Inject Enmity script
+		// Inject Unbound script
 		@try {
 			NSData *bundle = [FileSystem readFile:BUNDLE];
 
-			NSLog(@"Executing Enmity's bundle...");
-			%orig(bundle, SOURCE, false);
-			NSLog(@"Enmity's bundle successfully executed.");
+			NSLog(@"Executing Unbound's bundle...");
+			%orig(bundle, SOURCE, true);
+			NSLog(@"Unbound's bundle successfully executed.");
 		} @catch (NSException *e) {
-			NSLog(@"Enmity's bundle failed execution, aborting. (%@)", e.reason);
-			return [Utilities alert:@"Failed to load Enmity's bundle. Please report this to the developers."];
+			NSLog(@"Unbound's bundle failed execution, aborting. (%@)", e.reason);
+			return [Utilities alert:@"Failed to load Unbound's bundle. Please report this to the developers."];
 		}
 	}
 %end

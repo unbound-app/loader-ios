@@ -1,8 +1,8 @@
-this.ENMITY_SETTINGS = %@;
-this.ENMITY_PLUGINS = %@;
-this.ENMITY_THEMES = %@;
+this.UNBOUND_SETTINGS = % @;
+this.UNBOUND_PLUGINS = % @;
+this.UNBOUND_THEMES = % @;
 
-this.ENMITY_LOADER = {
+this.UNBOUND_LOADER = {
 	platform: 'iOS',
 	origin: 'Substrate'
 };

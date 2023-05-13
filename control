@@ -1,11 +1,11 @@
-Name: Enmity
+Name: Unbound
 Description: The power of addons, all in your hand.
 Version: 3.0.0
-Package: app.enmity.ios
+Package: app.unbound.ios
 Architecture: iphoneos-arm
 Maintainer: Zoey, eternal
-Author: Enmity Team
+Author: Unbound Team
 Section: Tweaks
 Depends: mobilesubstrate (>= 0.9.5000)
-SileoDepiction: https://repo.enmity.app/depictions/enmity.json
-Icon: https://repo.enmity.app/icons/Enmity.png
+SileoDepiction: https://repo.unbound.app/depictions/unbound.json
+Icon: https://repo.unbound.app/icons/Unbound.png

@@ -118,7 +118,7 @@
 			}
 		}
 
-		if ([Settings getBoolean:@"enmity" key:@"loader.enabled" def:YES] && ![Settings getBoolean:@"enmity" key:@"recovery" def:NO]) {
+		if ([Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES] && ![Settings getBoolean:@"unbound" key:@"recovery" def:NO]) {
 			@try {
 				[Themes apply];
 			} @catch (NSException *e) {

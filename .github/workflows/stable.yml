@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: Build and publish Enmity for iOS
+    name: Build and publish Unbound for iOS
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
@@ -37,9 +37,9 @@ jobs:
         run : |
           git clone https://github.com/Al4ise/Azule ${{ github.workspace }}/Azule
 
-      - name: Prepare Enmity Patcher
+      - name: Prepare Unbound Patcher
         run : |
-          curl -L https://github.com/enmity-mod/patcher/releases/latest/download/patcher.mac-amd64 -o ${{ github.workspace }}/patcher
+          curl -L https://github.com/unbound-mod/patcher/releases/latest/download/patcher.mac-amd64 -o ${{ github.workspace }}/patcher
           chmod +x patcher
 
       - name: Patch Discord
@@ -51,32 +51,32 @@ jobs:
         run: |
           rm -f packages/*
           gmake clean package FINALPACKAGE=1
-          mv $(find packages -name "*.deb" -print -quit) out/Enmity.deb
+          mv $(find packages -name "*.deb" -print -quit) out/Unbound.deb
 
-      - name: Create Enmity.ipa
+      - name: Create Unbound.ipa
         run : |
-          ${{ github.workspace }}/Azule/azule -i Enmity.ipa -o out -f out/enmity.deb
-          mv out/Enmity+enmity.deb.ipa out/Enmity.ipa
+          ${{ github.workspace }}/Azule/azule -i Unbound.ipa -o out -f out/unbound.deb
+          mv out/Unbound+unbound.deb.ipa out/Unbound.ipa
 
       - name: Build dev deb
         run: |
           rm -f packages/*
-          echo $"$(sed 's/Name\:.*/Name\: Enmity (Dev)/' control)" > control
-          echo $"$(sed 's/Package\:.*/Package\: app.enmity.dev/' control)" > control
+          echo $"$(sed 's/Name\:.*/Name\: Unbound (Dev)/' control)" > control
+          echo $"$(sed 's/Package\:.*/Package\: app.unbound.dev/' control)" > control
           gmake clean package FINALPACKAGE=1 DEVTOOLS=1
-          mv $(find packages -name "*.deb" -print -quit) out/Enmity.Development.deb
+          mv $(find packages -name "*.deb" -print -quit) out/Unbound.Development.deb
 
-      - name: Create Enmity.Dev.ipa
+      - name: Create Unbound.Dev.ipa
         run : |
-          ${{ github.workspace }}/Azule/azule -i Enmity.ipa -o out -f out/Enmity.Development.deb
-          mv out/Enmity+Enmity.Development.deb.ipa out/Enmity.Development.ipa
+          ${{ github.workspace }}/Azule/azule -i Unbound.ipa -o out -f out/Unbound.Development.deb
+          mv out/Unbound+Unbound.Development.deb.ipa out/Unbound.Development.ipa
 
       - id: latestRelease
         uses: pozetroninc/github-action-get-latest-release@master
         if: startsWith(github.ref, 'refs/tags/') != true
         with:
-          owner: enmity-mod
-          repo: enmity
+          owner: unbound-mod
+          repo: unbound
           excludes: prerelease, draft
 
       - id: tagName
@@ -86,7 +86,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v1
         env:
-          GITHUB_REPOSITORY: "enmity-mod/enmity"
+          GITHUB_REPOSITORY: "unbound-mod/unbound"
         with:
           tag_name: ${{ steps.tagName.output.tag }}
           files: out/*

@@ -12,9 +12,9 @@
 
 #ifdef DEBUG
 #   define IS_DEBUG true
-#   define NSLog(fmt, ... ) NSLog((@"[Enmity] " fmt), ##__VA_ARGS__);
+#   define NSLog(fmt, ... ) NSLog((@"[Unbound] " fmt), ##__VA_ARGS__);
 #else
 #   define IS_DEBUG false
-#   define NSLog(fmt, ... ) NSLog((@"[Enmity] " fmt), ##__VA_ARGS__);
+#   define NSLog(fmt, ... ) NSLog((@"[Unbound] " fmt), ##__VA_ARGS__);
 // #   define NSLog(...) (void)0
 #endif

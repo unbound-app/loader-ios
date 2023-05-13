@@ -124,7 +124,7 @@
 		}
 
 		if (!documents) {
-			documents = [NSString pathWithComponents:@[NSHomeDirectory(), @"Documents", @"Enmity"]];
+			documents = [NSString pathWithComponents:@[NSHomeDirectory(), @"Documents", @"Unbound"]];
 		}
 
 		if (![FileSystem exists:documents]) {
