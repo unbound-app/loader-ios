@@ -1,7 +1,7 @@
 #import "../Headers/Settings.h"
 
 @implementation Settings
-	static NSDictionary *data = nil;
+	static NSMutableDictionary *data = nil;
 	static NSString *path = nil;
 
 	+ (void) init {
@@ -17,7 +17,7 @@
 			NSData *settings = [FileSystem readFile:path];
 
 			NSError *error;
-			data = [NSJSONSerialization JSONObjectWithData:settings options:kNilOptions error:&error];
+			data = [NSJSONSerialization JSONObjectWithData:settings options:NSJSONReadingMutableContainers error:&error];
 		}
 	}
 
@@ -43,8 +43,46 @@
 		return def;
 	}
 
+	+ (void) set:(NSString*)store key:(NSString*)key value:(id)value {
+		@try {
+			__block NSMutableDictionary *payload = data[store];
+
+			if (!payload) {
+				[payload setValue:[NSMutableDictionary dictionary] forKey:store];
+				payload = data[store];
+			};
+
+			// Ensure all keys exist before the last one
+			NSArray *keys = [key componentsSeparatedByString:@"."];
+			__block NSMutableDictionary *res = payload;
+
+			for (id key in keys) {
+				if ([keys count] == ([keys indexOfObject:key] + 1)) {
+					[res setValue:value forKey:key];
+					break;
+				}
+
+				if (res[key] == nil) {
+					[res setValue:[NSMutableDictionary dictionary] forKey:key];
+				}
+
+				res = res[key];
+			}
+
+			[Settings save];
+		} @catch (NSException *e) {
+			NSLog(@"Settings set failed. %@", e);
+		}
+	}
+
 	+ (void) reset {
 		NSString *payload = @"{}";
+
+		[FileSystem writeFile:path contents:[payload dataUsingEncoding:NSUTF8StringEncoding]];
+	}
+
+	+ (void) save {
+		NSString *payload = [Settings getSettings];
 
 		[FileSystem writeFile:path contents:[payload dataUsingEncoding:NSUTF8StringEncoding]];
 	}
