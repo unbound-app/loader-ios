@@ -18,6 +18,7 @@
 
 			NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
 
+			[request setHTTPMethod:@"HEAD"];
 			request.timeoutInterval = 2.0;
 			request.cachePolicy = NSURLRequestReloadIgnoringCacheData;
 
