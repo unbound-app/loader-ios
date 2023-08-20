@@ -158,8 +158,14 @@
 
 						if ([color isKindOfClass:[NSArray class]]) {
 							NSInteger appearance = [%c(DCDTheme) themeIndex];
+                            NSString *value;
 
-							NSString *value = [color objectAtIndex:appearance];
+                            @try {
+                                value = [color objectAtIndex:appearance];
+                            } @catch (NSException *e) {
+                                value = [color firstObject];
+                            }
+                            
 							if (!value) return getOriginalColor(class, selector);
 
 							UIColor *parsed = [Themes parseColor:value];
