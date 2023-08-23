@@ -28,8 +28,10 @@
 			@try {
 				NSString *dir = [NSString pathWithComponents:@[path, folder]];
 				NSString *deletion = [NSString pathWithComponents:@[dir, @".delete"]];
+                NSData *fileData = [FileSystem readFile:deletion];
+                NSString *shouldDelete = [[NSString alloc] initWithData:fileData encoding:NSUTF8StringEncoding];
 
-				if ([FileSystem exists:deletion]) {
+				if ([shouldDelete isEqualToString:@"true"]) {
 					NSLog(@"[Plugins] Deleting %@ as it's pending deletion.", folder);
 					BOOL deleted = [FileSystem delete:dir];
 
