@@ -1,6 +1,8 @@
 #import "../Headers/Updater.h"
 
 @implementation Updater
+	static NSString *etag = nil;
+
 	+ (BOOL) hasUpdate {
 		NSLog(@"Checking for updates...");
 
@@ -38,7 +40,7 @@
 							result = ![header isEqualToString:tag];
 
 							if (result) {
-								[Settings set:@"unbound" key:@"loader.update.etag" value:header];
+								etag = header;
 								NSLog(@"Detected new update.")
 							} else {
 								NSLog(@"No updates found.")
@@ -72,5 +74,10 @@
 		NSString *url = [Settings getString:@"unbound" key:@"loader.update.url" def:@"https://raw.githubusercontent.com/unbound-mod/unbound/main/dist/bundle.js"];
 
 		return [NSURL URLWithString:url];
+	}
+
+	// Properties
+	+ (NSString*) etag {
+		return etag;
 	}
 @end

@@ -16,8 +16,9 @@
 			@try {
 				NSData *bundle = [Utilities getResource:@"devtools" data:true];
 
-				NSLog(@"Injecting React DevTools patch");
+				NSLog(@"Attempting to execute DevTools bundle...");
 				%orig(bundle, SOURCE, false);
+				NSLog(@"Successfully executed DevTools bundle.");
 			} @catch (NSException *e) {
 				NSLog(@"React DevTools failed to initialize. %@", e);
 			}
@@ -27,8 +28,9 @@
 		@try {
 			NSData *bundle = [Utilities getResource:@"modules" data:true];
 
-			NSLog(@"Injecting modules patch");
+			NSLog(@"Attempting to execute modules patch...");
 			%orig(bundle, SOURCE, false);
+			NSLog(@"Successfully executed modules patch.");
 		} @catch (NSException *e) {
 			NSLog(@"Modules patch injection failed, expect issues. %@", e);
 		}
@@ -50,7 +52,6 @@
 			NSLog(@"Failed to pre-load settings, plugins and themes. %@", e);
 		}
 
-		NSLog(@"Executing Discord's bundle");
 		%orig(script, url, false);
 
 		// Check for updates & re-download bundle if necessary
@@ -60,6 +61,7 @@
 
 				NSLog(@"Downloading bundle...");
 				[FileSystem download:url path:BUNDLE];
+				[Settings set:@"unbound" key:@"loader.update.etag" value:Updater.etag];
 				NSLog(@"Bundle downloaded.");
 			} @catch (NSException *e) {
 				NSLog(@"Bundle download failed: %@", e.reason);
@@ -81,7 +83,7 @@
 		@try {
 			NSData *bundle = [FileSystem readFile:BUNDLE];
 
-			NSLog(@"Executing Unbound's bundle...");
+			NSLog(@"Attempting to execute bundle...");
 			%orig(bundle, SOURCE, true);
 			NSLog(@"Unbound's bundle successfully executed.");
 		} @catch (NSException *e) {
