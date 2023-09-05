@@ -77,6 +77,7 @@
 	+ (BOOL) download:(NSURL*)url path:(NSString*)path {
 		dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 
+		NSLog(@"Downloading file from %@ to %@", url, path);
 		NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
 		__block NSException *exception;
 

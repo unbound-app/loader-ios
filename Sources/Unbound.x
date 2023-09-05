@@ -61,7 +61,11 @@
 
 				NSLog(@"Downloading bundle...");
 				[FileSystem download:url path:BUNDLE];
-				[Settings set:@"unbound" key:@"loader.update.etag" value:Updater.etag];
+
+				if ([Updater etag] != nil) {
+					[Settings set:@"unbound" key:@"loader.update.etag" value:[Updater etag]];
+				}
+
 				NSLog(@"Bundle downloaded.");
 			} @catch (NSException *e) {
 				NSLog(@"Bundle download failed: %@", e.reason);
