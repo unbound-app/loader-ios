@@ -11,6 +11,20 @@
 	}
 %end
 
+// Sideload Fix | Credit to https://github.com/m4fn3/DiscordSideloadFix/blob/master/Tweak.xm
+%hook NSFileManager
+	- (NSURL *)containerURLForSecurityApplicationGroupIdentifier:(NSString *)identifier {
+		if (identifier != nil) {
+			NSArray *paths = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask];
+			NSURL *url = [paths lastObject];
+
+			return [url URLByAppendingPathComponent:@"AppGroup"];
+		}
+
+		return %orig(identifier);
+	}
+%end
+
 %group Debug
 	%hook NSError
 		- (id) initWithDomain:(id)domain code:(int)code userInfo:(id)userInfo {
