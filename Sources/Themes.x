@@ -43,20 +43,23 @@
 			@try {
 				NSString *dir = [NSString pathWithComponents:@[path, folder]];
 				NSString *deletion = [NSString pathWithComponents:@[dir, @".delete"]];
-                NSData *fileData = [FileSystem readFile:deletion];
-                NSString *shouldDelete = [[NSString alloc] initWithData:fileData encoding:NSUTF8StringEncoding];
 
-				if ([shouldDelete isEqualToString:@"true"]) {
-					NSLog(@"[Themes] Deleting %@ as it's pending deletion.", folder);
-					BOOL deleted = [FileSystem delete:dir];
+				if ([FileSystem exists:deletion]) {
+					NSData *data = [FileSystem readFile:deletion];
+					NSString *pending = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 
-					if (deleted) {
-						NSLog(@"[Themes] Deleted %@.", folder);
-					} else {
-						NSLog(@"[Themes] Failed to delete %@.", folder);
+					if ([pending isEqualToString:@"true"]) {
+						NSLog(@"[Themes] Deleting %@ as it's pending deletion.", folder);
+						BOOL deleted = [FileSystem delete:dir];
+
+						if (deleted) {
+							NSLog(@"[Themes] Deleted %@.", folder);
+						} else {
+							NSLog(@"[Themes] Failed to delete %@.", folder);
+						}
+
+						continue;
 					}
-
-					continue;
 				}
 
 				if (![FileSystem isDirectory:dir]) {
@@ -160,14 +163,14 @@
 
 						if ([color isKindOfClass:[NSArray class]]) {
 							NSInteger appearance = [%c(DCDTheme) themeIndex];
-                            NSString *value;
+							NSString *value;
 
-                            @try {
-                                value = [color objectAtIndex:appearance];
-                            } @catch (NSException *e) {
-                                value = [color firstObject];
-                            }
-                            
+							@try {
+								value = [color objectAtIndex:appearance];
+							} @catch (NSException *e) {
+								value = [color firstObject];
+							}
+
 							if (!value) return getOriginalColor(class, selector);
 
 							UIColor *parsed = [Themes parseColor:value];
