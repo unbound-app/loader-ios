@@ -1,9 +1,9 @@
 Name: Unbound
-Description: The power of addons, all in your hand.
-Version: 3.0.0
+Description: Discord mobile client aimed at providing the user control, stability and customizability.
+Version: 1.0.0
 Package: app.unbound.ios
 Architecture: iphoneos-arm
-Maintainer: Zoey, eternal
+Maintainer: eternal
 Author: Unbound Team
 Section: Tweaks
 Depends: mobilesubstrate (>= 0.9.5000)

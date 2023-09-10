@@ -4,7 +4,7 @@
 
 @implementation Themes
 	static NSMutableArray *themes = nil;
-	static NSString *font = nil;
+	static NSMutableDictionary<NSString*, NSString*> *fonts = nil;
 
 	+ (NSString*) makeJSON {
 		NSError *error;
@@ -31,14 +31,14 @@
 	}
 
 	+ (void) init {
-		font = nil;
+		fonts = [[NSMutableDictionary alloc] init];
 		themes = [[NSMutableArray alloc] init];
 
 		NSString *path = [NSString pathWithComponents:@[FileSystem.documents, @"Themes"]];
 		[FileSystem createDirectory:path];
 
-		NSString *fonts = [NSString pathWithComponents:@[FileSystem.documents, @"Fonts"]];
-		[FileSystem createDirectory:fonts];
+		NSString *fontsPath = [NSString pathWithComponents:@[FileSystem.documents, @"Fonts"]];
+		[FileSystem createDirectory:fontsPath];
 
 		NSArray *contents = [FileSystem readDirectory:path];
 
@@ -137,15 +137,29 @@
 		}
 
 		NSDictionary<NSString*, NSDictionary*> *theme = [Themes getApplied];
-		if (!theme || !theme[@"bundle"] || !theme[@"bundle"][@"font"]) {
+		if (!theme || !theme[@"bundle"] || !theme[@"bundle"][@"fonts"]) {
 			return;
 		}
 
-		@try {
-			NSString *font = [Themes downloadFont:[NSURL URLWithString:theme[@"bundle"][@"font"]]];
-			[Themes loadFont:font];
-		} @catch (NSException *e) {
-			NSLog(@"[Themes] Failed to apply font. (%@)", e.reason);
+		NSDictionary<NSString*, NSString*> *overrides = theme[@"bundle"][@"fonts"];
+
+		for	(NSString *key in overrides) {
+			@try {
+				NSString *font = [overrides objectForKey:key];
+				if (!font) continue;
+
+				NSURL *url = [NSURL URLWithString:font];
+
+				NSLog(@"[Themes] Downloading font \"%@\"...", [url lastPathComponent]);
+				NSString *name = [Themes downloadFont:url];
+				NSLog(@"[Themes] Downloaded font \"%@\".", name);
+
+				NSLog(@"[Themes] Loading font \"%@\"...", name);
+				[Themes loadFont:name orig:key];
+				NSLog(@"[Themes] Loaded font \"%@\".", name);
+			} @catch(NSException *e) {
+				NSLog(@"[Themes] Failed to apply font override for \"%@\". (%@)", key, e.reason);
+			}
 		}
 	};
 
@@ -282,7 +296,7 @@
 		return name;
 	}
 
-	+ loadFont:(NSString*)name {
+	+ loadFont:(NSString*)name orig:(NSString*)orig {
 		@try {
 			NSString *path = [NSString pathWithComponents:@[FileSystem.documents, @"Fonts", name]];
 			NSURL *url = [NSURL fileURLWithPath:path];
@@ -293,7 +307,8 @@
 			CGDataProviderRelease(provider);
 			CTFontManagerRegisterGraphicsFont(ref, nil);
 
-			font = CFBridgingRelease(CGFontCopyPostScriptName(ref));
+			NSString *font = CFBridgingRelease(CGFontCopyPostScriptName(ref));
+			[fonts setValue:font forKey:orig];
 			CGFontRelease(ref);
 		} @catch (NSException* e) {
 			NSLog(@"[Themes] Failed to load font \"%@\". (%@)", name, e.reason);
@@ -301,19 +316,19 @@
 	}
 
 	// Properties
-	+ (NSString*) font {
-		return font;
+	+ (NSMutableDictionary<NSString*, NSString*>*) fonts {
+		return fonts;
 	}
 @end
 
 %hook UIFont
 	+ (UIFont *)fontWithName:(NSString *)name size:(CGFloat)size {
-		NSString *font = [Themes font];
+		NSMutableDictionary<NSString*, NSString*> *fonts = [Themes fonts];
 
-		if (font == nil) {
-			return %orig(name, size);
+		if (fonts && [fonts objectForKey:name] != nil) {
+			return %orig([fonts objectForKey:name], size);
 		}
 
-		return %orig(font, size);
+		return %orig(name, size);
 	}
 %end
