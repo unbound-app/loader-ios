@@ -1,7 +1,10 @@
+#include <CoreText/CoreText.h>
+
 #import "FileSystem.h"
 #import "Utilities.h"
 #import "Settings.h"
 #import "Unbound.h"
+
 
 @interface DCDTheme : NSObject
 
@@ -17,7 +20,12 @@
 + (UIColor*) parseColor:(NSString*)color;
 + (NSDictionary*) getApplied;
 + (NSString*) makeJSON;
++ (NSString*) downloadFont:(NSURL*)url;
++ loadFont:(NSString*)name;
 + (void) apply;
 + (void) init;
+
+// Properties
++ (NSString*) font;
 
 @end

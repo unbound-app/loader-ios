@@ -4,6 +4,7 @@
 
 @implementation Themes
 	static NSMutableArray *themes = nil;
+	static NSString *font = nil;
 
 	+ (NSString*) makeJSON {
 		NSError *error;
@@ -30,10 +31,14 @@
 	}
 
 	+ (void) init {
+		font = nil;
 		themes = [[NSMutableArray alloc] init];
 
 		NSString *path = [NSString pathWithComponents:@[FileSystem.documents, @"Themes"]];
 		[FileSystem createDirectory:path];
+
+		NSString *fonts = [NSString pathWithComponents:@[FileSystem.documents, @"Fonts"]];
+		[FileSystem createDirectory:fonts];
 
 		NSArray *contents = [FileSystem readDirectory:path];
 
@@ -130,6 +135,18 @@
 				NSLog(@"[Themes] Failed to apply theme. (%@)", e.reason);
 			}
 		}
+
+		NSDictionary<NSString*, NSDictionary*> *theme = [Themes getApplied];
+		if (!theme || !theme[@"bundle"] || !theme[@"bundle"][@"font"]) {
+			return;
+		}
+
+		@try {
+			NSString *font = [Themes downloadFont:[NSURL URLWithString:theme[@"bundle"][@"font"]]];
+			[Themes loadFont:font];
+		} @catch (NSException *e) {
+			NSLog(@"[Themes] Failed to apply font. (%@)", e.reason);
+		}
 	};
 
 	+ (void) apply {
@@ -149,7 +166,7 @@
 		}
 	}
 
-	+ (void) swizzle:(Class)class payload:(NSDictionary*)payload {
+	+ (void) swizzle:(Class)instance payload:(NSDictionary*)payload {
 		NSLog(@"[Themes] Attempting swizzle...");
 
 		@try {
@@ -157,7 +174,7 @@
 				SEL selector = NSSelectorFromString(raw);
 				id (*getOriginalColor)(Class, SEL);
 
-				MSHookMessageEx(class, selector, (IMP)imp_implementationWithBlock(^UIColor *(id self) {
+				MSHookMessageEx(instance, selector, (IMP)imp_implementationWithBlock(^UIColor *(id self) {
 					@try {
 						id color = payload[raw];
 
@@ -171,7 +188,7 @@
 								value = [color firstObject];
 							}
 
-							if (!value) return getOriginalColor(class, selector);
+							if (!value) return getOriginalColor(instance, selector);
 
 							UIColor *parsed = [Themes parseColor:value];
 							if (parsed) return parsed;
@@ -183,7 +200,7 @@
 						NSLog(@"[Themes] Failed to use modified color %@. (%@)", raw, e.reason);
 					}
 
-					return getOriginalColor(class, selector);
+					return getOriginalColor(instance, selector);
 				}), (IMP *)&getOriginalColor);
 			}
 		} @catch(NSException *e) {
@@ -248,4 +265,55 @@
 
 		return nil;
 	}
+
+	+ (NSString*) downloadFont:(NSURL*)url {
+		NSString *name = [url lastPathComponent];
+		NSString *path = [NSString pathWithComponents:@[FileSystem.documents, @"Fonts", name]];
+
+		if ([FileSystem exists:path]) {
+			return name;
+		}
+
+		NSData *data = [NSData dataWithContentsOfURL:url];
+		if (!data) return nil;
+
+		[data writeToFile:path atomically:YES];
+
+		return name;
+	}
+
+	+ loadFont:(NSString*)name {
+		@try {
+			NSString *path = [NSString pathWithComponents:@[FileSystem.documents, @"Fonts", name]];
+			NSURL *url = [NSURL fileURLWithPath:path];
+
+			CGDataProviderRef provider = CGDataProviderCreateWithURL((__bridge CFURLRef)url);
+			CGFontRef ref = CGFontCreateWithDataProvider(provider);
+
+			CGDataProviderRelease(provider);
+			CTFontManagerRegisterGraphicsFont(ref, nil);
+
+			font = CFBridgingRelease(CGFontCopyPostScriptName(ref));
+			CGFontRelease(ref);
+		} @catch (NSException* e) {
+			NSLog(@"[Themes] Failed to load font \"%@\". (%@)", name, e.reason);
+		}
+	}
+
+	// Properties
+	+ (NSString*) font {
+		return font;
+	}
 @end
+
+%hook UIFont
+	+ (UIFont *)fontWithName:(NSString *)name size:(CGFloat)size {
+		NSString *font = [Themes font];
+
+		if (font == nil) {
+			return %orig(name, size);
+		}
+
+		return %orig(font, size);
+	}
+%end

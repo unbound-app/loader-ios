@@ -2,6 +2,11 @@
 
 %hook RCTCxxBridge
 	- (void) executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async {
+		[FileSystem init];
+		[Settings init];
+		[Plugins init];
+		[Themes init];
+
 		NSString *BUNDLE = [NSString pathWithComponents:@[FileSystem.documents, @"bundle.js"]];
 		NSURL *SOURCE = [NSURL URLWithString:@"unbound"];
 
@@ -96,10 +101,3 @@
 		}
 	}
 %end
-
-%ctor {
-	[FileSystem init];
-	[Settings init];
-	[Plugins init];
-	[Themes init];
-}
