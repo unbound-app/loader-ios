@@ -20,15 +20,19 @@
 		[manager createFileAtPath:path contents:contents attributes:nil];
 	}
 
-	+ (BOOL) delete:(NSString*)path {
+	+ (id) delete:(NSString*)path {
 		if (![manager fileExistsAtPath:path]) {
-			return false;
+			NSError *error = [NSError errorWithDomain:NSCocoaErrorDomain
+                                     code:NSFileReadNoSuchFileError
+                                 userInfo:@{NSFilePathErrorKey: path}];
+
+            return error;
 		}
 
-		NSError *err;
-		[manager removeItemAtPath:path error:&err];
+		NSError *error;
+		[manager removeItemAtPath:path error:&error];
 
-		return err ? false : true;
+		return error ? error : path;
 	}
 
 	+ (NSData*) readFile:(NSString*)path {

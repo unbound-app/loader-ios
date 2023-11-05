@@ -47,25 +47,6 @@
 
 			@try {
 				NSString *dir = [NSString pathWithComponents:@[path, folder]];
-				NSString *deletion = [NSString pathWithComponents:@[dir, @".delete"]];
-
-				if ([FileSystem exists:deletion]) {
-					NSData *data = [FileSystem readFile:deletion];
-					NSString *pending = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-
-					if ([pending isEqualToString:@"true"]) {
-						NSLog(@"[Themes] Deleting %@ as it's pending deletion.", folder);
-						BOOL deleted = [FileSystem delete:dir];
-
-						if (deleted) {
-							NSLog(@"[Themes] Deleted %@.", folder);
-						} else {
-							NSLog(@"[Themes] Failed to delete %@.", folder);
-						}
-
-						continue;
-					}
-				}
 
 				if (![FileSystem isDirectory:dir]) {
 					NSLog(@"[Themes] Skipping %@ as it is not a directory.", folder);

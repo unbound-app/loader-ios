@@ -1,5 +1,44 @@
 #import "../Headers/Unbound.h"
 
+/**
+ * Adds a way to delete a file at a specific path on the JS side.
+ * ---
+ * This acts as a 3rd "type" to pass into the original writeFile from the JS side
+ * So, instead of calling with "documents" or "cache" and passing a partial path,
+ * You would call with "delete" and must pass the full path of the dirent to delete
+ * You can either delete a file or dir, just pass the appropriate path (hence "dirent")
+ * The promise is not handled, instead the result is logged in the native console.
+ */
+%hook DCDPhotosManager
+    - (void) deletePhotos:(NSArray*)uris resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+        if ([uris[0] isEqualToString:@"unbound"]) {
+            NSString* path = uris[1];
+            NSLog("Attempting to delete dirent at path %@...", path);
+
+            @try {
+                id result = [FileSystem delete:path];
+                NSString* message = nil;
+
+                if (![result isKindOfClass:[NSError class]]) {
+                    message = [NSString stringWithFormat:@"Successfully deleted dirent at path '%@'", path];
+
+                    NSLog("%@", message);
+                    resolve(message);
+                } else {
+                    message = [NSString stringWithFormat:@"Failed to delete dirent at path '%@': %@", path, [result localizedDescription]];
+
+                    NSLog("%@", message);
+                    reject(@"err", message, nil);
+                }
+            } @catch (NSException *e) {
+                NSLog(@"Failed to call promise methods: %@", e);
+            }
+        } else {
+            %orig(uris, resolve, reject);
+        }
+    }
+%end
+
 %hook RCTCxxBridge
 	- (void) executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async {
 		[FileSystem init];
