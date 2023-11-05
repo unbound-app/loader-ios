@@ -3,15 +3,21 @@
 /**
  * Adds a way to delete a file at a specific path on the JS side.
  * ---
- * This acts as a 3rd "type" to pass into the original writeFile from the JS side
- * So, instead of calling with "documents" or "cache" and passing a partial path,
- * You would call with "delete" and must pass the full path of the dirent to delete
+ * This acts as a special way to call [DCDPhotosManager deletePhotos]
+ * So, instead of calling with an array of the uris of each photo to delete,
+ * You would call with "unbound" as the 0th argument in the array,
+ * and must pass the full path of the dirent to delete as the 1st argument.
+ * ---
  * You can either delete a file or dir, just pass the appropriate path (hence "dirent")
- * The promise is not handled, instead the result is logged in the native console.
+ * The promise is handled, so using .then().catch() or await should work.
  */
 %hook DCDPhotosManager
     - (void) deletePhotos:(NSArray*)uris resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
         if ([uris[0] isEqualToString:@"unbound"]) {
+            if (!uris[1] || ![uris[1] isKindOfClass:[NSString class]]) {
+                reject(@"err", @"Failed to delete dirent: Path passed is invalid.", nil);
+            }
+
             NSString* path = uris[1];
             NSLog("Attempting to delete dirent at path %@...", path);
 
