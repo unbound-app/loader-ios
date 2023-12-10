@@ -7,7 +7,7 @@
 		[Plugins init];
 		[Themes init];
 
-		NSString *BUNDLE = [NSString pathWithComponents:@[FileSystem.documents, @"bundle.js"]];
+		NSString *BUNDLE = [NSString pathWithComponents:@[FileSystem.documents, @"unbound.bundle"]];
 		NSURL *SOURCE = [NSURL URLWithString:@"unbound"];
 
 		// Don't load bundle if not configured to do so.
@@ -19,7 +19,7 @@
 		// Apply React DevTools patch if its enabled
 		if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO]) {
 			@try {
-				NSData *bundle = [Utilities getResource:@"devtools" data:true];
+				NSData *bundle = [Utilities getResource:@"devtools" data:true ext:@"bundle"];
 
 				NSLog(@"Attempting to execute DevTools bundle...");
 				%orig(bundle, SOURCE, false);
@@ -31,7 +31,9 @@
 
 		// Apply modules patch
 		@try {
-			NSData *bundle = [Utilities getResource:@"modules" data:true];
+			NSData *bundle = [Utilities getResource:@"modules" data:true ext:@"bundle"];
+
+			NSLog("%@", bundle);
 
 			NSLog(@"Attempting to execute modules patch...");
 			%orig(bundle, SOURCE, false);

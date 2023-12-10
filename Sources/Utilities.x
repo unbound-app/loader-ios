@@ -41,19 +41,18 @@
 	}
 
 	+ (NSData*) getResource:(NSString*)file data:(BOOL)data ext:(NSString*)ext {
-		NSString *resource = [Utilities getResource:file ext:ext];
-
-		return [resource dataUsingEncoding:NSUTF8StringEncoding];
-	}
-
-	+ (NSString*) getResource:(NSString*)file ext:(NSString*)ext {
 		NSBundle *bundle = [NSBundle bundleWithPath:[Utilities getBundlePath]];
 		if (bundle == nil) {
 			return nil;
 		}
 
-		NSString *path = [bundle pathForResource:file ofType:@"js"];
-		NSData *data = [NSData dataWithContentsOfFile:path options:0 error:nil];
+		NSString *path = [bundle pathForResource:file ofType:ext];
+
+		return [NSData dataWithContentsOfFile:path options:0 error:nil];
+	}
+
+	+ (NSString*) getResource:(NSString*)file ext:(NSString*)ext {
+		NSData *data = [Utilities getResource:file data:true ext:ext];
 
 		return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 	}

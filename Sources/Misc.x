@@ -18,7 +18,7 @@
 			NSArray *paths = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask];
 			NSURL *url = [paths lastObject];
 
-			return [url URLByAppendingPathComponent:@"AppGroup"];
+			return url;
 		}
 
 		return %orig(identifier);
@@ -28,7 +28,24 @@
 %group Debug
 	%hook NSError
 		- (id) initWithDomain:(id)domain code:(int)code userInfo:(id)userInfo {
-			NSLog(@"Error initialized with message %@ %@ %d", userInfo, domain, code)
+			NSLog(@"[Error] Initialized with info: %@ %@ %d", userInfo, domain, code);
+			return %orig();
+		};
+
+		+ (id) errorWithDomain:(id)domain code:(int)code userInfo:(id)userInfo {
+			NSLog(@"[Error] Initialized with info: %@ %@ %d", userInfo, domain, code);
+			return %orig();
+		};
+	%end
+
+	%hook NSException
+		- (id) initWithName:(id)name reason:(id)reason userInfo:(id)userInfo {
+			NSLog(@"[Exception] Initialized with info: %@ %@ %@", userInfo, name, reason);
+			return %orig();
+		};
+
+		+ (id) exceptionWithName:(id)name reason:(id)reason userInfo:(id)userInfo {
+			NSLog(@"[Exception] Initialized with info: %@ %@ %@", userInfo, name, reason);
 			return %orig();
 		};
 	%end

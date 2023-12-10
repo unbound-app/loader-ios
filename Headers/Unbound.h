@@ -9,7 +9,6 @@
 #import "Themes.h"
 
 #include "./hermes/RCT.h"
-#include "./discord/DCDPhotosManager.h"
 
 #ifdef DEBUG
 #   define IS_DEBUG true

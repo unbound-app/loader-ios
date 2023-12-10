@@ -7,5 +7,5 @@ Maintainer: eternal
 Author: Unbound Team
 Section: Tweaks
 Depends: mobilesubstrate (>= 0.9.5000)
-SileoDepiction: https://repo.unbound.app/depictions/unbound.json
-Icon: https://repo.unbound.app/icons/Unbound.png
+SileoDepiction: https://repo.unbound.rip/depictions/unbound.json
+Icon: https://repo.unbound.rip/icons/Unbound.png

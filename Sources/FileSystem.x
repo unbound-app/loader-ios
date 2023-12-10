@@ -22,11 +22,9 @@
 
 	+ (id) delete:(NSString*)path {
 		if (![manager fileExistsAtPath:path]) {
-			NSError *error = [NSError errorWithDomain:NSCocoaErrorDomain
-                                     code:NSFileNoSuchFileError
-                                 userInfo:@{NSFilePathErrorKey: path}];
+			NSError *error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileNoSuchFileError userInfo:@{NSFilePathErrorKey: path}];
 
-            return error;
+			return error;
 		}
 
 		NSError *error;

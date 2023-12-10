@@ -8,7 +8,7 @@
 + (BOOL) createDirectory:(NSString*)path;
 + (void) writeFile:(NSString*)path contents:(NSData*)contents;
 
-+ (NSString*) delete:(NSString*)path;
++ (id) delete:(NSString*)path;
 
 + (BOOL) download:(NSURL*)url path:(NSString*)path;
 
