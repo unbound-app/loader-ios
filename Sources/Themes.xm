@@ -148,12 +148,6 @@
 		NSDictionary<NSString*, NSDictionary*> *theme = [Themes getApplied];
 		if (!theme || !theme[@"bundle"]) return;
 
-		NSDictionary<NSString*, NSString*> *semantic = theme[@"bundle"][@"semantic"];
-		if (semantic) {
-			Class DCDThemeColor = object_getClass(NSClassFromString(@"DCDThemeColor"));
-			[Themes swizzle:DCDThemeColor payload:semantic];
-		}
-
 		NSDictionary<NSString*, NSString*> *raw = theme[@"bundle"][@"raw"];
 		if (raw) {
 			Class Color = object_getClass(NSClassFromString(@"UIColor"));
@@ -173,24 +167,8 @@
 					@try {
 						id color = payload[raw];
 
-						if ([color isKindOfClass:[NSArray class]]) {
-							NSInteger appearance = [%c(DCDTheme) themeIndex];
-							NSString *value;
-
-							@try {
-								value = [color objectAtIndex:appearance];
-							} @catch (NSException *e) {
-								value = [color firstObject];
-							}
-
-							if (!value) return getOriginalColor(instance, selector);
-
-							UIColor *parsed = [Themes parseColor:value];
-							if (parsed) return parsed;
-						} else if ([color isKindOfClass:[NSString class]]) {
-							UIColor *parsed = [Themes parseColor:color];
-							if (parsed) return parsed;
-						}
+                        UIColor *parsed = [Themes parseColor:color];
+                        if (parsed) return parsed;
 					} @catch (NSException *e) {
 						NSLog(@"[Themes] Failed to use modified color %@. (%@)", raw, e.reason);
 					}
