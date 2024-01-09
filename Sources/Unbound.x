@@ -33,8 +33,6 @@
 		@try {
 			NSData *bundle = [Utilities getResource:@"modules" data:true ext:@"bundle"];
 
-			NSLog("%@", bundle);
-
 			NSLog(@"Attempting to execute modules patch...");
 			%orig(bundle, SOURCE, false);
 			NSLog(@"Successfully executed modules patch.");

@@ -66,12 +66,10 @@
 				manifest[@"folder"] = folder;
 				manifest[@"path"] = dir;
 
-				NSDictionary *test = @{
+				[plugins addObject:@{
 					@"manifest": manifest,
 					@"bundle": [[NSString alloc] initWithData:bundle encoding:NSUTF8StringEncoding]
-				};
-
-				[plugins addObject:test];
+				}];
 			} @catch (NSException *e) {
 				NSLog(@"[Plugins] Failed to load %@ (%@)", folder, e.reason);
 			}
