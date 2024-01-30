@@ -1,3 +1,3 @@
 rm -rf packages/*
-make clean package
+gmake clean package
 find packages/*.deb -exec sh -c 'mv "$0" packages/Unbound.deb' {} \;
