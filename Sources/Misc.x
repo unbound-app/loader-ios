@@ -11,12 +11,19 @@
 	}
 %end
 
-// Sideload Fix | Credit to https://github.com/m4fn3/DiscordSideloadFix/blob/master/Tweak.xm
+// Fix issues with sideloading
 %hook NSFileManager
-	- (NSURL *)containerURLForSecurityApplicationGroupIdentifier:(NSString *)identifier {
+	- (NSURL*)containerURLForSecurityApplicationGroupIdentifier:(NSString*)identifier {
 		if (identifier != nil) {
-			NSArray *paths = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask];
-			NSURL *url = [paths lastObject];
+			NSError *error;
+
+			NSFileManager *manager = [NSFileManager defaultManager];
+			NSURL *url = [manager URLForDirectory:NSDocumentDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
+
+			if (error) {
+				NSLog(@"[Error] Failed getting documents directory: %@", error);
+				return %orig(identifier);
+			}
 
 			return url;
 		}
