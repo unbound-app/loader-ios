@@ -11,26 +11,29 @@
 	}
 %end
 
-// Fix issues with sideloading
-%hook NSFileManager
-	- (NSURL*)containerURLForSecurityApplicationGroupIdentifier:(NSString*)identifier {
-		if (identifier != nil) {
-			NSError *error;
+#if SIDELOAD == 1
+	// Fix issues with sideloading
 
-			NSFileManager *manager = [NSFileManager defaultManager];
-			NSURL *url = [manager URLForDirectory:NSDocumentDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
+	%hook NSFileManager
+		- (NSURL*)containerURLForSecurityApplicationGroupIdentifier:(NSString*)identifier {
+			if (identifier != nil) {
+				NSError *error;
 
-			if (error) {
-				NSLog(@"[Error] Failed getting documents directory: %@", error);
-				return %orig(identifier);
+				NSFileManager *manager = [NSFileManager defaultManager];
+				NSURL *url = [manager URLForDirectory:NSDocumentDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
+
+				if (error) {
+					NSLog(@"[Error] Failed getting documents directory: %@", error);
+					return %orig(identifier);
+				}
+
+				return url;
 			}
 
-			return url;
+			return %orig(identifier);
 		}
-
-		return %orig(identifier);
-	}
-%end
+	%end
+#endif
 
 %group Debug
 	%hook NSError
@@ -61,7 +64,7 @@
 %ctor {
 	%init()
 
-	if (IS_DEBUG) {
+	if (LOGS) {
 		%init(Debug)
 	}
 }

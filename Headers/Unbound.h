@@ -7,6 +7,7 @@
 #import "Updater.h"
 #import "Plugins.h"
 #import "Themes.h"
+#import "Fonts.h"
 
 #include "./hermes/RCT.h"
 
@@ -15,6 +16,11 @@
 #   define NSLog(fmt, ... ) NSLog((@"[Unbound] " fmt), ##__VA_ARGS__);
 #else
 #   define IS_DEBUG false
-#   define NSLog(fmt, ... ) NSLog((@"[Unbound] " fmt), ##__VA_ARGS__);
-// #   define NSLog(...) (void)0
+#   define NSLog(...) (void)0
 #endif
+
+# ifdef THEOS_PACKAGE_INSTALL_PREFIX
+#   define BUNDLE_PATH @THEOS_PACKAGE_INSTALL_PREFIX "/Library/Application Support/Unbound/UnboundResources.bundle"
+# else
+#   define BUNDLE_PATH @"/Library/Application Support/Unbound/UnboundResources.bundle"
+# endif

@@ -1,4 +1,3 @@
-#import "Settings.h"
 #import "Unbound.h"
 
 @interface Updater : NSObject {

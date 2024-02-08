@@ -5,15 +5,16 @@ TARGET := iphone:clang:latest:11.0
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = Unbound
+LOGS = 0
+SIDELOAD = 1
 
+TWEAK_NAME = Unbound
 $(TWEAK_NAME)_FILES = $(shell find Sources -name "*.x*")
-$(TWEAK_NAME)_CFLAGS = -fobjc-arc
+$(TWEAK_NAME)_CFLAGS = -DLOGS=$(LOGS) -DSIDELOAD=$(SIDELOAD) -fobjc-arc
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation
 
 BUNDLE_NAME = UnboundResources
-
-$(BUNDLE_NAME)_INSTALL_PATH = "/Library/Application\ Support/Unbound"
+$(BUNDLE_NAME)_INSTALL_PATH = "$(THEOS_PACKAGE_INSTALL_PREFIX)/Library/Application\ Support/Unbound"
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk

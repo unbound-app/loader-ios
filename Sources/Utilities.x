@@ -8,15 +8,14 @@
 
 	+ (NSString*) getBundlePath {
 		if (bundle) {
-			NSLog(@"Using cached bundleURL");
+			NSLog(@"Using cached bundle URL.");
 			return bundle;
 		}
 
 		// Attempt to get the bundle from an exact path
-		NSString *exact = @"/Library/Application Support/Unbound/UnboundResources.bundle";
-		if ([FileSystem exists:exact]) {
-			bundle = exact;
-			return exact;
+		if ([FileSystem exists:BUNDLE_PATH]) {
+			bundle = BUNDLE_PATH;
+			return BUNDLE_PATH;
 		}
 
 		// Fall back to a relative path on non-jailbroken devices

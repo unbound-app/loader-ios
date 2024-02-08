@@ -83,7 +83,7 @@
 		NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
 		__block NSException *exception;
 
-		request.timeoutInterval = 2.0;
+		request.timeoutInterval = 1.0;
 		request.cachePolicy = NSURLRequestReloadIgnoringCacheData;
 
 		dispatch_async(dispatch_get_main_queue(), ^{

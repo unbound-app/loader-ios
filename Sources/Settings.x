@@ -26,6 +26,15 @@
 		return value != nil ? value : def;
 	}
 
+	+ (NSDictionary*) getDictionary:(NSString*)store key:(NSString*)key def:(NSDictionary*)def {
+		id payload = data[store];
+		if (!payload) return def;
+
+		id value = [payload valueForKeyPath:key];
+
+		return value != nil ? value : def;
+	}
+
 	+ (BOOL) getBoolean:(NSString*)store key:(NSString*)key def:(BOOL)def {
 		id payload = data[store];
 		if (!payload) return def;

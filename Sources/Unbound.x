@@ -6,6 +6,7 @@
 		[Settings init];
 		[Plugins init];
 		[Themes init];
+		// [Fonts init];
 
 		NSString *BUNDLE = [NSString pathWithComponents:@[FileSystem.documents, @"unbound.bundle"]];
 		NSURL *SOURCE = [NSURL URLWithString:@"unbound"];
@@ -13,7 +14,7 @@
 		// Don't load bundle if not configured to do so.
 		if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES]) {
 			NSLog(@"Loader is disabled");
-			return %orig;
+			return %orig(script, url, true);;
 		}
 
 		// Apply React DevTools patch if its enabled
@@ -22,7 +23,7 @@
 				NSData *bundle = [Utilities getResource:@"devtools" data:true ext:@"bundle"];
 
 				NSLog(@"Attempting to execute DevTools bundle...");
-				%orig(bundle, SOURCE, false);
+				%orig(bundle, SOURCE, true);
 				NSLog(@"Successfully executed DevTools bundle.");
 			} @catch (NSException *e) {
 				NSLog(@"React DevTools failed to initialize. %@", e);
@@ -34,7 +35,7 @@
 			NSData *bundle = [Utilities getResource:@"modules" data:true ext:@"bundle"];
 
 			NSLog(@"Attempting to execute modules patch...");
-			%orig(bundle, SOURCE, false);
+			%orig(bundle, SOURCE, true);
 			NSLog(@"Successfully executed modules patch.");
 		} @catch (NSException *e) {
 			NSLog(@"Modules patch injection failed, expect issues. %@", e);
@@ -51,13 +52,13 @@
 			NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
 
 			NSLog(@"Pre-loading settings, plugins and themes...");
-			%orig(data, SOURCE, false);
+			%orig(data, SOURCE, true);
 			NSLog(@"Pre-loaded settings, plugins and themes.");
 		} @catch (NSException *e) {
 			NSLog(@"Failed to pre-load settings, plugins and themes. %@", e);
 		}
 
-		%orig(script, url, false);
+		%orig(script, url, true);
 
 		// Check for updates & re-download bundle if necessary
 		if (![FileSystem exists:BUNDLE] || [Updater hasUpdate]) {
