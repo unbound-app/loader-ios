@@ -1,7 +1,6 @@
 #import "Unbound.h"
 
 @interface FileSystem : NSObject {
-	NSMutableDictionary<NSString*, void(^)(void)> *monitors;
 	NSFileManager *manager;
 	NSString *documents;
 }
@@ -12,9 +11,6 @@
 + (id) delete:(NSString*)path;
 
 + (BOOL) download:(NSURL*)url path:(NSString*)path;
-
-+ (void) monitor:(NSString*)filePath autoRestart:(BOOL)autoRestart;
-+ (void) monitor:(NSString*)filePath;
 
 + (NSArray*) readDirectory:(NSString*)path;
 + (NSData*) readFile:(NSString*)path;

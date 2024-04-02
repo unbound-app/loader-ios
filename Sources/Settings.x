@@ -5,9 +5,7 @@
 	static NSString *path = nil;
 
 	+ (void) init {
-		if (!path) {
-			path = [NSString pathWithComponents:@[FileSystem.documents, @"settings.json"]];
-		}
+		path = [NSString pathWithComponents:@[FileSystem.documents, @"settings.json"]];
 
 		if (![FileSystem exists:path]) {
 			[Settings reset];
@@ -17,8 +15,6 @@
 
 		NSError *error;
 		data = [NSJSONSerialization JSONObjectWithData:settings options:NSJSONReadingMutableContainers error:&error];
-
-		[FileSystem monitor:path];
 	}
 
 	+ (NSString*) getString:(NSString*)store key:(NSString*)key def:(NSString*)def {

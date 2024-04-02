@@ -1,7 +1,6 @@
 #import "../Headers/FileSystem.h"
 
 @implementation FileSystem
-	static NSMutableDictionary<NSString*, void(^)(void)> *monitors = nil;
 	static NSFileManager *manager = nil;
 	static NSString *documents = nil;
 
@@ -77,66 +76,6 @@
 		return err ? @[] : files;
 	}
 
-	+ (void) monitor:(NSString*)filePath {
-		return [FileSystem monitor:filePath autoRestart:YES];
-	}
-
-	+ (void) monitor:(NSString*)filePath autoRestart:(BOOL)autoRestart {
-		// If file is already being monitored, ignore this extra request.
-		if ([monitors objectForKey:filePath]) {
-			return;
-		}
-
-		const char *path = [filePath fileSystemRepresentation];
-
-		int fdescriptor = open(path, O_EVTONLY);
-
-		// Get a reference to the default queue so our file notifications can go out on it
-    dispatch_queue_t defaultQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-    // Create a dispatch source
-    dispatch_source_t source = dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, fdescriptor, DISPATCH_VNODE_ATTRIB | DISPATCH_VNODE_DELETE | DISPATCH_VNODE_EXTEND | DISPATCH_VNODE_LINK | DISPATCH_VNODE_RENAME | DISPATCH_VNODE_REVOKE | DISPATCH_VNODE_WRITE, defaultQueue);
-
-		// Add cancel handler
-		[monitors setValue:^{
-			close(fdescriptor);
-			dispatch_source_cancel(source);
-
-			[monitors removeObjectForKey:filePath];
-			NSLog(@"monitor for %@ was destroyed", filePath);
-		} forKey:filePath];
-
-    // Log one or more messages when there's a file change event
-    dispatch_source_set_event_handler(source, ^{
-			unsigned long eventTypes = dispatch_source_get_data(source);
-
-			NSLog(@"[Watcher] %lu event got fired for %s", eventTypes, path);
-    });
-
-    dispatch_source_set_cancel_handler(source, ^(void){
-			NSLog(@"[Watcher] event listener got cancelled for %s", path);
-        close(fdescriptor);
-
-        // If this dispatch source was canceled because of a rename or delete notification, recreate it
-        if (autoRestart) {
-					[FileSystem monitor:filePath];
-        }
-    });
-
-    // Start monitoring the target file
-    dispatch_resume(source);
-	}
-
-	+ (void) stopMonitoring:(NSString*)path {
-		if (!monitors) {
-			return;
-		}
-
-		void (^block)(void) = [monitors valueForKey:path];
-		if (block) {
-			block();
-		}
-	}
-
 	+ (BOOL) download:(NSURL*)url path:(NSString*)path {
 		dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 
@@ -185,10 +124,6 @@
 	+ (void) init {
 		if (!manager) {
 			manager = [NSFileManager defaultManager];
-		}
-
-		if (!monitors) {
-			monitors = [[NSMutableDictionary alloc] init];
 		}
 
 		if (!documents) {
