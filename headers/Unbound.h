@@ -7,7 +7,6 @@
 #import "Updater.h"
 #import "Plugins.h"
 #import "Themes.h"
-#import "Fonts.h"
 
 #include "./hermes/RCT.h"
 

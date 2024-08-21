@@ -13,7 +13,6 @@
 
 		[Plugins init];
 		[Themes init];
-		[Fonts init];
 
 		NSString *BUNDLE = [NSString pathWithComponents:@[FileSystem.documents, @"unbound.bundle"]];
 		NSURL *SOURCE = [NSURL URLWithString:@"unbound"];
