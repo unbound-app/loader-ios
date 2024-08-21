@@ -1,7 +1,8 @@
-THEOS_DEVICE_IP=192.168.0.27
+THEOS_DEVICE_IP=192.168.0.251
+THEOS_PACKAGE_SCHEME=rootless
 
 ARCHS := arm64 arm64e
-TARGET := iphone:clang:latest:11.0
+TARGET := iphone:clang:latest:14.0
 
 include $(THEOS)/makefiles/common.mk
 
@@ -14,7 +15,7 @@ $(TWEAK_NAME)_CFLAGS = -DLOGS=$(LOGS) -DSIDELOAD=$(SIDELOAD) -fobjc-arc
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation
 
 BUNDLE_NAME = UnboundResources
-$(BUNDLE_NAME)_INSTALL_PATH = "$(THEOS_PACKAGE_INSTALL_PREFIX)/Library/Application\ Support/Unbound"
+$(BUNDLE_NAME)_INSTALL_PATH = "/Library/Application\ Support/"
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk

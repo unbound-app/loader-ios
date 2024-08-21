@@ -20,7 +20,7 @@
 #endif
 
 # ifdef THEOS_PACKAGE_INSTALL_PREFIX
-#   define BUNDLE_PATH @THEOS_PACKAGE_INSTALL_PREFIX "/Library/Application Support/Unbound/UnboundResources.bundle"
+#   define BUNDLE_PATH @THEOS_PACKAGE_INSTALL_PREFIX "/Library/Application Support/UnboundResources.bundle"
 # else
-#   define BUNDLE_PATH @"/Library/Application Support/Unbound/UnboundResources.bundle"
+#   define BUNDLE_PATH @"/Library/Application Support/UnboundResources.bundle"
 # endif
