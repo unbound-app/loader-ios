@@ -4,18 +4,19 @@
 	- (void) executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async {
 		[FileSystem init];
 		[Settings init];
+
+		// Don't load bundle and addons  if not configured to do so.
+		if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES]) {
+			NSLog(@"Loader is disabled. Aborting.");
+			return %orig(script, url, true);
+		}
+
 		[Plugins init];
 		[Themes init];
-		// [Fonts init];
+		[Fonts init];
 
 		NSString *BUNDLE = [NSString pathWithComponents:@[FileSystem.documents, @"unbound.bundle"]];
 		NSURL *SOURCE = [NSURL URLWithString:@"unbound"];
-
-		// Don't load bundle if not configured to do so.
-		if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES]) {
-			NSLog(@"Loader is disabled");
-			return %orig(script, url, true);;
-		}
 
 		// Apply React DevTools patch if its enabled
 		if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO]) {
