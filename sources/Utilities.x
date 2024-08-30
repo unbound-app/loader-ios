@@ -2,6 +2,7 @@
 
 #import "../Headers/FileSystem.h"
 #import "../Headers/Utilities.h"
+#import <rootless.h>
 
 @implementation Utilities
 	static NSString *bundle = nil;
@@ -13,9 +14,11 @@
 		}
 
 		// Attempt to get the bundle from an exact path
-		if ([FileSystem exists:BUNDLE_PATH]) {
-			bundle = BUNDLE_PATH;
-			return BUNDLE_PATH;
+		NSString *bundlePath = ROOT_PATH_NS(@"/Library/Application Support/UnboundResources.bundle");
+
+		if ([FileSystem exists:bundlePath]) {
+			bundle = bundlePath;
+			return bundlePath;
 		}
 
 		// Fall back to a relative path on non-jailbroken devices
