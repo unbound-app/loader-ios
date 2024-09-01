@@ -1,7 +1,6 @@
 #import "Unbound.h"
 
 @interface FileSystem : NSObject {
-	NSMutableDictionary<NSString*, void(^)(void)> *monitors;
 	NSFileManager *manager;
 	NSString *documents;
 }

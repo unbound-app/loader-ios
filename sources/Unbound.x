@@ -48,14 +48,17 @@
 			NSString *plugins = [Plugins makeJSON];
 			NSString *themes = [Themes makeJSON];
 
-			NSString *json = [NSString stringWithFormat:bundle, settings, plugins, themes];
+			NSString *availabeFonts = [Fonts makeAvailableJSON];
+			NSString *fonts = [Fonts makeJSON];
+
+			NSString *json = [NSString stringWithFormat:bundle, settings, plugins, themes, fonts, availabeFonts];
 			NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
 
-			NSLog(@"Pre-loading settings, plugins and themes...");
+			NSLog(@"Pre-loading settings, plugins, fonts and themes...");
 			%orig(data, SOURCE, true);
-			NSLog(@"Pre-loaded settings, plugins and themes.");
+			NSLog(@"Pre-loaded settings, plugins, fonts and themes.");
 		} @catch (NSException *e) {
-			NSLog(@"Failed to pre-load settings, plugins and themes. %@", e);
+			NSLog(@"Failed to pre-load settings, plugins, fonts and themes. %@", e);
 		}
 
 		%orig(script, url, true);
