@@ -11,7 +11,7 @@ SIDELOAD = 1
 
 TWEAK_NAME = Unbound
 $(TWEAK_NAME)_FILES = $(shell find Sources -name "*.x*")
-$(TWEAK_NAME)_CFLAGS = -DLOGS=$(LOGS) -DSIDELOAD=$(SIDELOAD) -DDEBUG_URL=@\"$(DEBUG_URL)\" -fobjc-arc
+$(TWEAK_NAME)_CFLAGS = -DLOGS=$(LOGS) -DSIDELOAD=$(SIDELOAD) -fobjc-arc
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation
 
 BUNDLE_NAME = UnboundResources
