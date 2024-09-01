@@ -13,6 +13,7 @@
 
 		[Plugins init];
 		[Themes init];
+		[Fonts init];
 
 		NSString *BUNDLE = [NSString pathWithComponents:@[FileSystem.documents, @"unbound.bundle"]];
 		NSURL *SOURCE = [NSURL URLWithString:@"unbound"];
@@ -48,10 +49,10 @@
 			NSString *plugins = [Plugins makeJSON];
 			NSString *themes = [Themes makeJSON];
 
-			NSString *availabeFonts = [Fonts makeAvailableJSON];
+			NSString *availableFonts = [Fonts makeAvailableJSON];
 			NSString *fonts = [Fonts makeJSON];
 
-			NSString *json = [NSString stringWithFormat:bundle, settings, plugins, themes, fonts, availabeFonts];
+			NSString *json = [NSString stringWithFormat:bundle, settings, plugins, themes, fonts, availableFonts];
 			NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
 
 			NSLog(@"Pre-loading settings, plugins, fonts and themes...");

@@ -107,6 +107,10 @@
 			error:&error
 		];
 
-		return [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
+		if (error != nil) {
+			return @"{}";
+		} else {
+			return [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
+		}
 	}
 @end

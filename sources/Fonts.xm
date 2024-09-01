@@ -8,6 +8,7 @@
 		NSError *error;
 		NSData *data = [NSJSONSerialization dataWithJSONObject:fonts options:0 error:&error];
 
+
 		if (error != nil) {
 			return @"[]";
 		} else {
@@ -33,12 +34,17 @@
 		CFArrayRef available = CTFontManagerCopyAvailableFontFamilyNames();
 		NSArray *fonts = (__bridge NSArray*)available;
 
-		return fonts;
+		return fonts ? fonts : @[];
 	}
 
 	+ (void) init {
-		overrides = [[NSMutableDictionary alloc] init];
-		fonts = [[NSMutableArray alloc] init];
+		if (!fonts) {
+			fonts = [[NSMutableArray alloc] init];
+		}
+
+		if (!overrides) {
+			overrides = [[NSMutableDictionary alloc] init];
+		}
 
 		NSString *path = [NSString pathWithComponents:@[FileSystem.documents, @"Fonts"]];
 		[FileSystem createDirectory:path];
