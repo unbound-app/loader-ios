@@ -4,6 +4,7 @@
 #import "FileSystem.h"
 #import "Utilities.h"
 #import "Settings.h"
+#import "Fonts.h"
 #import "Updater.h"
 #import "Plugins.h"
 #import "Themes.h"
