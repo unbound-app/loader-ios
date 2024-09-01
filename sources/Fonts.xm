@@ -126,11 +126,9 @@
 
 		CGDataProviderRelease(provider);
 		CTFontManagerRegisterGraphicsFont(ref, nil);
-
-		NSString *name = [Fonts getFontNameByRef:ref];
 		CGFontRelease(ref);
 
-		NSLog(@"[Fonts] Loaded font: %@.", name);
+		NSLog(@"[Fonts] Loaded font: %@.", [Fonts getFontNameByRef:ref]);
 	}
 
 	+ (NSString*) getFontName:(NSString*)path {
@@ -138,8 +136,8 @@
 
 		CGDataProviderRef provider = CGDataProviderCreateWithURL((__bridge CFURLRef)url);
 		CGFontRef ref = CGFontCreateWithDataProvider(provider);
-
 		CGDataProviderRelease(provider);
+
 		return [Fonts getFontNameByRef:ref];
 	}
 
