@@ -3,7 +3,9 @@
 #import <substrate.h>
 
 @implementation Themes
+	static NSMutableDictionary<NSString *, NSValue *> *originalRawImplementations;
 	static NSMutableArray *themes = nil;
+	static NSString *currentThemeId = nil;
 
 	+ (NSString*) makeJSON {
 		NSError *error;
@@ -16,10 +18,8 @@
 		}
 	};
 
-	+ (NSDictionary*) getApplied {
-		NSString *key = [Settings getString:@"theme-states" key:@"applied" def:nil];
-
-		NSPredicate *predicate = [NSPredicate predicateWithFormat:@"manifest.id == %@", key];
+	+ (NSDictionary*) getThemeById:(NSString*)manifestId {
+		NSPredicate *predicate = [NSPredicate predicateWithFormat:@"manifest.id == %@", manifestId];
 		NSArray *array = [themes filteredArrayUsingPredicate:predicate];
 
 		if ([array count] != 0) {
@@ -29,8 +29,24 @@
 		return nil;
 	}
 
+	+ (BOOL) isValidCustomTheme:(NSString*)manifestId {
+		NSDictionary *theme = [Themes getThemeById:manifestId];
+
+		if (theme != nil) {
+			return YES;
+		}
+
+		return NO;
+	}
+
 	+ (void) init {
-		themes = [[NSMutableArray alloc] init];
+		if (!themes) {
+			themes = [[NSMutableArray alloc] init];
+		}
+
+		if (!originalRawImplementations) {
+			originalRawImplementations = [[NSMutableDictionary alloc] init];
+		}
 
 		NSString *path = [NSString pathWithComponents:@[FileSystem.documents, @"Themes"]];
 		[FileSystem createDirectory:path];
@@ -49,7 +65,7 @@
 				}
 
 				NSString *data = [NSString pathWithComponents:@[dir, @"manifest.json"]];
-				if(![FileSystem exists:data]) {
+				if (![FileSystem exists:data]) {
 					NSLog(@"[Themes] Skipping %@ as it is missing a manifest.", folder);
 					continue;
 				}
@@ -59,7 +75,7 @@
 				@try {
 					id json = [Utilities parseJSON:[FileSystem readFile:data]];
 
-					if([json isKindOfClass:[NSDictionary class]]) {
+					if ([json isKindOfClass:[NSDictionary class]]) {
 						manifest = [json mutableCopy];
 					} else {
 						NSLog(@"[Themes] Skipping %@ as its manifest is invalid.", folder);
@@ -71,7 +87,7 @@
 				}
 
 				NSString *entry = [NSString pathWithComponents:@[dir, @"bundle.json"]];
-				if(![FileSystem exists:entry]) {
+				if (![FileSystem exists:entry]) {
 					NSLog(@"[Themes] Skipping %@ as it is missing a bundle.", folder);
 					continue;
 				}
@@ -104,52 +120,139 @@
 			}
 		}
 
-		if ([Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES] && ![Settings getBoolean:@"unbound" key:@"recovery" def:NO]) {
-			@try {
-				[Themes apply];
-			} @catch (NSException *e) {
-				NSLog(@"[Themes] Failed to apply theme. (%@)", e.reason);
-			}
+		if (![Settings getBoolean:@"unbound" key:@"recovery" def:NO]) {
+			[Themes swizzleSemanticColors];
 		}
 	};
 
-	+ (void) apply {
-		NSDictionary<NSString*, NSDictionary*> *theme = [Themes getApplied];
-		if (!theme || !theme[@"bundle"]) return;
+	+ (void) swizzleRawColors:(NSDictionary*)payload {
+		Class instance = object_getClass(NSClassFromString(@"UIColor"));
 
-		NSDictionary<NSString*, NSString*> *raw = theme[@"bundle"][@"raw"];
-		if (raw) {
-			Class Color = object_getClass(NSClassFromString(@"UIColor"));
-			[Themes swizzle:Color payload:raw];
-		}
-	}
-
-	+ (void) swizzle:(Class)instance payload:(NSDictionary*)payload {
-		NSLog(@"[Themes] Attempting swizzle...");
+		NSLog(@"[Themes] Attempting swizzle semantic colors...");
 
 		@try {
 			for (NSString *raw in payload) {
 				SEL selector = NSSelectorFromString(raw);
-				id (*getOriginalColor)(Class, SEL);
 
-				MSHookMessageEx(instance, selector, (IMP)imp_implementationWithBlock(^UIColor *(id self) {
+				__block id (*original)(Class, SEL);
+				IMP replacement = imp_implementationWithBlock(^UIColor *(id self) {
 					@try {
 						id color = payload[raw];
-
-                        UIColor *parsed = [Themes parseColor:color];
-                        if (parsed) return parsed;
+						UIColor *parsed = [Themes parseColor:color];
+						if (parsed) return parsed;
 					} @catch (NSException *e) {
-						NSLog(@"[Themes] Failed to use modified color %@. (%@)", raw, e.reason);
+						NSLog(@"[Themes] Failed to use modified raw color %@. (%@)", raw, e.reason);
 					}
 
-					return getOriginalColor(instance, selector);
-				}), (IMP *)&getOriginalColor);
+					return original(instance, selector);
+				});
+
+				MSHookMessageEx(instance, selector, replacement, (IMP *)&original);
+				originalRawImplementations[raw] = [NSValue valueWithPointer:(void *)original];
 			}
-		} @catch(NSException *e) {
-			NSLog(@"[Themes] Failed to swizzle. (%@)", e.reason);
+
+			NSLog(@"[Themes] Raw color swizzle completed.");
+		} @catch (NSException *e) {
+			NSLog(@"[Themes] Failed to swizzle raw colors. (%@)", e.reason);
+		}
+	}
+
+	+ (void) restoreOriginalRawColors {
+		Class instance = object_getClass(NSClassFromString(@"UIColor"));
+
+		// Iterate over the stored original implementations and restore them
+		for (NSString *selectorName in originalRawImplementations) {
+			SEL selector = NSSelectorFromString(selectorName);
+			IMP originalIMP = (IMP)[originalRawImplementations[selectorName] pointerValue];
+
+			// Reapply the original implementation
+			if (originalIMP) {
+				// Reapply the original implementation
+				MSHookMessageEx(instance, selector, originalIMP, NULL);
+			} else {
+				NSLog(@"[Themes] Failed to restore implementation for %@: Original IMP is NULL", selectorName);
+			}
 		}
 
-		NSLog(@"[Themes] Swizzle completed.");
+		// Clear the dictionary after unsetting swizzles
+		[originalRawImplementations removeAllObjects];
+	}
+
+	+ (void) swizzleSemanticColors  {
+		NSLog(@"[Themes] Attempting swizzle semantic colors...");
+
+		@try {
+			Class instance = object_getClass(NSClassFromString(@"DCDThemeColor"));
+			unsigned methodCount = 0;
+			Method *methods = class_copyMethodList(instance, &methodCount);
+
+			for (unsigned int i = 0; i < methodCount; i++) {
+				Method method = methods[i];
+				SEL selector = method_getName(method);
+				NSString *name = NSStringFromSelector(selector);
+
+				__block id (*original)(Class, SEL);
+				IMP replacement = imp_implementationWithBlock(^UIColor *(id self) {
+					if (currentThemeId != nil) {
+						@try {
+							NSDictionary *theme = [Themes getThemeById:currentThemeId];
+							if (!theme) return original(instance, selector);
+
+							NSDictionary *values = theme[@"bundle"][@"semantic"];
+							if (!values) return original(instance, selector);
+
+							NSDictionary *color = values[name];
+							if (!color || !color[@"type"] || !color[@"value"]) {
+								return original(instance, selector);
+							}
+
+							NSString *colorType = color[@"type"];
+							NSString *colorValue = color[@"value"];
+							NSNumber *colorOpacity = color[@"opacity"];
+
+							if ([colorType isEqualToString:@"color"]) {
+								UIColor *parsed = [Themes parseColor:colorValue];
+
+								if (parsed) {
+									if (colorOpacity) {
+										return [parsed colorWithAlphaComponent:[colorOpacity doubleValue]];
+									}
+
+									return parsed;
+								}
+							}
+
+							if ([colorType isEqualToString:@"raw"]) {
+								SEL colorSelector = NSSelectorFromString(colorValue);
+								Class instance = object_getClass(NSClassFromString(@"UIColor"));
+
+								if ([instance respondsToSelector:colorSelector]) {
+									UIColor* (*getColor)(id, SEL);
+									getColor = (UIColor* (*)(id, SEL))[instance methodForSelector:colorSelector];
+
+									return getColor(instance, colorSelector);
+								}
+
+								return original(instance, selector);
+							}
+
+							return original(instance, selector);
+						} @catch (NSException *e) {
+							NSLog(@"[Themes] Failed to use modified color %@. (%@)", name, e.reason);
+						}
+					}
+
+					return original(instance, selector);
+				});
+
+				MSHookMessageEx(instance, selector, replacement, (IMP *)&original);
+			}
+
+			free(methods);
+			NSLog(@"[Themes] Semantic color swizzle completed.");
+		} @catch(NSException *e) {
+			NSLog(@"[Themes] Failed to swizzle semantic colors. (%@)", e.reason);
+		}
 	}
 
 	+ (UIColor*) parseColor:(NSString*)color {
@@ -205,6 +308,60 @@
 			return [UIColor colorWithRed:r green:g blue:b alpha:a];
 		}
 
+		if ([color hasPrefix:@"rgb"]) {
+			NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"\\((.*)\\)"
+				options:NSRegularExpressionCaseInsensitive
+				error:nil
+			];
+
+			NSArray *matches = [regex matchesInString:color options:0 range:NSMakeRange(0, [color length])];
+			NSString *value = [[NSString alloc] init];
+
+			for (NSTextCheckingResult *match in matches) {
+				NSRange range = [match rangeAtIndex:1];
+				value = [color substringWithRange:range];
+			}
+
+			NSCharacterSet *whitespaces = [NSCharacterSet whitespaceCharacterSet];
+			NSArray *values = [value componentsSeparatedByString:@","];
+			NSMutableArray *res = [[NSMutableArray alloc] init];
+
+			for (NSString* value in values) {
+				NSString *trimmed = [value stringByTrimmingCharactersInSet:whitespaces];
+				NSNumber *payload = [NSNumber numberWithFloat:[trimmed floatValue]];
+
+				[res addObject:payload];
+			}
+
+			CGFloat r = [[res objectAtIndex:0] floatValue] / 255.0f;
+			CGFloat g = [[res objectAtIndex:1] floatValue] / 255.0f;
+			CGFloat b = [[res objectAtIndex:2] floatValue] / 255.0f;
+
+			return [UIColor colorWithRed:r green:g blue:b alpha:1.0f];
+		}
+
 		return nil;
 	}
 @end
+
+%hook DCDTheme
+	- (void) updateTheme:(id)theme {
+		if ([currentThemeId isEqualToString:theme]) {
+			return %orig;
+		}
+
+		NSLog(@"[Themes] Theme was changed to %@", theme);
+		currentThemeId = theme;
+
+		[Themes restoreOriginalRawColors];
+
+		NSDictionary *instance = [Themes getThemeById:theme];
+
+		if (instance) {
+			NSDictionary *raw = instance[@"bundle"][@"raw"];
+			if (raw) [Themes swizzleRawColors:raw];
+		}
+
+		%orig;
+	}
+%end

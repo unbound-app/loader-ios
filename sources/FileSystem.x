@@ -1,6 +1,7 @@
 #import "../Headers/FileSystem.h"
 
 @implementation FileSystem
+	static NSMutableDictionary<NSString*, NSMutableDictionary*> *monitors = nil;
 	static NSFileManager *manager = nil;
 	static NSString *documents = nil;
 
@@ -74,6 +75,85 @@
 		NSArray *files = [manager contentsOfDirectoryAtPath:path error:&err];
 
 		return err ? @[] : files;
+	}
+
+	+ (void) monitor:(NSString*)filePath onChange:(void(^)())onChange autoRestart:(BOOL)autoRestart {
+		// If file is already being monitored, ignore this extra request.
+		if ([monitors objectForKey:filePath]) {
+			return;
+		}
+
+		const char *path = [filePath fileSystemRepresentation];
+
+		int fdescriptor = open(path, O_EVTONLY);
+
+		// Get a reference to the default queue so our file notifications can go out on it
+    dispatch_queue_t defaultQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    // Create a dispatch source
+    dispatch_source_t source = dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, fdescriptor, DISPATCH_VNODE_ATTRIB | DISPATCH_VNODE_DELETE | DISPATCH_VNODE_EXTEND | DISPATCH_VNODE_LINK | DISPATCH_VNODE_RENAME | DISPATCH_VNODE_REVOKE | DISPATCH_VNODE_WRITE, defaultQueue);
+
+		// Add cancel handler
+
+		NSMutableDictionary *monitor = [[NSMutableDictionary alloc] init];
+
+		monitor[@"cancel"] = ^{
+			close(fdescriptor);
+			dispatch_source_cancel(source);
+
+			[monitors removeObjectForKey:filePath];
+			NSLog(@"monitor for %@ was destroyed", filePath);
+		};
+
+		monitor[@"debounce_timer"] = nil;
+
+		[monitors setValue:monitor forKey:filePath];
+
+    // Log one or more messages when there's a file change event
+    dispatch_source_set_event_handler(source, ^{
+			// unsigned long eventTypes = dispatch_source_get_data(source);
+
+			// NSLog(@"[Watcher] %lu event got fired for %@", eventTypes, filePath);
+
+			if (monitor[@"debounce_timer"] != nil) {
+				dispatch_source_cancel(monitor[@"debounce_timer"]);
+				monitor[@"debounce_timer"] = nil;
+			}
+
+			dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+			double secondsToThrottle = 0.250f;
+			monitor[@"debounce_timer"] = [Utilities createDebounceTimer:secondsToThrottle queue:queue block:^{
+				NSLog(@"Debounced");
+				onChange();
+					//Do some task you don't want to happen every character change, like filter a large set of data or query the network, update a scrubber position.
+					//[self doSomethingWith:text];
+			}];
+    });
+
+    dispatch_source_set_cancel_handler(source, ^(void){
+			NSLog(@"[Watcher] event listener got cancelled for %@", filePath);
+        close(fdescriptor);
+
+        // If this dispatch source was canceled because of a rename or delete notification, recreate it
+        if (autoRestart) {
+					NSLog(@"Restarting file watcher.");
+					[FileSystem monitor:filePath onChange:onChange autoRestart:autoRestart];
+        }
+    });
+
+    // Start monitoring the target file
+    dispatch_resume(source);
+	}
+
+	+ (void) stopMonitoring:(NSString*)path {
+		if (!monitors) {
+			return;
+		}
+
+		NSMutableDictionary *monitor = [monitors valueForKey:path];
+		void (^block)(void) = monitor[@"cancel"];
+		if (block) {
+			block();
+		}
 	}
 
 	+ (BOOL) download:(NSURL*)url path:(NSString*)path {

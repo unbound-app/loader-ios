@@ -1,5 +1,5 @@
-THEOS_DEVICE_IP=192.168.0.251
 THEOS_PACKAGE_SCHEME=rootless
+INSTALL_TARGET_PROCESSES = Discord
 
 ARCHS := arm64 arm64e
 TARGET := iphone:clang:latest:14.0
@@ -11,7 +11,7 @@ SIDELOAD = 1
 
 TWEAK_NAME = Unbound
 $(TWEAK_NAME)_FILES = $(shell find Sources -name "*.x*")
-$(TWEAK_NAME)_CFLAGS = -DLOGS=$(LOGS) -DSIDELOAD=$(SIDELOAD) -fobjc-arc
+$(TWEAK_NAME)_CFLAGS = -DLOGS=$(LOGS) -DSIDELOAD=$(SIDELOAD) -DDEBUG_URL=@\"$(DEBUG_URL)\" -fobjc-arc
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation
 
 BUNDLE_NAME = UnboundResources

@@ -18,4 +18,6 @@
 
 + (id) parseJSON:(NSData*)data;
 
++ (dispatch_source_t) createDebounceTimer:(double)delay queue:(dispatch_queue_t)queue block:(dispatch_block_t)block;
+
 @end

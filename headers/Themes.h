@@ -6,13 +6,17 @@
 
 @interface Themes : NSObject {
 	NSMutableArray *themes;
+	NSMutableDictionary<NSString*, NSValue*> *originalRawImplementations;
+	NSString *currentThemeId;
 }
 
-+ (void) swizzle:(Class)interface payload:(NSDictionary*)payload;
++ (NSDictionary*) getThemeById:(NSString*)manifestId;
++ (BOOL) isValidCustomTheme:(NSString*)manifestId;
++ (void) swizzleRawColors:(NSDictionary*)payload;
 + (UIColor*) parseColor:(NSString*)color;
-+ (NSDictionary*) getApplied;
++ (void) restoreOriginalRawColors;
++ (void) swizzleSemanticColors;
 + (NSString*) makeJSON;
-+ (void) apply;
 + (void) init;
 
 @end

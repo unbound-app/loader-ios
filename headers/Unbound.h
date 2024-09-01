@@ -8,7 +8,7 @@
 #import "Plugins.h"
 #import "Themes.h"
 
-#include "./hermes/RCT.h"
+#include "./Discord/RCT.h"
 
 #ifdef DEBUG
 #   define IS_DEBUG true

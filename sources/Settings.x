@@ -7,6 +7,14 @@
 	+ (void) init {
 		path = [NSString pathWithComponents:@[FileSystem.documents, @"settings.json"]];
 
+		[Settings loadSettings];
+
+		[FileSystem monitor:path onChange:^{
+			[Settings loadSettings];
+		} autoRestart:YES];
+	}
+
+	+ (void) loadSettings {
 		if (![FileSystem exists:path]) {
 			[Settings reset];
 		}

@@ -41,9 +41,9 @@
 
 							if (result) {
 								etag = header;
-								NSLog(@"Detected new update.")
+								NSLog(@"Detected new update.");
 							} else {
-								NSLog(@"No updates found.")
+								NSLog(@"No updates found.");
 							}
 						}
 
@@ -71,6 +71,10 @@
 	}
 
 	+ (NSURL*) getDownloadURL {
+		#ifdef DEBUG_URL
+			return [NSURL URLWithString:[NSString stringWithFormat:@"%@", DEBUG_URL]];
+		#endif
+
 		NSString *url = [Settings getString:@"unbound" key:@"loader.update.url" def:@"https://raw.githubusercontent.com/unbound-mod/unbound/main/dist/unbound.bundle"];
 
 		return [NSURL URLWithString:url];

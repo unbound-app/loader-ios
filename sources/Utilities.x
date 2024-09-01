@@ -116,4 +116,16 @@
 
 		return object;
 	}
+
+	+ (dispatch_source_t) createDebounceTimer:(double)delay queue:(dispatch_queue_t)queue block:(dispatch_block_t)block {
+		dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+
+	    if (timer) {
+				dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, delay * NSEC_PER_SEC), DISPATCH_TIME_FOREVER, (1ull * NSEC_PER_SEC) / 10);
+				dispatch_source_set_event_handler(timer, block);
+				dispatch_resume(timer);
+	    }
+
+	    return timer;
+	}
 @end
