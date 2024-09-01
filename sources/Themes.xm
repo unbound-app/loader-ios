@@ -126,14 +126,16 @@
 	};
 
 	+ (void) swizzleRawColors:(NSDictionary*)payload {
+		// Get the class reference for UIColor
 		Class instance = object_getClass(NSClassFromString(@"UIColor"));
 
-		NSLog(@"[Themes] Attempting swizzle semantic colors...");
+		NSLog(@"[Themes] Attempting swizzle raw colors...");
 
 		@try {
 			for (NSString *raw in payload) {
 				SEL selector = NSSelectorFromString(raw);
 
+				// Define a block to replace the original method implementation
 				__block id (*original)(Class, SEL);
 				IMP replacement = imp_implementationWithBlock(^UIColor *(id self) {
 					@try {
@@ -144,10 +146,14 @@
 						NSLog(@"[Themes] Failed to use modified raw color %@. (%@)", raw, e.reason);
 					}
 
+					// Call the original implementation if parsing fails
 					return original(instance, selector);
 				});
 
+				// Hook the original method with the replacement block
 				MSHookMessageEx(instance, selector, replacement, (IMP *)&original);
+
+				// Store the original implementation for restoration when the theme changes
 				originalRawImplementations[raw] = [NSValue valueWithPointer:(void *)original];
 			}
 
@@ -167,7 +173,6 @@
 
 			// Reapply the original implementation
 			if (originalIMP) {
-				// Reapply the original implementation
 				MSHookMessageEx(instance, selector, originalIMP, NULL);
 			} else {
 				NSLog(@"[Themes] Failed to restore implementation for %@: Original IMP is NULL", selectorName);
@@ -182,7 +187,11 @@
 		NSLog(@"[Themes] Attempting swizzle semantic colors...");
 
 		@try {
+			// Get the class reference for DCDThemeColor
 			Class instance = object_getClass(NSClassFromString(@"DCDThemeColor"));
+
+			// All DCDThemeColor methods return UIColor and are semantic colors.
+			// We dynamically copy them and patch them to avoid hardcoding each color.
 			unsigned methodCount = 0;
 			Method *methods = class_copyMethodList(instance, &methodCount);
 
@@ -191,6 +200,7 @@
 				SEL selector = method_getName(method);
 				NSString *name = NSStringFromSelector(selector);
 
+				// Define a block to replace the original method implementation
 				__block id (*original)(Class, SEL);
 				IMP replacement = imp_implementationWithBlock(^UIColor *(id self) {
 					if (currentThemeId != nil) {
@@ -210,6 +220,7 @@
 							NSString *colorValue = color[@"value"];
 							NSNumber *colorOpacity = color[@"opacity"];
 
+							// Theme Developers are allowed to specify a custom color. (rgb/rgba/hex)
 							if ([colorType isEqualToString:@"color"]) {
 								UIColor *parsed = [Themes parseColor:colorValue];
 
@@ -222,6 +233,7 @@
 								}
 							}
 
+							// Theme Developers can also use Discord's raw colors.
 							if ([colorType isEqualToString:@"raw"]) {
 								SEL colorSelector = NSSelectorFromString(colorValue);
 								Class instance = object_getClass(NSClassFromString(@"UIColor"));
@@ -242,9 +254,11 @@
 						}
 					}
 
+					// Call the original implementation if parsing fails or the user does not have a theme applied.
 					return original(instance, selector);
 				});
 
+				// Hook the original method with the replacement block
 				MSHookMessageEx(instance, selector, replacement, (IMP *)&original);
 			}
 
