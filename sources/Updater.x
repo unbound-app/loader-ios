@@ -11,10 +11,10 @@
 
 		__block NSHTTPURLResponse *response;
 
-		if ([FileSystem exists:path]) {
-			response = [FileSystem download:url path:path withHeaders:@{ @"If-None-Match": etag }];
-		} else {
+		if (![FileSystem exists:path] || [Settings getBoolean:@"unbound" key:@"loader.update.force" def:NO]) {
 			response = [FileSystem download:url path:path];
+		} else {
+			response = [FileSystem download:url path:path withHeaders:@{ @"If-None-Match": etag }];
 		}
 
 		if ([response statusCode] == 304) {
