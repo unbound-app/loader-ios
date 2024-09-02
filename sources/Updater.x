@@ -21,9 +21,8 @@
 			NSLog(@"[Updater] No update found.");
 		} else {
 			NSLog(@"[Updater] Successfully updated to the latest version.");
+			[Settings set:@"unbound" key:@"loader.update.etag" value:[response valueForHTTPHeaderField:@"etag"]];
 		}
-
-		[Settings set:@"unbound" key:@"loader.update.etag" value:[response valueForHTTPHeaderField:@"etag"]];
 	}
 
 	+ (NSURL*) getDownloadURL {
