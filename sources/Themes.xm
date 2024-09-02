@@ -364,7 +364,7 @@
 			return %orig;
 		}
 
-		NSLog(@"[Themes] Theme was changed to %@", theme);
+		NSLog(@"[Themes] Theme updated. (%@)", theme);
 		currentThemeId = theme;
 
 		[Themes restoreOriginalRawColors];

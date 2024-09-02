@@ -108,12 +108,7 @@
 
 		[monitors setValue:monitor forKey:filePath];
 
-    // Log one or more messages when there's a file change event
     dispatch_source_set_event_handler(source, ^{
-			// unsigned long eventTypes = dispatch_source_get_data(source);
-
-			// NSLog(@"[Watcher] %lu event got fired for %@", eventTypes, filePath);
-
 			if (monitor[@"debounce_timer"] != nil) {
 				dispatch_source_cancel(monitor[@"debounce_timer"]);
 				monitor[@"debounce_timer"] = nil;
@@ -122,10 +117,7 @@
 			dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
 			double secondsToThrottle = 0.250f;
 			monitor[@"debounce_timer"] = [Utilities createDebounceTimer:secondsToThrottle queue:queue block:^{
-				NSLog(@"Debounced");
 				onChange();
-					//Do some task you don't want to happen every character change, like filter a large set of data or query the network, update a scrubber position.
-					//[self doSomethingWith:text];
 			}];
     });
 
@@ -156,26 +148,37 @@
 		}
 	}
 
-	+ (BOOL) download:(NSURL*)url path:(NSString*)path {
+	+ (NSHTTPURLResponse*) download:(NSURL*)url path:(NSString*)path {
+		return [FileSystem download:url path:path withHeaders:@{}];
+	}
+
+	+ (NSHTTPURLResponse*) download:(NSURL*)url path:(NSString*)path withHeaders:(NSDictionary*)headers {
 		dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 
-		NSLog(@"Downloading file from %@ to %@", url, path);
 		NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+
+		__block NSHTTPURLResponse *response;
 		__block NSException *exception;
 
 		request.timeoutInterval = 1.0;
 		request.cachePolicy = NSURLRequestReloadIgnoringCacheData;
 
+		for (NSString *header in headers) {
+			NSString *value = headers[header];
+			[request setValue:value forHTTPHeaderField:header];
+		}
+
 		dispatch_async(dispatch_get_main_queue(), ^{
 			@try {
 				NSURLSession *session = [NSURLSession sharedSession];
 				NSURLSessionTask *task = [session dataTaskWithRequest:request
-					completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
-						NSHTTPURLResponse *http = (NSHTTPURLResponse *) response;
+					completionHandler: ^(NSData *data, NSURLResponse *res, NSError *error) {
+						response = (NSHTTPURLResponse*)res;
 
-						if (error != nil || [http statusCode] != 200) {
+						if (error != nil || ([response statusCode] != 200 && [response statusCode] != 304)) {
 							exception = [[NSException alloc] initWithName:@"DownloadFailed" reason:error.localizedDescription userInfo:nil];
-						} else {
+						} else if ([response statusCode] != 304) {
+							NSLog(@"Saving file from %@ to %@", url, path);
 							[data writeToFile:path atomically:YES];
 						}
 
@@ -198,7 +201,7 @@
 			@throw exception;
 		}
 
-		return true;
+		return response;
 	}
 
 	+ (void) init {

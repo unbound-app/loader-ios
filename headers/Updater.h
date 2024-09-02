@@ -4,9 +4,7 @@
 	NSString *etag;
 }
 
-+ (BOOL) hasUpdate;
++ (void) downloadBundle:(NSString*)path;
 + (NSURL*) getDownloadURL;
-
-+ (NSString*) etag;
 
 @end

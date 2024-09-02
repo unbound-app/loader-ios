@@ -10,7 +10,8 @@
 
 + (id) delete:(NSString*)path;
 
-+ (BOOL) download:(NSURL*)url path:(NSString*)path;
++ (NSHTTPURLResponse*) download:(NSURL*)url path:(NSString*)path withHeaders:(NSDictionary*)headers;
++ (NSHTTPURLResponse*) download:(NSURL*)url path:(NSString*)path;
 
 + (void) monitor:(NSString*)filePath onChange:(void (^)())onChange autoRestart:(BOOL)autoRestart;
 

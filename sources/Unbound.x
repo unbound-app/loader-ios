@@ -65,26 +65,15 @@
 		%orig(script, url, true);
 
 		// Check for updates & re-download bundle if necessary
-		if (![FileSystem exists:BUNDLE] || [Updater hasUpdate]) {
-			@try {
-				NSURL *url = [Updater getDownloadURL];
+		@try {
+			[Updater downloadBundle:BUNDLE];
+		} @catch (NSException *e) {
+			NSLog(@"Bundle download failed. (%@)", e);
 
-				NSLog(@"Downloading bundle...");
-				[FileSystem download:url path:BUNDLE];
-
-				if ([Updater etag] != nil) {
-					[Settings set:@"unbound" key:@"loader.update.etag" value:[Updater etag]];
-				}
-
-				NSLog(@"Bundle downloaded.");
-			} @catch (NSException *e) {
-				NSLog(@"Bundle download failed: %@", e.reason);
-
-				if (![FileSystem exists:BUNDLE]) {
-					return [Utilities alert:@"Bundle failed to download, please report this to the developers."];
-				} else {
-					[Utilities alert:@"Bundle failed to update, loading out of date bundle."];
-				}
+			if (![FileSystem exists:BUNDLE]) {
+				return [Utilities alert:@"Bundle failed to download, please report this to the developers."];
+			} else {
+				[Utilities alert:@"Bundle failed to update, loading out of date bundle."];
 			}
 		}
 
