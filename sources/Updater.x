@@ -12,9 +12,9 @@
 		__block NSHTTPURLResponse *response;
 
 		if ([FileSystem exists:path]) {
-			[FileSystem download:url path:path withHeaders:@{ @"If-None-Match": etag }];
+			response = [FileSystem download:url path:path withHeaders:@{ @"If-None-Match": etag }];
 		} else {
-			[FileSystem download:url path:path];
+			response = [FileSystem download:url path:path];
 		}
 
 		if ([response statusCode] == 304) {
