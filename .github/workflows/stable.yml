@@ -7,6 +7,12 @@ on:
     tags:
       - '*'
   workflow_dispatch:
+    inputs:
+      discord_ipa_url:
+        description: "Discord IPA URL"
+        default: ""
+        required: true
+        type: string
 
 jobs:
   build:
@@ -42,9 +48,13 @@ jobs:
           curl -L https://github.com/unbound-mod/patcher/releases/latest/download/patcher.mac-amd64 -o ${{ github.workspace }}/patcher
           chmod +x patcher
 
+      - name: Download Discord IPA
+        run: |
+          curl -L ${{ inputs.discord_ipa_url }} -o ${{ github.workspace }}/Discord.ipa
+
       - name: Patch Discord
         run : |
-          ${{ github.workspace }}/patcher
+          ${{ github.workspace }}/patcher ${{ github.workspace }}/Discord.ipa
           mkdir out
 
       - name: Build package
