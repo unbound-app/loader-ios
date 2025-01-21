@@ -26,7 +26,7 @@
 	}
 
 	+ (NSURL*) getDownloadURL {
-		NSString *url = [Settings getString:@"unbound" key:@"loader.update.url" def:@"https://raw.githubusercontent.com/unbound-mod/unbound/main/dist/unbound.bundle"];
+		NSString *url = [Settings getString:@"unbound" key:@"loader.update.url" def:@"https://raw.githubusercontent.com/unbound-mod/client/refs/heads/main/dist/unbound.js"];
 
 		return [NSURL URLWithString:url];
 	}
