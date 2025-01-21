@@ -1,4 +1,4 @@
-#import "../Headers/FileSystem.h"
+#import "../headers/FileSystem.h"
 
 @implementation FileSystem
 	static NSMutableDictionary<NSString*, NSMutableDictionary*> *monitors = nil;

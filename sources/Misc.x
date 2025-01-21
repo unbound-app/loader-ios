@@ -1,4 +1,4 @@
-#import "../Headers/Misc.h"
+#import "../headers/Misc.h"
 
 %hook SentrySDK
 	+ (void) startWithOptions:(id)options {

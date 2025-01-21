@@ -1,4 +1,4 @@
-#import "../Headers/Updater.h"
+#import "../headers/Updater.h"
 
 @implementation Updater
 	static NSString *etag = nil;

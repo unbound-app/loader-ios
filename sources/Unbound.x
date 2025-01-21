@@ -1,4 +1,4 @@
-#import "../Headers/Unbound.h"
+#import "../headers/Unbound.h"
 
 %hook RCTCxxBridge
 	- (void) executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async {
@@ -21,7 +21,7 @@
 		// Apply React DevTools patch if its enabled
 		if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO]) {
 			@try {
-				NSData *bundle = [Utilities getResource:@"devtools" data:true ext:@"bundle"];
+				NSData *bundle = [Utilities getResource:@"devtools" data:true ext:@"js"];
 
 				NSLog(@"Attempting to execute DevTools bundle...");
 				%orig(bundle, SOURCE, true);
@@ -33,7 +33,7 @@
 
 		// Apply modules patch
 		@try {
-			NSData *bundle = [Utilities getResource:@"modules" data:true ext:@"bundle"];
+			NSData *bundle = [Utilities getResource:@"modules" data:true ext:@"js"];
 
 			NSLog(@"Attempting to execute modules patch...");
 			%orig(bundle, SOURCE, true);

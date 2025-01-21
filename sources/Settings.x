@@ -1,4 +1,4 @@
-#import "../Headers/Settings.h"
+#import "../headers/Settings.h"
 
 @implementation Settings
 	static NSMutableDictionary *data = nil;
