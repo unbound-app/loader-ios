@@ -23,9 +23,8 @@
 	}
 %end
 
-#if SIDELOAD == 1
-	// Fix issues with sideloading
-
+// Fix issues with sideloading
+%group Sideload
 	%hook NSFileManager
 		- (NSURL*)containerURLForSecurityApplicationGroupIdentifier:(NSString*)identifier {
 			if (identifier != nil) {
@@ -45,7 +44,7 @@
 			return %orig(identifier);
 		}
 	%end
-#endif
+%end
 
 %group Debug
 	%hook NSError
@@ -78,5 +77,9 @@
 
 	if (LOGS) {
 		%init(Debug)
+	}
+
+	if (SIDELOAD) {
+		%init(Sideload)
 	}
 }
