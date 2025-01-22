@@ -5,7 +5,7 @@ this.UNBOUND_FONTS = %@;
 this.UNBOUND_AVAILABLE_FONTS = %@;
 
 this.UNBOUND_LOADER = {
-    platform: 'iOS',
-    origin: 'Substrate',
-    version: VERSION_PLACEHOLDER
+        platform: 'iOS',
+        origin: 'Substrate',
+        version: VERSION_PLACEHOLDER
 };

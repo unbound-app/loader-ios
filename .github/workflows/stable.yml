@@ -33,9 +33,8 @@ jobs:
       - name: Prepare Theos
         uses: Randomblock1/theos-action@v1
 
-      - name: Prepare Azule
-        run : |
-          git clone https://github.com/Al4ise/Azule ${{ github.workspace }}/Azule
+      - name: Install cyan
+        run: pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip Pillow
 
       - name: Prepare Unbound Patcher
         run : |
@@ -53,10 +52,8 @@ jobs:
           gmake clean package
           mv $(find packages -name "*.deb" -print -quit) out/Unbound.deb
 
-      - name: Create Unbound.ipa
-        run : |
-          ${{ github.workspace }}/Azule/azule -i Unbound.ipa -o out -f out/unbound.deb
-          mv out/Unbound+unbound.deb.ipa out/Unbound.ipa
+      - name: Inject tweak
+        run: -duwsgq -i Unbound.ipa -o out/Unbound.ipa -f out/Unbound.deb
 
       - name: Build dev deb
         run: |
@@ -66,10 +63,8 @@ jobs:
           gmake clean package FINALPACKAGE=1 DEVTOOLS=1
           mv $(find packages -name "*.deb" -print -quit) out/Unbound.Development.deb
 
-      - name: Create Unbound.Dev.ipa
-        run : |
-          ${{ github.workspace }}/Azule/azule -i Unbound.ipa -o out -f out/Unbound.Development.deb
-          mv out/Unbound+Unbound.Development.deb.ipa out/Unbound.Development.ipa
+      - name: Inject dev tweak
+        run: -duwsgq -i Unbound.ipa -o out/Unbound.ipa -f out/Unbound.Development.deb
 
       - id: latestRelease
         uses: pozetroninc/github-action-get-latest-release@master

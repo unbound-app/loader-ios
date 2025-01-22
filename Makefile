@@ -21,7 +21,6 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
 
 before-all::
-	$(ECHO_NOTHING)mkdir -p Resources$(ECHO_END)
 	$(ECHO_NOTHING)VERSION_NUM=$$(echo "$(THEOS_PACKAGE_BASE_VERSION)" | cut -d'.' -f1,2) && \
 		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.template.js > resources/preload.js$(ECHO_END)
 
