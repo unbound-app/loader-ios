@@ -1,4 +1,4 @@
-#import "../headers/Themes.h"
+#import "Themes.h"
 #import <objc/runtime.h>
 #import <substrate.h>
 

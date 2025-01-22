@@ -1,4 +1,4 @@
-#import "../headers/Unbound.h"
+#import "Unbound.h"
 
 %hook RCTCxxBridge
 	- (void) executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async {

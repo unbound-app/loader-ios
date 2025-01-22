@@ -50,7 +50,7 @@ jobs:
       - name: Build package
         run: |
           rm -f packages/*
-          gmake clean package FINALPACKAGE=1
+          gmake clean package
           mv $(find packages -name "*.deb" -print -quit) out/Unbound.deb
 
       - name: Create Unbound.ipa

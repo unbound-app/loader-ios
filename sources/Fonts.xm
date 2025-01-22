@@ -1,4 +1,4 @@
-#import "../headers/Fonts.h"
+#import "Fonts.h"
 
 @implementation Fonts
 	static NSMutableDictionary<NSString*, NSString*> *overrides = nil;
