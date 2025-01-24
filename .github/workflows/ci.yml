@@ -1,0 +1,17 @@
+name: Build Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build-check:
+    name: Build Check
+    uses: ./.github/workflows/build.yml
+    with:
+      ipa_url: ""
+      release: false
+      is_testflight: false
+      add_extension: true
+      caller_workflow: "ci"
+    secrets: inherit 
