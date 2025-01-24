@@ -3,9 +3,8 @@ Object.defineProperties(globalThis, {
 		configurable: true,
 
 		get() {
-			if (!globalThis.modules) {
-				globalThis.modules = globalThis.__c?.();
-			}
+			globalThis.modules ??= globalThis.__c?.();
+
 
 			return this.value;
 		},
