@@ -1,6 +1,7 @@
 name: PR Assignment
 
 permissions:
+  pull-requests: write
   issues: write
 
 on:
@@ -10,8 +11,6 @@ on:
 jobs:
     auto-assign:
         runs-on: ubuntu-latest
-        permissions:
-            pull-requests: write
         steps:
             - name: 'Auto-assign PR'
               uses: pozil/auto-assign-issue@v2
