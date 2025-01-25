@@ -15,6 +15,5 @@ jobs:
             - name: 'Auto-assign PR'
               uses: pozil/auto-assign-issue@v2
               with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
                   assignees: acquitelol,marioparaschiv
                   numOfAssignee: 2
