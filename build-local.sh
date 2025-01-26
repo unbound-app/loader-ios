@@ -121,7 +121,7 @@ VERSION=$(grep '^Version:' control | cut -d ' ' -f 2)
 DEB_FILE="packages/${PACKAGE}_${VERSION}_iphoneos-arm64.deb"
 
 print_status "Injecting tweak..."
-yes | cyan -duwsgq -i $IPA_FILE -o "$NAME.ipa" -f "$DEB_FILE" OpenInDiscord/build/OpenInDiscord.appex
+yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE" OpenInDiscord/build/OpenInDiscord.appex
 
 if [ $? -ne 0 ]; then
     print_error "Failed to inject tweak"
