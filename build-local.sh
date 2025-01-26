@@ -20,7 +20,7 @@ print_error() {
 IPA_FILE=$(find . -maxdepth 1 -name "*.ipa" -print -quit)
 
 if [ -z "$IPA_FILE" ]; then
-    print_status "No IPA found. Please enter Discord IPA URL:"
+    print_status "No ipa found. Please enter Discord ipa URL:"
     read DISCORD_URL
     
     if [ -z "$DISCORD_URL" ]; then
@@ -28,15 +28,15 @@ if [ -z "$IPA_FILE" ]; then
         exit 1
     fi
     
-    print_status "Downloading Discord IPA..."
+    print_status "Downloading Discord ipa..."
     curl -L -o discord.ipa "$DISCORD_URL"
     
     if [ $? -ne 0 ]; then
-        print_error "Failed to download Discord IPA"
+        print_error "Failed to download Discord ipa"
         exit 1
     fi
     IPA_FILE="discord.ipa"
-    print_success "Downloaded Discord IPA"
+    print_success "Downloaded Discord ipa"
 fi
 
 print_status "Building tweak..."
@@ -92,14 +92,14 @@ if [ $? -ne 0 ]; then
 fi
 print_success "Built Safari extension"
 
-# print_status "Patching IPA..."
+# print_status "Patching ipa..."
 # ./patcher $IPA_FILE
 
 # if [ $? -ne 0 ]; then
-#     print_error "Failed to patch IPA"
+#     print_error "Failed to patch ipa"
 #     exit 1
 # fi
-# print_success "Patched IPA"
+# print_success "Patched ipa"
 
 print_status "Setting up Python environment..."
 python3 -m venv venv
@@ -128,6 +128,6 @@ fi
 deactivate
 
 print_status "Cleaning up..."
-rm -f patcher
+rm -rf patcher
 
 print_success "Successfully created $NAME.ipa" 
