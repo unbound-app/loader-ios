@@ -27,12 +27,14 @@ on:
   workflow_call:
     inputs:
       ipa_url:
+        default: ""
         required: true
         type: string
       release:
         default: true
         type: boolean
       is_testflight:
+        default: false
         required: true
         type: boolean
       add_extension:
