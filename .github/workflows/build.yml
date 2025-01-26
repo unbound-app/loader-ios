@@ -1,5 +1,5 @@
 name: Build Unbound
-run-name: ${{ github.event.inputs.release == 'true' && 'Release' || 'Build' }} for ${{ github.event.inputs.ipa_url }}
+run-name: ${{ inputs.release == 'true' && 'Release' || 'Build' }} for ${{ inputs.ipa_url }}
 
 on:
   workflow_dispatch:
@@ -58,7 +58,7 @@ jobs:
           submodules: recursive
 
       - name: Download Tweak
-        if: github.event.inputs.caller_workflow != 'ci'
+        if: inputs.caller_workflow != 'ci'
         run: |
           set +e
 
@@ -115,7 +115,7 @@ jobs:
           path: packages/*.deb
 
   build-ipa:
-    if: github.event.inputs.caller_workflow != 'ci'
+    if: inputs.caller_workflow != 'ci'
     runs-on: macos-15
     needs: build-tweak
 
@@ -129,17 +129,17 @@ jobs:
           merge-multiple: true
 
       - name: Download Discord ipa
-        run: curl -L -o discord.ipa ${{ github.event.inputs.ipa_url }}
+        run: curl -L -o discord.ipa ${{ inputs.ipa_url }}
 
       - name: Clone OpenInDiscord
-        if: github.event.inputs.add_extension == 'true'
+        if: inputs.add_extension == 'true'
         uses: actions/checkout@v4
         with:
           repository: castdrian/OpenInDiscord
           path: OpenInDiscord
 
       - name: Build Safari Extension
-        if: github.event.inputs.add_extension == 'true'
+        if: inputs.add_extension == 'true'
         run: |
           cd OpenInDiscord
           xcodebuild build \
@@ -174,7 +174,7 @@ jobs:
 
       - name: Inject tweak (and extension)
         run: |
-          if [ "${{ github.event.inputs.add_extension }}" == "true" ]; then
+          if [ "${{ inputs.add_extension }}" == "true" ]; then
             cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb OpenInDiscord/build/OpenInDiscord.appex
           else
             cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
@@ -187,7 +187,7 @@ jobs:
           path: ${{ env.APP_NAME }}.ipa
 
   release-app:
-    if: inputs.caller_workflow != 'ci' && github.event.inputs.release == 'true'
+    if: inputs.caller_workflow != 'ci' && inputs.release == 'true'
     runs-on: macos-15
     needs: build-ipa
     permissions:
@@ -207,7 +207,7 @@ jobs:
           unzip -q *.ipa
           VERSION=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleShortVersionString | cut -d '"' -f 4)
           
-          if [[ "${{ github.event.inputs.is_testflight }}" == "true" ]]; then
+          if [[ "${{ inputs.is_testflight }}" == "true" ]]; then
             BUILD=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleVersion | cut -d '"' -f 4)
             VERSION="${VERSION}_${BUILD}"
             echo "IS_PRERELEASE=true" >> $GITHUB_ENV
@@ -233,7 +233,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   app-repo:
-    if: inputs.caller_workflow != 'ci' && github.event.inputs.release == 'true'
+    if: inputs.caller_workflow != 'ci' && inputs.release == 'true'
     continue-on-error: true
     runs-on: macos-15
     needs: release-app
@@ -252,7 +252,7 @@ jobs:
           unzip -q "$APP_FILE"
           VERSION=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleShortVersionString | cut -d '"' -f 4)
           
-          if [[ "${{ github.event.inputs.is_testflight }}" == "true" ]]; then
+          if [[ "${{ inputs.is_testflight }}" == "true" ]]; then
             BUILD=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleVersion | cut -d '"' -f 4)
             VERSION="${VERSION}_${BUILD}"
             APP_INDEX=1
