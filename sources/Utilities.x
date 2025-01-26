@@ -1,7 +1,7 @@
 #import <CommonCrypto/CommonCrypto.h>
 
-#import "../Headers/FileSystem.h"
-#import "../Headers/Utilities.h"
+#import "FileSystem.h"
+#import "Utilities.h"
 #import <rootless.h>
 
 @implementation Utilities

@@ -1,28 +1,30 @@
 #import "Unbound.h"
 
 @interface FileSystem : NSObject {
-	NSFileManager *manager;
-	NSString *documents;
+  NSFileManager *manager;
+  NSString *documents;
 }
 
-+ (BOOL) createDirectory:(NSString*)path;
-+ (void) writeFile:(NSString*)path contents:(NSData*)contents;
++ (BOOL)createDirectory:(NSString *)path;
++ (void)writeFile:(NSString *)path contents:(NSData *)contents;
 
-+ (id) delete:(NSString*)path;
++ (id)delete:(NSString *)path;
 
-+ (NSHTTPURLResponse*) download:(NSURL*)url path:(NSString*)path withHeaders:(NSDictionary*)headers;
-+ (NSHTTPURLResponse*) download:(NSURL*)url path:(NSString*)path;
++ (NSHTTPURLResponse *)download:(NSURL *)url
+                           path:(NSString *)path
+                    withHeaders:(NSDictionary *)headers;
++ (NSHTTPURLResponse *)download:(NSURL *)url path:(NSString *)path;
 
-+ (void) monitor:(NSString*)filePath onChange:(void (^)())onChange autoRestart:(BOOL)autoRestart;
++ (void)monitor:(NSString *)filePath onChange:(void (^)())onChange autoRestart:(BOOL)autoRestart;
 
-+ (NSArray*) readDirectory:(NSString*)path;
-+ (NSData*) readFile:(NSString*)path;
++ (NSArray *)readDirectory:(NSString *)path;
++ (NSData *)readFile:(NSString *)path;
 
-+ (BOOL) isDirectory:(NSString*)path;
-+ (BOOL) exists:(NSString*)path;
++ (BOOL)isDirectory:(NSString *)path;
++ (BOOL)exists:(NSString *)path;
 
-+ (void) init;
++ (void)init;
 
-+ (NSString*) documents;
++ (NSString *)documents;
 
 @end

@@ -1,4 +1,4 @@
-#import "../Headers/Plugins.h"
+#import "Plugins.h"
 
 @implementation Plugins
 	static NSMutableArray *plugins = nil;
