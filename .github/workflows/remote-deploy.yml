@@ -1,0 +1,13 @@
+name: Remote ipa update
+
+on:
+  repository_dispatch:
+    types: [ipa-update]
+
+jobs:
+  trigger-deploy:
+    uses: ./.github/workflows/build.yml
+    with:
+      ipa_url: ${{ github.event.client_payload.ipa_url }}
+      is_testflight: ${{ github.event.client_payload.is_testflight }}
+    secrets: inherit

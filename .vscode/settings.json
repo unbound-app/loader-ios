@@ -1,0 +1,40 @@
+{
+	"markdownlint.config": {
+		"MD029": false,
+		"MD033": false,
+		"MD045": false,
+	},
+	"VsCodeTaskButtons.tasks": [
+		{
+			"label": "$(tools) Build Tweak",
+			"task": "Build Tweak",
+			"tooltip": "Build Tweak"
+		},
+		{
+			"label": "$(cloud-upload) AirDrop Tweak",
+			"task": "AirDrop Tweak",
+			"tooltip": "AirDrop Tweak"
+		},
+		{
+			"label": "$(package) Build IPA",
+			"task": "Build IPA", 
+			"tooltip": "Build IPA locally"
+		}
+	],
+	"externalFormatters.languages": {
+		"logos": {
+			"command": "python3",
+			"arguments": [
+				"../.vscode/logos-format.py",
+				"--assume-filename",
+				"objc"
+			]
+		}
+	},
+	"yaml.schemas": {
+		"https://json.schemastore.org/github-workflow.json": [
+			"*.github/workflows/*.yml",
+		]
+	},
+	"editor.formatOnSave": true
+}

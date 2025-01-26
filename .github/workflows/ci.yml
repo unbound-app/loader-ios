@@ -1,0 +1,14 @@
+name: Build validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  build-check:
+    name: Build Check
+    uses: ./.github/workflows/build.yml
+    with:
+      release: false
+      caller_workflow: "ci"
+    secrets: inherit 
