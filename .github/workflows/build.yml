@@ -128,6 +128,11 @@ jobs:
       - name: Download Discord ipa
         run: curl -L -o discord.ipa ${{ inputs.ipa_url }}
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
       - name: Clone patcher
         uses: actions/checkout@v4
         with:
