@@ -1,7 +1,5 @@
 name: PR Assignment
 
-permissions: write-all
-
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
