@@ -12,17 +12,14 @@ on:
       release:
         default: true
         description: "Create a GitHub release"
-        required: true
         type: boolean
       is_testflight:
         default: false
         description: "This is a TestFlight build"
-        required: true
         type: boolean
       add_extension:
         default: true
         description: "Include OpenInDiscord"
-        required: true
         type: boolean
   workflow_call:
     inputs:
