@@ -4,9 +4,7 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: write-all
 
 jobs:
   auto-assign:
