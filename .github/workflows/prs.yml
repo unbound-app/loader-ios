@@ -1,5 +1,8 @@
 name: PR Assignment
-permissions: write-all
+
+permissions:
+  pull-requests: write
+  issues: write
 
 on:
   pull_request:
