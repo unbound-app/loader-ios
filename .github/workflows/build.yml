@@ -128,7 +128,7 @@ jobs:
         with:
           merge-multiple: true
 
-      - name: Download Discord IPA
+      - name: Download Discord ipa
         run: curl -L -o discord.ipa ${{ github.event.inputs.ipa_url }}
 
       - name: Clone OpenInDiscord
@@ -241,7 +241,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download IPA artifact
+      - name: Download ipa artifact
         uses: actions/download-artifact@v4
         with:
           name: ipa
