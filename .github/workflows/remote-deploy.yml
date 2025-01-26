@@ -1,4 +1,4 @@
-name: Remote IPA Update
+name: Remote ipa update
 
 on:
   repository_dispatch:

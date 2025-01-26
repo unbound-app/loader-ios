@@ -176,7 +176,7 @@ jobs:
 
       - name: Inject tweak (and extension)
         run: |
-          if [ "${{ inputs.add_extension }}" == true ]; then
+          if [ ${{ inputs.add_extension }} == true ]; then
             cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb OpenInDiscord/build/OpenInDiscord.appex
           else
             cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
@@ -209,7 +209,7 @@ jobs:
           unzip -q *.ipa
           VERSION=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleShortVersionString | cut -d '"' -f 4)
           
-          if [[ "${{ inputs.is_testflight }}" == true ]]; then
+          if [[ ${{ inputs.is_testflight }} == true ]]; then
             BUILD=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleVersion | cut -d '"' -f 4)
             VERSION="${VERSION}_${BUILD}"
             echo "IS_PRERELEASE=true" >> $GITHUB_ENV
@@ -254,7 +254,7 @@ jobs:
           unzip -q "$APP_FILE"
           VERSION=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleShortVersionString | cut -d '"' -f 4)
           
-          if [[ "${{ inputs.is_testflight }}" == true ]]; then
+          if [[ ${{ inputs.is_testflight }} == true ]]; then
             BUILD=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleVersion | cut -d '"' -f 4)
             VERSION="${VERSION}_${BUILD}"
             APP_INDEX=1
