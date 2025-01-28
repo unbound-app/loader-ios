@@ -128,6 +128,24 @@ jobs:
       - name: Download Discord ipa
         run: curl -L -o discord.ipa ${{ inputs.ipa_url }}
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Clone patcher
+        uses: actions/checkout@v4
+        with:
+          repository: unbound-mod/patcher-ios
+          path: patcher-ios
+
+      - name: Build and run patcher
+        run: |
+          cd patcher-ios
+          go build -o patcher
+          cd ..
+          ./patcher-ios/patcher discord.ipa
+
       - name: Clone OpenInDiscord
         if: inputs.add_extension == true
         uses: actions/checkout@v4
@@ -159,22 +177,15 @@ jobs:
           NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
           echo "APP_NAME=$NAME" >> $GITHUB_ENV
 
-    # no releases yet
-    #   - name: Run patcher
-    #     run: |
-    #       curl -L -o patcher https://github.com/unbound-mod/patcher-ios/releases/latest/download/patcher.mac-amd64
-    #       chmod +x patcher
-    #       ./patcher discord.ipa
-
       - name: Install cyan
         run: pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip Pillow
 
       - name: Inject tweak (and extension)
         run: |
           if [ ${{ inputs.add_extension }} == true ]; then
-            cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb OpenInDiscord/build/OpenInDiscord.appex
+            yes | cyan -duwsgq -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb OpenInDiscord/build/OpenInDiscord.appex
           else
-            cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+            yes | cyan -duwsgq -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
           fi
 
       - name: Upload ipa as artifact

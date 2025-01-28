@@ -48,15 +48,27 @@ if [ $? -ne 0 ]; then
 fi
 print_success "Built tweak"
 
-# print_status "Downloading patcher..."
-# curl -L -o patcher https://github.com/unbound-mod/patcher-ios/releases/latest/download/patcher.mac-amd64
-# chmod +x patcher
+print_status "Building patcher..."
+rm -rf patcher-ios
+git clone https://github.com/unbound-mod/patcher-ios
+cd patcher-ios
+go build -o patcher
+cd ..
 
-# if [ $? -ne 0 ]; then
-#     print_error "Failed to download patcher"
-#     exit 1
-# fi
-# print_success "Downloaded patcher"
+if [ $? -ne 0 ]; then
+    print_error "Failed to build patcher"
+    exit 1
+fi
+print_success "Built patcher"
+
+print_status "Patching ipa..."
+./patcher-ios/patcher "$IPA_FILE"
+
+if [ $? -ne 0 ]; then
+    print_error "Failed to patch ipa"
+    exit 1
+fi
+print_success "Patched ipa"
 
 print_status "Cloning Safari extension..."
 rm -rf OpenInDiscord
@@ -92,15 +104,6 @@ if [ $? -ne 0 ]; then
 fi
 print_success "Built Safari extension"
 
-# print_status "Patching ipa..."
-# ./patcher $IPA_FILE
-
-# if [ $? -ne 0 ]; then
-#     print_error "Failed to patch ipa"
-#     exit 1
-# fi
-# print_success "Patched ipa"
-
 print_status "Setting up Python environment..."
 python3 -m venv venv
 source venv/bin/activate
@@ -115,10 +118,10 @@ print_success "Installed cyan"
 NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
 PACKAGE=$(grep '^Package:' control | cut -d ' ' -f 2)
 VERSION=$(grep '^Version:' control | cut -d ' ' -f 2)
-DEB_FILE="packages/${PACKAGE}_${VERSION}_iphoneos-arm.deb"
+DEB_FILE="packages/${PACKAGE}_${VERSION}_iphoneos-arm64.deb"
 
 print_status "Injecting tweak..."
-cyan -duwsgq -i $IPA_FILE -o "$NAME.ipa" -f "$DEB_FILE" OpenInDiscord/build/OpenInDiscord.appex
+yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE" OpenInDiscord/build/OpenInDiscord.appex
 
 if [ $? -ne 0 ]; then
     print_error "Failed to inject tweak"
@@ -128,6 +131,6 @@ fi
 deactivate
 
 print_status "Cleaning up..."
-rm -rf patcher
+rm -rf patcher-ios OpenInDiscord venv
 
-print_success "Successfully created $NAME.ipa" 
+print_success "Successfully created $NAME.ipa"
