@@ -11,7 +11,14 @@
       "localizedDescription": "A client mod for Discord",
       "subtitle": "A client mod for Discord",
       "tintColor": "aa454d",
-      "versions": [],
+      "versions": [
+        {
+          "version": "264.1",
+          "date": "2025-02-05",
+          "size": 88559274,
+          "downloadURL": "https://github.com/stqism/loader-ios/releases/download/v264.1/Unbound.ipa"
+        }
+      ],
       "appPermissions": {}
     },
     {
