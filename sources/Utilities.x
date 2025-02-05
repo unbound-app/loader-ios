@@ -21,7 +21,7 @@
 			return bundlePath;
 		}
 
-		// Fall back to a relative path on non-jailbroken devices
+		// Fall back to a relative path on jailed devices
 		NSURL *url = [[NSBundle mainBundle] bundleURL];
 		NSString *relative = [NSString stringWithFormat:@"%@/UnboundResources.bundle", [url path]];
 		if ([FileSystem exists:relative]) {

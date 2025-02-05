@@ -8,6 +8,7 @@
 #import "Updater.h"
 #import "Plugins.h"
 #import "Themes.h"
+#import "Menu.h"
 
 #include "./Discord/RCT.h"
 
