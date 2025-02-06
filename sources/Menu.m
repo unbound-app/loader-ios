@@ -240,7 +240,10 @@ BOOL isRecoveryModeEnabled(void) {
 
 // Action methods
 - (void)toggleRecoveryMode {
+    BOOL currentValue = isRecoveryModeEnabled();
+    [Settings set:@"unbound" key:@"recovery" value:@(!currentValue)];
     [self dismiss];
+    reloadApp(self);
 }
 
 - (void)refetchBundle {
@@ -250,6 +253,7 @@ BOOL isRecoveryModeEnabled(void) {
 - (void)deleteBundle {
     [[NSFileManager defaultManager] removeItemAtPath:[self bundlePath] error:nil];
     [self dismiss];
+	reloadApp(self);
 }
 
 - (void)switchBundleVersion {
