@@ -18,3 +18,4 @@ extern id gBridge;
 BOOL isSafeModeEnabled(void);
 NSString *getDeviceIdentifier(void);
 void showMenuSheet(void);
+void reloadApp(UIViewController *viewController);

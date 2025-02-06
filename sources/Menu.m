@@ -2,7 +2,6 @@
 
 extern id gBridge;
 
-
 BOOL isRecoveryModeEnabled(void) {
   return [Settings getBoolean:@"unbound" key:@"recovery" def:NO];
 }
@@ -13,6 +12,10 @@ BOOL isRecoveryModeEnabled(void) {
 
 @implementation UnboundMenuViewController {
     BOOL isJailbroken;
+}
+
+- (NSString *)bundlePath {
+    return [NSString pathWithComponents:@[FileSystem.documents, @"unbound.bundle"]];
 }
 
 - (void)viewDidLoad {
@@ -210,7 +213,7 @@ BOOL isRecoveryModeEnabled(void) {
 #pragma mark - Actions
 
 - (void)showDestructiveConfirmation:(NSString *)action selectorName:(NSString *)selectorName {
-    NSString *message = [NSString stringWithFormat:@"Are you sure you want to %@?", [action lowercaseString]];
+    NSString *message = @"Are you sure you want to do this?";
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Confirm Action"
                                                                  message:message
@@ -245,6 +248,7 @@ BOOL isRecoveryModeEnabled(void) {
 }
 
 - (void)deleteBundle {
+    [[NSFileManager defaultManager] removeItemAtPath:[self bundlePath] error:nil];
     [self dismiss];
 }
 
@@ -257,23 +261,33 @@ BOOL isRecoveryModeEnabled(void) {
 }
 
 - (void)wipePlugins {
+	[[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Plugins"] error:nil];
     [self dismiss];
+	reloadApp(self);
 }
 
 - (void)wipeThemes {
-    [self dismiss];
+    [[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Themes"] error:nil];
+	[self dismiss];
+	reloadApp(self);
 }
 
 - (void)wipeFonts {
-    [self dismiss];
+    [[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Fonts"] error:nil];
+	[self dismiss];
+	reloadApp(self);
 }
 
 - (void)wipeIconPacks {
-    [self dismiss];
+    [[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Icons"] error:nil];
+	[self dismiss];
+	reloadApp(self);
 }
 
 - (void)factoryReset {
-    [self dismiss];
+	[[NSFileManager defaultManager] removeItemAtPath:FileSystem.documents error:nil];
+	[self dismiss];
+	reloadApp(self);
 }
 
 - (void)openAppFolder {
