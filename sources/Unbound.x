@@ -43,7 +43,7 @@ static void triggerHapticFeedback(void) {
   [FileSystem init];
   [Settings init];
 
-  // Don't load bundle and addons  if not configured to do so.
+  // Don't load bundle and addons if not configured to do so.
   if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES]) {
     NSLog(@"Loader is disabled. Aborting.");
     return %orig(script, url, true);
