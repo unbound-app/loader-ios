@@ -247,13 +247,18 @@ BOOL isRecoveryModeEnabled(void) {
 }
 
 - (void)refetchBundle {
+    [Updater downloadBundle:[self bundlePath]];
     [self dismiss];
+	reloadApp(self);
 }
 
 - (void)deleteBundle {
+    [Settings set:@"unbound" key:@"loader.update.url" value:nil];
+	[Settings set:@"unbound" key:@"loader.update.force" value:nil];
+
     [[NSFileManager defaultManager] removeItemAtPath:[self bundlePath] error:nil];
     [self dismiss];
-	reloadApp(self);
+    reloadApp(self);
 }
 
 - (void)switchBundleVersion {
@@ -261,7 +266,36 @@ BOOL isRecoveryModeEnabled(void) {
 }
 
 - (void)loadCustomBundle {
-    [self dismiss];
+    UIAlertController *alert = [UIAlertController 
+        alertControllerWithTitle:@"Load Custom Bundle"
+        message:@"Enter the URL for your custom bundle:"
+        preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"https://example.com/file.bundle";
+        textField.keyboardType = UIKeyboardTypeURL;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    }];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Load" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        NSString *urlString = alert.textFields.firstObject.text;
+        if (urlString.length > 0) {
+            [Settings set:@"unbound" key:@"loader.update.url" value:urlString];
+			[Settings set:@"unbound" key:@"loader.update.force" value:true];
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                [Updater downloadBundle:[self bundlePath]];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self dismissViewControllerAnimated:YES completion:^{
+                        reloadApp(self);
+                    }];
+                });
+            });
+        }
+    }]];
+
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)wipePlugins {
