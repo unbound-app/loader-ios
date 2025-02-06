@@ -242,14 +242,20 @@ BOOL isRecoveryModeEnabled(void) {
 - (void)toggleRecoveryMode {
     BOOL currentValue = isRecoveryModeEnabled();
     [Settings set:@"unbound" key:@"recovery" value:@(!currentValue)];
-    [self dismiss];
-    reloadApp(self);
+    [self dismissViewControllerAnimated:YES completion:^{
+        reloadApp(self);
+    }];
 }
 
 - (void)refetchBundle {
-    [Updater downloadBundle:[self bundlePath]];
-    [self dismiss];
-	reloadApp(self);
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [Updater downloadBundle:[self bundlePath]];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self dismissViewControllerAnimated:YES completion:^{
+                reloadApp(self);
+            }];
+        });
+    });
 }
 
 - (void)deleteBundle {
@@ -257,12 +263,15 @@ BOOL isRecoveryModeEnabled(void) {
 	[Settings set:@"unbound" key:@"loader.update.force" value:nil];
 
     [[NSFileManager defaultManager] removeItemAtPath:[self bundlePath] error:nil];
-    [self dismiss];
-    reloadApp(self);
+    [self dismissViewControllerAnimated:YES completion:^{
+        reloadApp(self);
+    }];
 }
 
 - (void)switchBundleVersion {
-    [self dismiss];
+    [self dismissViewControllerAnimated:YES completion:^{
+        reloadApp(self);
+    }];
 }
 
 - (void)loadCustomBundle {
@@ -283,7 +292,7 @@ BOOL isRecoveryModeEnabled(void) {
         NSString *urlString = alert.textFields.firstObject.text;
         if (urlString.length > 0) {
             [Settings set:@"unbound" key:@"loader.update.url" value:urlString];
-			[Settings set:@"unbound" key:@"loader.update.force" value:true];
+            [Settings set:@"unbound" key:@"loader.update.force" value:@YES];
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                 [Updater downloadBundle:[self bundlePath]];
                 dispatch_async(dispatch_get_main_queue(), ^{
@@ -300,32 +309,37 @@ BOOL isRecoveryModeEnabled(void) {
 
 - (void)wipePlugins {
 	[[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Plugins"] error:nil];
-    [self dismiss];
-	reloadApp(self);
+    [self dismissViewControllerAnimated:YES completion:^{
+        reloadApp(self);
+    }];
 }
 
 - (void)wipeThemes {
     [[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Themes"] error:nil];
-	[self dismiss];
-	reloadApp(self);
+	[self dismissViewControllerAnimated:YES completion:^{
+        reloadApp(self);
+    }];
 }
 
 - (void)wipeFonts {
     [[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Fonts"] error:nil];
-	[self dismiss];
-	reloadApp(self);
+	[self dismissViewControllerAnimated:YES completion:^{
+        reloadApp(self);
+    }];
 }
 
 - (void)wipeIconPacks {
     [[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Icons"] error:nil];
-	[self dismiss];
-	reloadApp(self);
+	[self dismissViewControllerAnimated:YES completion:^{
+        reloadApp(self);
+    }];
 }
 
 - (void)factoryReset {
 	[[NSFileManager defaultManager] removeItemAtPath:FileSystem.documents error:nil];
-	[self dismiss];
-	reloadApp(self);
+	[self dismissViewControllerAnimated:YES completion:^{
+        reloadApp(self);
+    }];
 }
 
 - (void)openAppFolder {
