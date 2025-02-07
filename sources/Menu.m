@@ -1,14 +1,8 @@
 #import "Menu.h"
 
-extern id gBridge;
-
 BOOL isRecoveryModeEnabled(void) {
   return [Settings getBoolean:@"unbound" key:@"recovery" def:NO];
 }
-
-@interface UnboundMenuViewController ()
-@property (nonatomic, strong) NSArray<NSDictionary *> *menuSections;
-@end
 
 @implementation UnboundMenuViewController {
     BOOL isJailbroken;
@@ -402,7 +396,10 @@ BOOL isRecoveryModeEnabled(void) {
     }];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Load" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"Load" 
+                                            style:UIAlertActionStyleDefault 
+                                          handler:^(UIAlertAction *action) {
         NSString *urlString = alert.textFields.firstObject.text;
         if (urlString.length > 0) {
             [Settings set:@"unbound" key:@"loader.update.url" value:urlString];
