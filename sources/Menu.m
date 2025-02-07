@@ -1,32 +1,38 @@
 #import "Menu.h"
 
-BOOL isRecoveryModeEnabled(void) {
-  return [Settings getBoolean:@"unbound" key:@"recovery" def:NO];
+BOOL isRecoveryModeEnabled(void)
+{
+    return [Settings getBoolean:@"unbound" key:@"recovery" def:NO];
 }
 
-@implementation UnboundMenuViewController {
+@implementation UnboundMenuViewController
+{
     BOOL isJailbroken;
 }
 
-- (NSString *)bundlePath {
-    return [NSString pathWithComponents:@[FileSystem.documents, @"unbound.bundle"]];
+- (NSString *)bundlePath
+{
+    return [NSString pathWithComponents:@[ FileSystem.documents, @"unbound.bundle" ]];
 }
 
-- (void)viewDidLoad {
+- (void)viewDidLoad
+{
     [super viewDidLoad];
     isJailbroken = [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];
     [self setupTableView];
     [self setupMenuItems];
 }
 
-- (void)setupTableView {
+- (void)setupTableView
+{
     self.title = [NSString stringWithFormat:@"Unbound v%@ Recovery Menu", PACKAGE_VERSION];
     self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
 
-    self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
+    self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds
+                                                  style:UITableViewStyleInsetGrouped];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.tableView.delegate = self;
-    self.tableView.dataSource = self;
+    self.tableView.delegate                                  = self;
+    self.tableView.dataSource                                = self;
     [self.view addSubview:self.tableView];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -37,108 +43,108 @@ BOOL isRecoveryModeEnabled(void) {
     ]];
 }
 
-- (void)setupMenuItems {
+- (void)setupMenuItems
+{
     self.menuSections = @[
         @{
-            @"title": @"",
-            @"items": @[
+            @"title" : @"",
+            @"items" : @[ @{
+                @"title" : isRecoveryModeEnabled() ? @"Disable Recovery Mode"
+                                                   : @"Enable Recovery Mode",
+                @"icon" : @"shield",
+                @"selector" : NSStringFromSelector(@selector(toggleRecoveryMode))
+            } ]
+        },
+        @{
+            @"title" : @"Bundle",
+            @"items" : @[
                 @{
-                    @"title": isRecoveryModeEnabled() ? @"Disable Recovery Mode" : @"Enable Recovery Mode",
-                    @"icon": @"shield",
-                    @"selector": NSStringFromSelector(@selector(toggleRecoveryMode))
+                    @"title" : @"Refetch Bundle",
+                    @"icon" : @"arrow.triangle.2.circlepath",
+                    @"selector" : NSStringFromSelector(@selector(refetchBundle))
+                },
+                @{
+                    @"title" : @"Delete Bundle",
+                    @"icon" : @"trash",
+                    @"destructive" : @YES,
+                    @"selector" : NSStringFromSelector(@selector(deleteBundle))
+                },
+                @{
+                    @"title" : @"Switch Bundle Version",
+                    @"icon" : @"arrow.triangle.2.circlepath.circle",
+                    @"selector" : NSStringFromSelector(@selector(switchBundleVersion))
+                },
+                @{
+                    @"title" : @"Load Custom Bundle",
+                    @"icon" : @"link.badge.plus",
+                    @"selector" : NSStringFromSelector(@selector(loadCustomBundle))
                 }
             ]
         },
         @{
-            @"title": @"Bundle",
-            @"items": @[
+            @"title" : @"Addons",
+            @"items" : @[
                 @{
-                    @"title": @"Refetch Bundle",
-                    @"icon": @"arrow.triangle.2.circlepath",
-                    @"selector": NSStringFromSelector(@selector(refetchBundle))
+                    @"title" : @"Wipe Plugins",
+                    @"icon" : @"trash",
+                    @"destructive" : @YES,
+                    @"selector" : NSStringFromSelector(@selector(wipePlugins))
                 },
                 @{
-                    @"title": @"Delete Bundle",
-                    @"icon": @"trash",
-                    @"destructive": @YES,
-                    @"selector": NSStringFromSelector(@selector(deleteBundle))
+                    @"title" : @"Wipe Themes",
+                    @"icon" : @"trash",
+                    @"destructive" : @YES,
+                    @"selector" : NSStringFromSelector(@selector(wipeThemes))
                 },
                 @{
-                    @"title": @"Switch Bundle Version",
-                    @"icon": @"arrow.triangle.2.circlepath.circle",
-                    @"selector": NSStringFromSelector(@selector(switchBundleVersion))
+                    @"title" : @"Wipe Fonts",
+                    @"icon" : @"trash",
+                    @"destructive" : @YES,
+                    @"selector" : NSStringFromSelector(@selector(wipeFonts))
                 },
                 @{
-                    @"title": @"Load Custom Bundle",
-                    @"icon": @"link.badge.plus",
-                    @"selector": NSStringFromSelector(@selector(loadCustomBundle))
+                    @"title" : @"Wipe Icon Packs",
+                    @"icon" : @"trash",
+                    @"destructive" : @YES,
+                    @"selector" : NSStringFromSelector(@selector(wipeIconPacks))
                 }
             ]
         },
         @{
-            @"title": @"Addons",
-            @"items": @[
+            @"title" : @"Utilities",
+            @"items" : @[
                 @{
-                    @"title": @"Wipe Plugins",
-                    @"icon": @"trash",
-                    @"destructive": @YES,
-                    @"selector": NSStringFromSelector(@selector(wipePlugins))
+                    @"title" : @"Factory Reset",
+                    @"icon" : @"trash.fill",
+                    @"destructive" : @YES,
+                    @"selector" : NSStringFromSelector(@selector(factoryReset))
                 },
                 @{
-                    @"title": @"Wipe Themes",
-                    @"icon": @"trash",
-                    @"destructive": @YES,
-                    @"selector": NSStringFromSelector(@selector(wipeThemes))
+                    @"title" : @"Open App Folder",
+                    @"icon" : @"folder",
+                    @"selector" : NSStringFromSelector(@selector(openAppFolder))
                 },
                 @{
-                    @"title": @"Wipe Fonts",
-                    @"icon": @"trash",
-                    @"destructive": @YES,
-                    @"selector": NSStringFromSelector(@selector(wipeFonts))
-                },
-                @{
-                    @"title": @"Wipe Icon Packs",
-                    @"icon": @"trash",
-                    @"destructive": @YES,
-                    @"selector": NSStringFromSelector(@selector(wipeIconPacks))
+                    @"title" : @"Open GitHub Issue",
+                    @"icon" : @"exclamationmark.bubble",
+                    @"selector" : NSStringFromSelector(@selector(openGitHubIssue))
                 }
             ]
         },
         @{
-            @"title": @"Utilities",
-            @"items": @[
+            @"title" : @"Settings",
+            @"items" : @[
                 @{
-                    @"title": @"Factory Reset",
-                    @"icon": @"trash.fill",
-                    @"destructive": @YES,
-                    @"selector": NSStringFromSelector(@selector(factoryReset))
+                    @"title" : @"Enable Shake Motion",
+                    @"icon" : @"iphone.gen3.radiowaves.left.and.right",
+                    @"isSwitch" : @YES,
+                    @"key" : @"UnboundShakeGestureEnabled"
                 },
                 @{
-                    @"title": @"Open App Folder",
-                    @"icon": @"folder",
-                    @"selector": NSStringFromSelector(@selector(openAppFolder))
-                },
-                @{
-                    @"title": @"Open GitHub Issue",
-                    @"icon": @"exclamationmark.bubble",
-                    @"selector": NSStringFromSelector(@selector(openGitHubIssue))
-                }
-            ]
-        },
-        @{
-            @"title": @"Settings",
-            @"items": @[
-                @{
-                    @"title": @"Enable Shake Motion",
-                    @"icon": @"iphone.gen3.radiowaves.left.and.right",
-                    @"isSwitch": @YES,
-                    @"key": @"UnboundShakeGestureEnabled"
-                },
-                @{
-                    @"title": @"Enable Three Finger Press",
-                    @"icon": @"hand.tap",
-                    @"isSwitch": @YES,
-                    @"key": @"UnboundThreeFingerGestureEnabled"
+                    @"title" : @"Enable Three Finger Press",
+                    @"icon" : @"hand.tap",
+                    @"isSwitch" : @YES,
+                    @"key" : @"UnboundThreeFingerGestureEnabled"
                 }
             ]
         }
@@ -147,331 +153,460 @@ BOOL isRecoveryModeEnabled(void) {
 
 #pragma mark - Table View Data Source
 
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
     return self.menuSections.count;
 }
 
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section
+{
     return self.menuSections[section][@"title"];
 }
 
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
     return [self.menuSections[section][@"items"] count];
 }
 
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+- (UITableViewCell *)tableView:(UITableView *)tableView
+         cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"Cell"];
-    if (!cell) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"Cell"];
+    if (!cell)
+    {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                      reuseIdentifier:@"Cell"];
     }
-    
+
     cell.accessoryView = nil;
-    
+
     NSDictionary *item = self.menuSections[indexPath.section][@"items"][indexPath.row];
-    
+
     cell.textLabel.text = item[@"title"];
-    
-    UIImageConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightRegular];
-    UIImage *icon = [UIImage systemImageNamed:item[@"icon"] withConfiguration:config];
+
+    UIImageConfiguration *config =
+        [UIImageSymbolConfiguration configurationWithPointSize:22
+                                                        weight:UIImageSymbolWeightRegular];
+    UIImage *icon        = [UIImage systemImageNamed:item[@"icon"] withConfiguration:config];
     cell.imageView.image = icon;
-    cell.imageView.tintColor = [item[@"destructive"] boolValue] ? UIColor.systemRedColor : UIColor.systemBlueColor;
-    
-    if ([item[@"isSwitch"] boolValue]) {
+    cell.imageView.tintColor =
+        [item[@"destructive"] boolValue] ? UIColor.systemRedColor : UIColor.systemBlueColor;
+
+    if ([item[@"isSwitch"] boolValue])
+    {
         UISwitch *toggle = [[UISwitch alloc] init];
-        toggle.tag = indexPath.row;
-        [toggle addTarget:self action:@selector(toggleSetting:) forControlEvents:UIControlEventValueChanged];
-        
+        toggle.tag       = indexPath.row;
+        [toggle addTarget:self
+                      action:@selector(toggleSetting:)
+            forControlEvents:UIControlEventValueChanged];
+
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        toggle.on = [defaults objectForKey:item[@"key"]] == nil ? YES : [defaults boolForKey:item[@"key"]];
-        
+        toggle.on =
+            [defaults objectForKey:item[@"key"]] == nil ? YES : [defaults boolForKey:item[@"key"]];
+
         cell.accessoryView = toggle;
     }
-    
+
     return cell;
 }
 
 #pragma mark - Table View Delegate
 
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    
+
     NSDictionary *item = self.menuSections[indexPath.section][@"items"][indexPath.row];
-    
-    if ([item[@"destructive"] boolValue]) {
+
+    if ([item[@"destructive"] boolValue])
+    {
         [self showDestructiveConfirmation:item[@"title"] selectorName:item[@"selector"]];
-    } else if (item[@"selector"]) {
+    }
+    else if (item[@"selector"])
+    {
         [self executeActionWithSelectorName:item[@"selector"]];
     }
 }
 
 #pragma mark - Actions
 
-- (void)showDestructiveConfirmation:(NSString *)action selectorName:(NSString *)selectorName {
+- (void)showDestructiveConfirmation:(NSString *)action selectorName:(NSString *)selectorName
+{
     NSString *message = @"Are you sure you want to do this?";
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Confirm Action"
-                                                                 message:message
-                                                          preferredStyle:UIAlertControllerStyleAlert];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Confirm" 
-                                            style:UIAlertActionStyleDestructive
-                                          handler:^(UIAlertAction *action) {
-        [self executeActionWithSelectorName:selectorName];
-    }]];
-    
+
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Confirm Action"
+                                            message:message
+                                     preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Confirm"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction *action) {
+                                                [self executeActionWithSelectorName:selectorName];
+                                            }]];
+
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)executeActionWithSelectorName:(NSString *)selectorName {
+- (void)executeActionWithSelectorName:(NSString *)selectorName
+{
     SEL selector = NSSelectorFromString(selectorName);
-    if ([self respondsToSelector:selector]) {
-        IMP imp = [self methodForSelector:selector];
-        void (*func)(id, SEL) = (void *)imp;
+    if ([self respondsToSelector:selector])
+    {
+        IMP imp               = [self methodForSelector:selector];
+        void (*func)(id, SEL) = (void *) imp;
         func(self, selector);
     }
 }
 
 // Action methods
-- (void)toggleRecoveryMode {
+- (void)toggleRecoveryMode
+{
     BOOL currentValue = isRecoveryModeEnabled();
     [Settings set:@"unbound" key:@"recovery" value:@(!currentValue)];
-    [self dismissViewControllerAnimated:YES completion:^{
-        reloadApp(self);
-    }];
+    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
 
-- (void)refetchBundle {
+- (void)refetchBundle
+{
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [Updater downloadBundle:[self bundlePath]];
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self dismissViewControllerAnimated:YES completion:^{
-                reloadApp(self);
-            }];
+            [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
         });
     });
 }
 
-- (void)deleteBundle {
+- (void)deleteBundle
+{
     [Settings set:@"unbound" key:@"loader.update.url" value:nil];
-	[Settings set:@"unbound" key:@"loader.update.force" value:nil];
+    [Settings set:@"unbound" key:@"loader.update.force" value:nil];
 
     [[NSFileManager defaultManager] removeItemAtPath:[self bundlePath] error:nil];
-    [self dismissViewControllerAnimated:YES completion:^{
-        reloadApp(self);
-    }];
+    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
 
-- (void)switchBundleVersion {
-    UIAlertController *loadingAlert = [UIAlertController 
-        alertControllerWithTitle:@"Loading"
-        message:@"Fetching branches..."
-        preferredStyle:UIAlertControllerStyleAlert];
+- (void)switchBundleVersion
+{
+    UIAlertController *loadingAlert =
+        [UIAlertController alertControllerWithTitle:@"Loading"
+                                            message:@"Fetching branches..."
+                                     preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:loadingAlert animated:YES completion:nil];
 
     NSURL *url = [NSURL URLWithString:@"https://api.github.com/repos/unbound-mod/builds/branches"];
-    NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
+    NSURLSession *session = [NSURLSession
+        sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
 
-    [[session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [loadingAlert dismissViewControllerAnimated:YES completion:^{
-                if (error || !data) {
-                    [Utilities alert:@"Failed to fetch branches" title:@"Error"];
-                    return;
-                }
+    [[session
+          dataTaskWithURL:url
+        completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [loadingAlert
+                    dismissViewControllerAnimated:YES
+                                       completion:^{
+                                           if (error || !data)
+                                           {
+                                               [Utilities alert:@"Failed to fetch branches"
+                                                          title:@"Error"];
+                                               return;
+                                           }
 
-                NSError *jsonError;
-                NSArray *branches = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-                if (jsonError || !branches.count) {
-                    [Utilities alert:@"No branches available" title:@"Error"];
-                    return;
-                }
+                                           NSError *jsonError;
+                                           NSArray *branches =
+                                               [NSJSONSerialization JSONObjectWithData:data
+                                                                               options:0
+                                                                                 error:&jsonError];
+                                           if (jsonError || !branches.count)
+                                           {
+                                               [Utilities alert:@"No branches available"
+                                                          title:@"Error"];
+                                               return;
+                                           }
 
-                // If there's only one branch, skip straight to fetching commits
-                if (branches.count == 1) {
-                    NSString *branchName = branches[0][@"name"];
-                    [self fetchCommitsForBranch:branchName withSession:session];
-                    return;
-                }
+                                           // If there's only one branch, skip straight to fetching
+                                           // commits
+                                           if (branches.count == 1)
+                                           {
+                                               NSString *branchName = branches[0][@"name"];
+                                               [self fetchCommitsForBranch:branchName
+                                                               withSession:session];
+                                               return;
+                                           }
 
-                // Otherwise show branch selection
-                UIAlertController *branchAlert = [UIAlertController
-                    alertControllerWithTitle:@"Select Branch"
-                    message:nil
-                    preferredStyle:UIAlertControllerStyleAlert];
+                                           // Otherwise show branch selection
+                                           UIAlertController *branchAlert = [UIAlertController
+                                               alertControllerWithTitle:@"Select Branch"
+                                                                message:nil
+                                                         preferredStyle:
+                                                             UIAlertControllerStyleAlert];
 
-                for (NSDictionary *branch in branches) {
-                    NSString *branchName = branch[@"name"];
-                    [branchAlert addAction:[UIAlertAction 
-                        actionWithTitle:branchName
-                        style:UIAlertActionStyleDefault
-                        handler:^(UIAlertAction *action) {
-                            [self fetchCommitsForBranch:branchName withSession:session];
-                        }]];
-                }
+                                           for (NSDictionary *branch in branches)
+                                           {
+                                               NSString *branchName = branch[@"name"];
+                                               [branchAlert
+                                                   addAction:
+                                                       [UIAlertAction
+                                                           actionWithTitle:branchName
+                                                                     style:UIAlertActionStyleDefault
+                                                                   handler:^(
+                                                                       UIAlertAction *action) {
+                                                                       [self fetchCommitsForBranch:
+                                                                                 branchName
+                                                                                       withSession:
+                                                                                           session];
+                                                                   }]];
+                                           }
 
-                [branchAlert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-                [self presentViewController:branchAlert animated:YES completion:nil];
-            }];
-        });
-    }] resume];
+                                           [branchAlert
+                                               addAction:
+                                                   [UIAlertAction
+                                                       actionWithTitle:@"Cancel"
+                                                                 style:UIAlertActionStyleCancel
+                                                               handler:nil]];
+                                           [self presentViewController:branchAlert
+                                                              animated:YES
+                                                            completion:nil];
+                                       }];
+            });
+        }] resume];
 }
 
-- (void)fetchCommitsForBranch:(NSString *)branch withSession:(NSURLSession *)session {
-    UIAlertController *loadingCommits = [UIAlertController
-        alertControllerWithTitle:@"Loading"
-        message:@"Fetching commits..."
-        preferredStyle:UIAlertControllerStyleAlert];
+- (void)fetchCommitsForBranch:(NSString *)branch withSession:(NSURLSession *)session
+{
+    UIAlertController *loadingCommits =
+        [UIAlertController alertControllerWithTitle:@"Loading"
+                                            message:@"Fetching commits..."
+                                     preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:loadingCommits animated:YES completion:nil];
 
-    NSString *commitsUrl = [NSString stringWithFormat:@"https://api.github.com/repos/unbound-mod/builds/commits?sha=%@&per_page=10", branch];
-    NSURL *commitsURL = [NSURL URLWithString:commitsUrl];
+    NSString *commitsUrl = [NSString
+        stringWithFormat:
+            @"https://api.github.com/repos/unbound-mod/builds/commits?sha=%@&per_page=10", branch];
+    NSURL    *commitsURL = [NSURL URLWithString:commitsUrl];
 
-    [[session dataTaskWithURL:commitsURL completionHandler:^(NSData *commitsData, NSURLResponse *commitsResponse, NSError *commitsError) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [loadingCommits dismissViewControllerAnimated:YES completion:^{
-                if (commitsError || !commitsData) {
-                    [Utilities alert:@"Failed to fetch commits" title:@"Error"];
-                    return;
-                }
+    [[session
+          dataTaskWithURL:commitsURL
+        completionHandler:^(NSData *commitsData, NSURLResponse *commitsResponse,
+                            NSError *commitsError) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [loadingCommits
+                    dismissViewControllerAnimated:YES
+                                       completion:^{
+                                           if (commitsError || !commitsData)
+                                           {
+                                               [Utilities alert:@"Failed to fetch commits"
+                                                          title:@"Error"];
+                                               return;
+                                           }
 
-                NSError *jsonError;
-                NSArray *commits = [NSJSONSerialization JSONObjectWithData:commitsData options:0 error:&jsonError];
-                if (jsonError || !commits.count) {
-                    [Utilities alert:@"No commits available" title:@"Error"];
-                    return;
-                }
+                                           NSError *jsonError;
+                                           NSArray *commits =
+                                               [NSJSONSerialization JSONObjectWithData:commitsData
+                                                                               options:0
+                                                                                 error:&jsonError];
+                                           if (jsonError || !commits.count)
+                                           {
+                                               [Utilities alert:@"No commits available"
+                                                          title:@"Error"];
+                                               return;
+                                           }
 
-                UIAlertController *commitAlert = [UIAlertController
-                    alertControllerWithTitle:@"Select Version"
-                    message:nil
-                    preferredStyle:UIAlertControllerStyleAlert];
+                                           UIAlertController *commitAlert = [UIAlertController
+                                               alertControllerWithTitle:@"Select Version"
+                                                                message:nil
+                                                         preferredStyle:
+                                                             UIAlertControllerStyleAlert];
 
-                for (NSDictionary *commit in commits) {
-                    NSString *sha = commit[@"sha"];
-                    NSString *dateStr = commit[@"commit"][@"author"][@"date"];
+                                           for (NSDictionary *commit in commits)
+                                           {
+                                               NSString *sha = commit[@"sha"];
+                                               NSString *dateStr =
+                                                   commit[@"commit"][@"author"][@"date"];
 
-                    NSDateFormatter *iso8601Formatter = [[NSDateFormatter alloc] init];
-                    iso8601Formatter.dateFormat = @"yyyy-MM-dd'T'HH:mm:ssZ";
-                    NSDate *date = [iso8601Formatter dateFromString:dateStr];
+                                               NSDateFormatter *iso8601Formatter =
+                                                   [[NSDateFormatter alloc] init];
+                                               iso8601Formatter.dateFormat =
+                                                   @"yyyy-MM-dd'T'HH:mm:ssZ";
+                                               NSDate *date =
+                                                   [iso8601Formatter dateFromString:dateStr];
 
-                    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-                    formatter.dateFormat = @"MMM d, yyyy";
+                                               NSDateFormatter *formatter =
+                                                   [[NSDateFormatter alloc] init];
+                                               formatter.dateFormat = @"MMM d, yyyy";
 
-                    NSString *title = [NSString stringWithFormat:@"%@ (%@)", 
-                        [sha substringToIndex:7], 
-                        [formatter stringFromDate:date]];
+                                               NSString *title = [NSString
+                                                   stringWithFormat:@"%@ (%@)",
+                                                                    [sha substringToIndex:7],
+                                                                    [formatter
+                                                                        stringFromDate:date]];
 
-                    [commitAlert addAction:[UIAlertAction 
-                        actionWithTitle:title
-                        style:UIAlertActionStyleDefault
-                        handler:^(UIAlertAction *action) {
-                            NSString *bundleUrl = [NSString stringWithFormat:@"https://raw.githubusercontent.com/unbound-mod/builds/%@/unbound.js", sha];
-                            [Settings set:@"unbound" key:@"loader.update.url" value:bundleUrl];
-                            [Settings set:@"unbound" key:@"loader.update.force" value:@YES];
-                            [self dismissViewControllerAnimated:YES completion:^{
-                                reloadApp(self);
-                            }];
-                        }]];
-                }
+                                               [commitAlert
+                                                   addAction:
+                                                       [UIAlertAction
+                                                           actionWithTitle:title
+                                                                     style:UIAlertActionStyleDefault
+                                                                   handler:^(
+                                                                       UIAlertAction *action) {
+                                                                       NSString *bundleUrl =
+                                                                           [NSString
+                                                                               stringWithFormat:
+                                                                                   @"https://"
+                                                                                   @"raw."
+                                                                                   @"githubusercont"
+                                                                                   @"ent.com/"
+                                                                                   @"unbound-mod/"
+                                                                                   @"builds/%@/"
+                                                                                   @"unbound.js",
+                                                                                   sha];
+                                                                       [Settings set:@"unbound"
+                                                                                 key:@"loader."
+                                                                                     @"update.url"
+                                                                               value:bundleUrl];
+                                                                       [Settings set:@"unbound"
+                                                                                 key:@"loader."
+                                                                                     @"update.force"
+                                                                               value:@YES];
+                                                                       [self
+                                                                           dismissViewControllerAnimated:
+                                                                               YES
+                                                                                              completion:^{
+                                                                                                  reloadApp(
+                                                                                                      self);
+                                                                                              }];
+                                                                   }]];
+                                           }
 
-                [commitAlert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-                [self presentViewController:commitAlert animated:YES completion:nil];
-            }];
-        });
-    }] resume];
+                                           [commitAlert
+                                               addAction:
+                                                   [UIAlertAction
+                                                       actionWithTitle:@"Cancel"
+                                                                 style:UIAlertActionStyleCancel
+                                                               handler:nil]];
+                                           [self presentViewController:commitAlert
+                                                              animated:YES
+                                                            completion:nil];
+                                       }];
+            });
+        }] resume];
 }
 
-- (void)loadCustomBundle {
-    UIAlertController *alert = [UIAlertController 
-        alertControllerWithTitle:@"Load Custom Bundle"
-        message:@"Enter the URL for your custom bundle:"
-        preferredStyle:UIAlertControllerStyleAlert];
+- (void)loadCustomBundle
+{
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Load Custom Bundle"
+                                            message:@"Enter the URL for your custom bundle:"
+                                     preferredStyle:UIAlertControllerStyleAlert];
 
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"https://example.com/file.bundle";
-        textField.keyboardType = UIKeyboardTypeURL;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.placeholder            = @"https://example.com/file.bundle";
+        textField.keyboardType           = UIKeyboardTypeURL;
+        textField.autocorrectionType     = UITextAutocorrectionTypeNo;
         textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
     }];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"Load" 
-                                            style:UIAlertActionStyleDefault 
-                                          handler:^(UIAlertAction *action) {
-        NSString *urlString = alert.textFields.firstObject.text;
-        if (urlString.length > 0) {
-            [Settings set:@"unbound" key:@"loader.update.url" value:urlString];
-            [Settings set:@"unbound" key:@"loader.update.force" value:@YES];
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                [Updater downloadBundle:[self bundlePath]];
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self dismissViewControllerAnimated:YES completion:^{
-                        reloadApp(self);
-                    }];
-                });
-            });
-        }
-    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
+    [alert addAction:[UIAlertAction
+                         actionWithTitle:@"Load"
+                                   style:UIAlertActionStyleDefault
+                                 handler:^(UIAlertAction *action) {
+                                     NSString *urlString = alert.textFields.firstObject.text;
+                                     if (urlString.length > 0)
+                                     {
+                                         [Settings set:@"unbound"
+                                                   key:@"loader.update.url"
+                                                 value:urlString];
+                                         [Settings set:@"unbound"
+                                                   key:@"loader.update.force"
+                                                 value:@YES];
+                                         dispatch_async(
+                                             dispatch_get_global_queue(
+                                                 DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
+                                             ^{
+                                                 [Updater downloadBundle:[self bundlePath]];
+                                                 dispatch_async(dispatch_get_main_queue(), ^{
+                                                     [self dismissViewControllerAnimated:YES
+                                                                              completion:^{
+                                                                                  reloadApp(self);
+                                                                              }];
+                                                 });
+                                             });
+                                     }
+                                 }]];
 
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)wipePlugins {
-	[[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Plugins"] error:nil];
-    [self dismissViewControllerAnimated:YES completion:^{
-        reloadApp(self);
-    }];
+- (void)wipePlugins
+{
+    [[NSFileManager defaultManager]
+        removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Plugins"]
+                   error:nil];
+    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
 
-- (void)wipeThemes {
-    [[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Themes"] error:nil];
-	[self dismissViewControllerAnimated:YES completion:^{
-        reloadApp(self);
-    }];
+- (void)wipeThemes
+{
+    [[NSFileManager defaultManager]
+        removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Themes"]
+                   error:nil];
+    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
 
-- (void)wipeFonts {
-    [[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Fonts"] error:nil];
-	[self dismissViewControllerAnimated:YES completion:^{
-        reloadApp(self);
-    }];
+- (void)wipeFonts
+{
+    [[NSFileManager defaultManager]
+        removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Fonts"]
+                   error:nil];
+    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
 
-- (void)wipeIconPacks {
-    [[NSFileManager defaultManager] removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Icons"] error:nil];
-	[self dismissViewControllerAnimated:YES completion:^{
-        reloadApp(self);
-    }];
+- (void)wipeIconPacks
+{
+    [[NSFileManager defaultManager]
+        removeItemAtPath:[FileSystem.documents stringByAppendingPathComponent:@"Icons"]
+                   error:nil];
+    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
 
-- (void)factoryReset {
-	[[NSFileManager defaultManager] removeItemAtPath:FileSystem.documents error:nil];
-	[self dismissViewControllerAnimated:YES completion:^{
-        reloadApp(self);
-    }];
+- (void)factoryReset
+{
+    [[NSFileManager defaultManager] removeItemAtPath:FileSystem.documents error:nil];
+    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
 
-- (void)openAppFolder {
-	if (isJailbroken) {
+- (void)openAppFolder
+{
+    if (isJailbroken)
+    {
         NSString *filzaPath = [NSString stringWithFormat:@"filza://view%@", FileSystem.documents];
-        NSURL *filzaURL = [NSURL URLWithString:[filzaPath stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]]];
-        
-        if ([[UIApplication sharedApplication] canOpenURL:filzaURL]) {
+        NSURL    *filzaURL =
+            [NSURL URLWithString:[filzaPath stringByAddingPercentEncodingWithAllowedCharacters:
+                                                [NSCharacterSet URLQueryAllowedCharacterSet]]];
+
+        if ([[UIApplication sharedApplication] canOpenURL:filzaURL])
+        {
             [[UIApplication sharedApplication] openURL:filzaURL options:@{} completionHandler:nil];
             return;
         }
     }
-    
-    NSString *sharedPath = [NSString stringWithFormat:@"shareddocuments://%@", FileSystem.documents];
+
+    NSString *sharedPath =
+        [NSString stringWithFormat:@"shareddocuments://%@", FileSystem.documents];
     NSURL *sharedUrl = [NSURL URLWithString:sharedPath];
-    
+
     [[UIApplication sharedApplication] openURL:sharedUrl options:@{} completionHandler:nil];
 }
 
-- (void)openGitHubIssue {
-	UIDevice *device      = [UIDevice currentDevice];
+- (void)openGitHubIssue
+{
+    UIDevice *device      = [UIDevice currentDevice];
     NSString *deviceId    = getDeviceIdentifier();
     NSString *deviceModel = DEVICE_MODELS[deviceId] ?: deviceId;
     NSString *appVersion =
@@ -504,41 +639,51 @@ BOOL isRecoveryModeEnabled(void) {
     NSString *urlString = [NSString
         stringWithFormat:@"https://github.com/unbound-mod/client/issues/new?title=%@&body=%@",
                          encodedTitle, encodedBody];
-    NSURL *url          = [NSURL URLWithString:urlString];
+    NSURL    *url       = [NSURL URLWithString:urlString];
     [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
 }
 
-- (void)toggleSetting:(UISwitch *)sender {
+- (void)toggleSetting:(UISwitch *)sender
+{
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    
-    if (sender.tag == 0) { // Shake gesture
+
+    if (sender.tag == 0)
+    { // Shake gesture
         [defaults setBool:sender.on forKey:@"UnboundShakeGestureEnabled"];
-        if (!sender.on) {
+        if (!sender.on)
+        {
             // If shake is being disabled, ensure three finger is enabled
             [defaults setBool:YES forKey:@"UnboundThreeFingerGestureEnabled"];
-            
+
             // Find the cell containing the other switch
-            UITableViewCell *otherCell = [self.tableView cellForRowAtIndexPath:
-                [NSIndexPath indexPathForRow:1 inSection:4]];
-            if (otherCell) {
-                UISwitch *otherSwitch = (UISwitch *)otherCell.accessoryView;
-                if ([otherSwitch isKindOfClass:[UISwitch class]]) {
+            UITableViewCell *otherCell =
+                [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:4]];
+            if (otherCell)
+            {
+                UISwitch *otherSwitch = (UISwitch *) otherCell.accessoryView;
+                if ([otherSwitch isKindOfClass:[UISwitch class]])
+                {
                     [otherSwitch setOn:YES animated:YES];
                 }
             }
         }
-    } else { // Three finger gesture
+    }
+    else
+    { // Three finger gesture
         [defaults setBool:sender.on forKey:@"UnboundThreeFingerGestureEnabled"];
-        if (!sender.on) {
+        if (!sender.on)
+        {
             // If three finger is being disabled, ensure shake is enabled
             [defaults setBool:YES forKey:@"UnboundShakeGestureEnabled"];
-            
+
             // Find the cell containing the other switch
-            UITableViewCell *otherCell = [self.tableView cellForRowAtIndexPath:
-                [NSIndexPath indexPathForRow:0 inSection:4]];
-            if (otherCell) {
-                UISwitch *otherSwitch = (UISwitch *)otherCell.accessoryView;
-                if ([otherSwitch isKindOfClass:[UISwitch class]]) {
+            UITableViewCell *otherCell =
+                [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:4]];
+            if (otherCell)
+            {
+                UISwitch *otherSwitch = (UISwitch *) otherCell.accessoryView;
+                if ([otherSwitch isKindOfClass:[UISwitch class]])
+                {
                     [otherSwitch setOn:YES animated:YES];
                 }
             }
@@ -547,77 +692,75 @@ BOOL isRecoveryModeEnabled(void) {
     [defaults synchronize];
 }
 
-- (void)dismiss {
-  [self dismissViewControllerAnimated:YES completion:nil];
+- (void)dismiss
+{
+    [self dismissViewControllerAnimated:YES completion:nil];
 }
 
-void showMenuSheet(void) {
-  UnboundMenuViewController *settingsVC =
-      [[UnboundMenuViewController alloc] init];
+void showMenuSheet(void)
+{
+    UnboundMenuViewController *settingsVC = [[UnboundMenuViewController alloc] init];
 
-  UINavigationController *navController =
-      [[UINavigationController alloc] initWithRootViewController:settingsVC];
-  navController.modalPresentationStyle = UIModalPresentationFormSheet;
+    UINavigationController *navController =
+        [[UINavigationController alloc] initWithRootViewController:settingsVC];
+    navController.modalPresentationStyle = UIModalPresentationFormSheet;
 
-  UIBarButtonItem *doneButton = [[UIBarButtonItem alloc]
-      initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-                           target:settingsVC
-                           action:@selector(dismiss)];
-  settingsVC.navigationItem.rightBarButtonItem = doneButton;
+    UIBarButtonItem *doneButton =
+        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                                                      target:settingsVC
+                                                      action:@selector(dismiss)];
+    settingsVC.navigationItem.rightBarButtonItem = doneButton;
 
-  UIWindow *window = nil;
-  NSSet *scenes = [[UIApplication sharedApplication] connectedScenes];
-  for (UIScene *scene in scenes) {
-    if (scene.activationState == UISceneActivationStateForegroundActive) {
-      window = ((UIWindowScene *)scene).windows.firstObject;
-      break;
+    UIWindow *window = nil;
+    NSSet    *scenes = [[UIApplication sharedApplication] connectedScenes];
+    for (UIScene *scene in scenes)
+    {
+        if (scene.activationState == UISceneActivationStateForegroundActive)
+        {
+            window = ((UIWindowScene *) scene).windows.firstObject;
+            break;
+        }
     }
-  }
 
-  if (!window) {
-    window = [[UIApplication sharedApplication] windows].firstObject;
-  }
+    if (!window)
+    {
+        window = [[UIApplication sharedApplication] windows].firstObject;
+    }
 
-  if (window && window.rootViewController) {
-    [window.rootViewController presentViewController:navController
-                                            animated:YES
-                                          completion:nil];
-  }
+    if (window && window.rootViewController)
+    {
+        [window.rootViewController presentViewController:navController animated:YES completion:nil];
+    }
 }
 
 @end
 
-NSString *getDeviceIdentifier(void) {
-  struct utsname systemInfo;
-  uname(&systemInfo);
-  return [NSString stringWithCString:systemInfo.machine
-                            encoding:NSUTF8StringEncoding];
+NSString *getDeviceIdentifier(void)
+{
+    struct utsname systemInfo;
+    uname(&systemInfo);
+    return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
 }
 
-void reloadApp(UIViewController *viewController) {
-  [viewController
-      dismissViewControllerAnimated:NO
-                         completion:^{
-                           if (gBridge &&
-                               [gBridge isKindOfClass:NSClassFromString(
-                                                          @"RCTCxxBridge")]) {
-                             SEL reloadSelector =
-                                 NSSelectorFromString(@"reload");
-                             if ([gBridge respondsToSelector:reloadSelector]) {
-                               ((void (*)(id, SEL))objc_msgSend)(
-                                   gBridge, reloadSelector);
-                               return;
-                             }
-                           }
+void reloadApp(UIViewController *viewController)
+{
+    [viewController
+        dismissViewControllerAnimated:NO
+                           completion:^{
+                               if (gBridge &&
+                                   [gBridge isKindOfClass:NSClassFromString(@"RCTCxxBridge")])
+                               {
+                                   SEL reloadSelector = NSSelectorFromString(@"reload");
+                                   if ([gBridge respondsToSelector:reloadSelector])
+                                   {
+                                       ((void (*)(id, SEL)) objc_msgSend)(gBridge, reloadSelector);
+                                       return;
+                                   }
+                               }
 
-                           UIApplication *app =
-                               [UIApplication sharedApplication];
-                           ((void (*)(id, SEL))objc_msgSend)(app, @selector
-                                                             (suspend));
-                           dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
-                                                        0.5 * NSEC_PER_SEC),
-                                          dispatch_get_main_queue(), ^{
-                                            exit(0);
-                                          });
-                         }];
+                               UIApplication *app = [UIApplication sharedApplication];
+                               ((void (*)(id, SEL)) objc_msgSend)(app, @selector(suspend));
+                               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC),
+                                              dispatch_get_main_queue(), ^{ exit(0); });
+                           }];
 }

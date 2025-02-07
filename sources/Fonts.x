@@ -1,165 +1,196 @@
 #import "Fonts.h"
 
 @implementation Fonts
-	static NSMutableDictionary<NSString*, NSString*> *overrides = nil;
-	static NSMutableArray<NSDictionary<NSString*, NSString*>*> *fonts = nil;
+static NSMutableDictionary<NSString *, NSString *>            *overrides = nil;
+static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
 
-	+ (NSString*) makeJSON {
-		NSError *error;
-		NSData *data = [NSJSONSerialization dataWithJSONObject:fonts options:0 error:&error];
++ (NSString *)makeJSON
+{
+    NSError *error;
+    NSData  *data = [NSJSONSerialization dataWithJSONObject:fonts options:0 error:&error];
 
+    if (error != nil)
+    {
+        return @"[]";
+    }
+    else
+    {
+        return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    }
+};
 
-		if (error != nil) {
-			return @"[]";
-		} else {
-			return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-		}
-	};
++ (NSString *)makeAvailableJSON
+{
+    NSError *error;
 
-	+ (NSString*) makeAvailableJSON {
-		NSError *error;
+    NSArray *availabeFonts = [Fonts getAvailableFonts];
 
-		NSArray *availabeFonts = [Fonts getAvailableFonts];
+    NSData *data = [NSJSONSerialization dataWithJSONObject:availabeFonts options:0 error:&error];
 
-		NSData *data = [NSJSONSerialization dataWithJSONObject:availabeFonts options:0 error:&error];
+    if (error != nil)
+    {
+        return @"[]";
+    }
+    else
+    {
+        return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    }
+};
 
-		if (error != nil) {
-			return @"[]";
-		} else {
-			return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-		}
-	};
++ (NSArray *)getAvailableFonts
+{
+    CFArrayRef available = CTFontManagerCopyAvailableFontFamilyNames();
+    NSArray   *fonts     = (__bridge NSArray *) available;
 
-	+ (NSArray*) getAvailableFonts {
-		CFArrayRef available = CTFontManagerCopyAvailableFontFamilyNames();
-		NSArray *fonts = (__bridge NSArray*)available;
+    return fonts ? fonts : @[];
+}
 
-		return fonts ? fonts : @[];
-	}
++ (void)init
+{
+    if (!fonts)
+    {
+        fonts = [[NSMutableArray alloc] init];
+    }
 
-	+ (void) init {
-		if (!fonts) {
-			fonts = [[NSMutableArray alloc] init];
-		}
+    if (!overrides)
+    {
+        overrides = [[NSMutableDictionary alloc] init];
+    }
 
-		if (!overrides) {
-			overrides = [[NSMutableDictionary alloc] init];
-		}
+    NSString *path = [NSString pathWithComponents:@[ FileSystem.documents, @"Fonts" ]];
+    [FileSystem createDirectory:path];
 
-		NSString *path = [NSString pathWithComponents:@[FileSystem.documents, @"Fonts"]];
-		[FileSystem createDirectory:path];
+    NSArray *contents = [FileSystem readDirectory:path];
 
-		NSArray *contents = [FileSystem readDirectory:path];
+    for (NSString *file in contents)
+    {
+        NSLog(@"[Fonts] Attempting to load %@...", file);
 
-		for (NSString* file in contents) {
-			NSLog(@"[Fonts] Attempting to load %@...", file);
+        @try
+        {
+            NSString *font = [NSString pathWithComponents:@[ path, file ]];
+            NSString *name = [Fonts getFontName:font];
 
-			@try {
-				NSString *font = [NSString pathWithComponents:@[path, file]];
-				NSString *name = [Fonts getFontName:font];
+            NSLog(@"[Fonts] Registering font: %@", font);
 
-				NSLog(@"[Fonts] Registering font: %@", font);
+            [fonts addObject:@{@"name" : name, @"file" : file, @"path" : font}];
+        }
+        @catch (NSException *e)
+        {
+            NSLog(@"[Fonts] Failed to load %@ (%@)", file, e.reason);
+        }
+    }
 
-				[fonts addObject:@{
-					@"name": name,
-					@"file": file,
-					@"path": font
-				}];
-			} @catch (NSException *e) {
-				NSLog(@"[Fonts] Failed to load %@ (%@)", file, e.reason);
-			}
-		}
+    @try
+    {
+        NSLog(@"[Fonts] Loading...");
+        [Fonts apply];
+        NSLog(@"[Fonts] Successfully loaded.");
+    }
+    @catch (NSException *e)
+    {
+        NSLog(@"[Fonts] [Error] Failed to load. (%@)", e.reason);
+    }
+};
 
-		@try {
-			NSLog(@"[Fonts] Loading...");
-			[Fonts apply];
-			NSLog(@"[Fonts] Successfully loaded.");
-		} @catch (NSException *e) {
-			NSLog(@"[Fonts] [Error] Failed to load. (%@)", e.reason);
-		}
-	};
++ (void)apply
+{
+    NSDictionary *states = [Settings getDictionary:@"unbound" key:@"font-states" def:@{}];
 
-	+ (void) apply {
-		NSDictionary *states = [Settings getDictionary:@"unbound" key:@"font-states" def:@{}];
+    for (NSString *state in states)
+    {
+        NSString *override = states[state];
+        if (!override)
+            continue;
 
-		for (NSString* state in states) {
-			NSString *override = states[state];
-			if (!override) continue;
+        NSPredicate *customPredicate = [NSPredicate predicateWithFormat:@"name == %@", override];
+        NSArray     *custom          = [fonts filteredArrayUsingPredicate:customPredicate];
 
-			NSPredicate *customPredicate = [NSPredicate predicateWithFormat:@"name == %@", override];
-			NSArray *custom = [fonts filteredArrayUsingPredicate:customPredicate];
+        NSArray     *loadedSystemFonts = [Fonts getAvailableFonts];
+        NSPredicate *systemPredicate   = [NSPredicate predicateWithFormat:@"SELF == %@", override];
+        NSArray     *systemFonts = [loadedSystemFonts filteredArrayUsingPredicate:systemPredicate];
 
+        if ([custom count] == 0 && [systemFonts count] == 0)
+        {
+            NSLog(@"[Fonts] [Error] Failed to replace \"%@\" with \"%@\". The requested font isn't "
+                  @"loaded.",
+                  state, override);
+            continue;
+        }
 
-			NSArray *loadedSystemFonts = [Fonts getAvailableFonts];
-			NSPredicate *systemPredicate = [NSPredicate predicateWithFormat:@"SELF == %@", override];
-			NSArray *systemFonts = [loadedSystemFonts filteredArrayUsingPredicate:systemPredicate];
+        @try
+        {
+            NSDictionary *font = [custom count] != 0 ? custom[0] : systemFonts[0];
+            if (!font)
+                continue;
 
-			if ([custom count] == 0 && [systemFonts count] == 0) {
-				NSLog(@"[Fonts] [Error] Failed to replace \"%@\" with \"%@\". The requested font isn't loaded.", state, override);
-				continue;
-			}
+            BOOL isString = [font isKindOfClass:[NSString class]];
 
-			@try {
-				NSDictionary *font =  [custom count] != 0 ? custom[0] : systemFonts[0];
-				if (!font) continue;
+            if (!isString && font[@"path"] != nil)
+            {
+                NSString *path = font[@"path"];
+                if (!path)
+                    continue;
+                [Fonts loadFont:path];
+            }
 
-				BOOL isString = [font isKindOfClass:[NSString class]];
+            overrides[state] = isString ? font : font[@"name"];
+        }
+        @catch (NSException *e)
+        {
+            NSLog(@"[Fonts] Failed to load font \"%@\". (%@)", override, e.reason);
+        }
+    }
+}
 
-				if (!isString && font[@"path"] != nil) {
-					NSString *path = font[@"path"];
-					if (!path) continue;
-					[Fonts loadFont:path];
-				}
++ (void)loadFont:(NSString *)path
+{
+    NSURL *url = [NSURL fileURLWithPath:path];
 
-				overrides[state] = isString ? font : font[@"name"];
-			} @catch (NSException* e) {
-				NSLog(@"[Fonts] Failed to load font \"%@\". (%@)", override, e.reason);
-			}
-		}
-	}
+    CGDataProviderRef provider = CGDataProviderCreateWithURL((__bridge CFURLRef) url);
+    CGFontRef         ref      = CGFontCreateWithDataProvider(provider);
 
-	+ (void) loadFont:(NSString*)path {
-		NSURL *url = [NSURL fileURLWithPath:path];
+    CGDataProviderRelease(provider);
+    CTFontManagerRegisterGraphicsFont(ref, nil);
+    CGFontRelease(ref);
 
-		CGDataProviderRef provider = CGDataProviderCreateWithURL((__bridge CFURLRef)url);
-		CGFontRef ref = CGFontCreateWithDataProvider(provider);
+    NSLog(@"[Fonts] Loaded font: %@.", [Fonts getFontNameByRef:ref]);
+}
 
-		CGDataProviderRelease(provider);
-		CTFontManagerRegisterGraphicsFont(ref, nil);
-		CGFontRelease(ref);
++ (NSString *)getFontName:(NSString *)path
+{
+    NSURL *url = [NSURL fileURLWithPath:path];
 
-		NSLog(@"[Fonts] Loaded font: %@.", [Fonts getFontNameByRef:ref]);
-	}
+    CGDataProviderRef provider = CGDataProviderCreateWithURL((__bridge CFURLRef) url);
+    CGFontRef         ref      = CGFontCreateWithDataProvider(provider);
+    CGDataProviderRelease(provider);
 
-	+ (NSString*) getFontName:(NSString*)path {
-		NSURL *url = [NSURL fileURLWithPath:path];
+    return [Fonts getFontNameByRef:ref];
+}
 
-		CGDataProviderRef provider = CGDataProviderCreateWithURL((__bridge CFURLRef)url);
-		CGFontRef ref = CGFontCreateWithDataProvider(provider);
-		CGDataProviderRelease(provider);
++ (NSString *)getFontNameByRef:(CGFontRef)ref
+{
+    return CFBridgingRelease(CGFontCopyFullName(ref));
+}
 
-		return [Fonts getFontNameByRef:ref];
-	}
-
-	+ (NSString*) getFontNameByRef:(CGFontRef)ref {
-		return CFBridgingRelease(CGFontCopyFullName(ref));
-	}
-
-	// Properties
-	+ (NSMutableDictionary<NSString*, NSString*>*) overrides {
-		return overrides;
-	}
+// Properties
++ (NSMutableDictionary<NSString *, NSString *> *)overrides
+{
+    return overrides;
+}
 @end
 
 %hook UIFont
-	+ (UIFont *)fontWithName:(NSString *)name size:(CGFloat)size {
-		NSDictionary *overrides = [Fonts overrides];
-		NSObject *all = overrides[@"*"];
++ (UIFont *)fontWithName:(NSString *)name size:(CGFloat)size
+{
+    NSDictionary *overrides = [Fonts overrides];
+    NSObject     *all       = overrides[@"*"];
 
-		if (overrides[name] || all) {
-			return %orig(all ? all : overrides[name], size);
-		}
+    if (overrides[name] || all)
+    {
+        return %orig(all ? all : overrides[name], size);
+    }
 
-		return %orig;
-	}
+    return %orig;
+}
 %end

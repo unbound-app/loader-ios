@@ -8,13 +8,13 @@
 #import "DeviceModels.h"
 #import "FileSystem.h"
 #import "Settings.h"
-#import "Utilities.h"
 #import "Updater.h"
+#import "Utilities.h"
 
-BOOL isRecoveryModeEnabled(void);
+BOOL      isRecoveryModeEnabled(void);
 NSString *getDeviceIdentifier(void);
-void showMenuSheet(void);
-void reloadApp(UIViewController *viewController);
+void      showMenuSheet(void);
+void      reloadApp(UIViewController *viewController);
 
 extern id gBridge;
 
@@ -26,6 +26,6 @@ extern id gBridge;
 
 @end
 
-@interface UnboundMenuViewController ()
+@interface                                             UnboundMenuViewController ()
 @property (nonatomic, strong) NSArray<NSDictionary *> *menuSections;
 @end

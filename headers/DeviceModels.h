@@ -156,5 +156,5 @@
         @"iPad16,3" : @"iPad Pro 11 inch 5th Gen",                                                 \
         @"iPad16,4" : @"iPad Pro 11 inch 5th Gen",                                                 \
         @"iPad16,5" : @"iPad Pro 12.9 inch 7th Gen",                                               \
-        @"iPad16,6" : @"iPad Pro 12.9 inch 7th Gen"                                               \
+        @"iPad16,6" : @"iPad Pro 12.9 inch 7th Gen"                                                \
     }

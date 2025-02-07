@@ -1,8 +1,9 @@
 #import "Unbound.h"
 
-@interface FileSystem : NSObject {
-  NSFileManager *manager;
-  NSString *documents;
+@interface FileSystem : NSObject
+{
+    NSFileManager *manager;
+    NSString      *documents;
 }
 
 + (BOOL)createDirectory:(NSString *)path;
