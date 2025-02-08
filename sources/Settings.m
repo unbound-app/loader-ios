@@ -70,13 +70,18 @@ static NSString            *path = nil;
 {
     @try
     {
+        if (!data)
+        {
+            data = [NSMutableDictionary dictionary];
+        }
+
         __block NSMutableDictionary *payload = data[store];
 
         if (!payload)
         {
-            [payload setValue:[NSMutableDictionary dictionary] forKey:store];
-            payload = data[store];
-        };
+            payload     = [NSMutableDictionary dictionary];
+            data[store] = payload;
+        }
 
         // Ensure all keys exist before the last one
         NSArray                     *keys = [key componentsSeparatedByString:@"."];
@@ -117,7 +122,9 @@ static NSString            *path = nil;
 {
     NSString *payload = [Settings getSettings];
 
-    [FileSystem writeFile:path contents:[payload dataUsingEncoding:NSUTF8StringEncoding]];
+    NSData *contents = [payload dataUsingEncoding:NSUTF8StringEncoding];
+
+    [FileSystem writeFile:path contents:contents];
 }
 
 + (NSString *)getSettings
