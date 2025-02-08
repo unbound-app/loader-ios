@@ -184,13 +184,12 @@
 {
     %init()
 
-        if (LOGS)
-    {
+#ifdef DEBUG
         %init(Debug)
-    }
+#endif
 
-    BOOL isAppStoreApp = [[NSFileManager defaultManager]
-        fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
+            BOOL isAppStoreApp = [[NSFileManager defaultManager]
+                fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
     if (!isAppStoreApp)
     {
         %init(Sideloading);

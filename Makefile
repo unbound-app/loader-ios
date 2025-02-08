@@ -7,8 +7,6 @@ TARGET := iphone:clang:latest:14.0
 
 include $(THEOS)/makefiles/common.mk
 
-LOGS = 0
-
 TWEAK_NAME = Unbound
 $(TWEAK_NAME)_FILES = $(shell find Sources -name "*.x*" -o -name "*.m")
 $(TWEAK_NAME)_CFLAGS =  -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DLOGS=$(LOGS) -I$(THEOS_PROJECT_DIR)/headers
