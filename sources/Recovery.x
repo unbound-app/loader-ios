@@ -1,9 +1,112 @@
-#import "Menu.h"
+#import "Recovery.h"
+
+#pragma mark - Gesture Handling
+
+static NSTimeInterval shakeStartTime      = 0;
+static BOOL           isShaking           = NO;
+static NSHashTable   *windowsWithGestures = nil;
+
+static void addSettingsGestureToWindow(UIWindow *window)
+{
+    if (!windowsWithGestures)
+    {
+        windowsWithGestures = [NSHashTable weakObjectsHashTable];
+    }
+
+    if (![windowsWithGestures containsObject:window])
+    {
+        [windowsWithGestures addObject:window];
+
+        UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc]
+            initWithTarget:[UIApplication sharedApplication]
+                    action:@selector(handleThreeFingerLongPress:)];
+        longPress.minimumPressDuration          = 0.5;
+        longPress.numberOfTouchesRequired       = 3;
+        [window addGestureRecognizer:longPress];
+    }
+}
+
+static UIImpactFeedbackGenerator *feedbackGenerator = nil;
+
+static void triggerHapticFeedback(void)
+{
+    if (!feedbackGenerator)
+    {
+        feedbackGenerator =
+            [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+    }
+    [feedbackGenerator prepare];
+    [feedbackGenerator impactOccurred];
+}
+
+%hook UIWindow
+- (void)becomeKeyWindow
+{
+    %orig;
+    addSettingsGestureToWindow(self);
+}
+
+- (void)motionBegan:(UIEventSubtype)motion withEvent:(UIEvent *)event
+{
+    if (motion == UIEventSubtypeMotionShake)
+    {
+        isShaking      = YES;
+        shakeStartTime = [[NSDate date] timeIntervalSince1970];
+    }
+    %orig;
+}
+
+- (void)motionEnded:(UIEventSubtype)motion withEvent:(UIEvent *)event
+{
+    if (motion == UIEventSubtypeMotionShake && isShaking)
+    {
+        NSUserDefaults *defaults  = [NSUserDefaults standardUserDefaults];
+        BOOL            isEnabled = [defaults objectForKey:@"UnboundShakeGestureEnabled"] == nil
+                                        ? YES
+                                        : [defaults boolForKey:@"UnboundShakeGestureEnabled"];
+        if (isEnabled)
+        {
+            NSTimeInterval currentTime   = [[NSDate date] timeIntervalSince1970];
+            NSTimeInterval shakeDuration = currentTime - shakeStartTime;
+
+            if (shakeDuration >= 0.5 && shakeDuration <= 2.0)
+            {
+                triggerHapticFeedback();
+                dispatch_async(dispatch_get_main_queue(), ^{ showMenuSheet(); });
+            }
+        }
+        isShaking = NO;
+    }
+    %orig;
+}
+
+%end
+
+%hook UIApplication
+%new
+- (void)handleThreeFingerLongPress:(UILongPressGestureRecognizer *)gesture
+{
+    if (gesture.state == UIGestureRecognizerStateBegan)
+    {
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        BOOL isEnabled = [defaults objectForKey:@"UnboundThreeFingerGestureEnabled"] == nil
+                             ? YES
+                             : [defaults boolForKey:@"UnboundThreeFingerGestureEnabled"];
+        if (isEnabled)
+        {
+            triggerHapticFeedback();
+            showMenuSheet();
+        }
+    }
+}
+%end
 
 BOOL isRecoveryModeEnabled(void)
 {
     return [Settings getBoolean:@"unbound" key:@"recovery" def:NO];
 }
+
+#pragma mark - Menu Setup
 
 @implementation UnboundMenuViewController
 {
@@ -228,7 +331,7 @@ BOOL isRecoveryModeEnabled(void)
     }
 }
 
-#pragma mark - Actions
+#pragma mark - Menu Actions
 
 - (void)showDestructiveConfirmation:(NSString *)action selectorName:(NSString *)selectorName
 {
@@ -288,6 +391,8 @@ BOOL isRecoveryModeEnabled(void)
     [[NSFileManager defaultManager] removeItemAtPath:[self bundlePath] error:nil];
     [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
+
+#pragma mark - Bundle Management
 
 - (void)switchBundleVersion
 {
@@ -543,6 +648,8 @@ BOOL isRecoveryModeEnabled(void)
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+#pragma mark - Cleanup Operations
+
 - (void)wipePlugins
 {
     [[NSFileManager defaultManager]
@@ -580,6 +687,8 @@ BOOL isRecoveryModeEnabled(void)
     [[NSFileManager defaultManager] removeItemAtPath:FileSystem.documents error:nil];
     [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
+
+#pragma mark - Utility Functions
 
 - (void)openAppFolder
 {
@@ -696,6 +805,8 @@ BOOL isRecoveryModeEnabled(void)
 {
     [self dismissViewControllerAnimated:YES completion:nil];
 }
+
+#pragma mark - Helper Functions
 
 void showMenuSheet(void)
 {

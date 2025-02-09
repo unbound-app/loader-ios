@@ -3,7 +3,6 @@
 
 #import "FileSystem.h"
 #import "Fonts.h"
-#import "Menu.h"
 #import "Plugins.h"
 #import "Settings.h"
 #import "Themes.h"

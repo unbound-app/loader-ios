@@ -182,14 +182,15 @@
 
 %ctor
 {
-    %init()
+    BOOL isAppStoreApp = [[NSFileManager defaultManager]
+        fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
+
+    %init();
 
 #ifdef DEBUG
-        %init(Debug)
+    %init(Debug);
 #endif
 
-            BOOL isAppStoreApp = [[NSFileManager defaultManager]
-                fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
     if (!isAppStoreApp)
     {
         %init(Sideloading);
