@@ -1,10 +1,11 @@
 #import "Unbound.h"
 
-@interface Plugins : NSObject {
-	NSMutableArray *plugins;
+@interface Plugins : NSObject
+{
+    NSMutableArray *plugins;
 }
 
-+ (NSString*) makeJSON;
-+ (void) init;
++ (NSString *)makeJSON;
++ (void)init;
 
 @end

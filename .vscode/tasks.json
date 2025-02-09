@@ -7,7 +7,7 @@
 			"command": "zsh",
 			"args": [
 				"-c",
-				"rm -rf packages && gmake clean package"
+				"rm -rf packages && gmake clean package DEBUG=1"
 			],
 			"problemMatcher": {
 				"owner": "cpp",

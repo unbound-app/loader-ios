@@ -29,6 +29,12 @@
 				"--assume-filename",
 				"objc"
 			]
+		},
+		"objective-c": {
+			"command": "clang-format",
+			"arguments": [
+				"-style=file"
+			]
 		}
 	},
 	"yaml.schemas": {

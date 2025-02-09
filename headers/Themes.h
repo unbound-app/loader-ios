@@ -1,22 +1,23 @@
 #import "Unbound.h"
 
 @interface DCDTheme : NSObject
-	+ (NSInteger) themeIndex;
++ (NSInteger)themeIndex;
 @end
 
-@interface Themes : NSObject {
-	NSMutableArray *themes;
-	NSMutableDictionary<NSString*, NSValue*> *originalRawImplementations;
-	NSString *currentThemeId;
+@interface Themes : NSObject
+{
+    NSMutableArray                             *themes;
+    NSMutableDictionary<NSString *, NSValue *> *originalRawImplementations;
+    NSString                                   *currentThemeId;
 }
 
-+ (NSDictionary*) getThemeById:(NSString*)manifestId;
-+ (BOOL) isValidCustomTheme:(NSString*)manifestId;
-+ (void) swizzleRawColors:(NSDictionary*)payload;
-+ (UIColor*) parseColor:(NSString*)color;
-+ (void) restoreOriginalRawColors;
-+ (void) swizzleSemanticColors;
-+ (NSString*) makeJSON;
-+ (void) init;
++ (NSDictionary *)getThemeById:(NSString *)manifestId;
++ (BOOL)isValidCustomTheme:(NSString *)manifestId;
++ (void)swizzleRawColors:(NSDictionary *)payload;
++ (UIColor *)parseColor:(NSString *)color;
++ (void)restoreOriginalRawColors;
++ (void)swizzleSemanticColors;
++ (NSString *)makeJSON;
++ (void)init;
 
 @end
