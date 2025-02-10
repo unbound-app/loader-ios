@@ -40,7 +40,7 @@ if [ -z "$IPA_FILE" ]; then
 fi
 
 print_status "Building tweak..."
-gmake package LOGS=1
+gmake package DEBUG=1
 
 if [ $? -ne 0 ]; then
     print_error "Failed to build tweak"

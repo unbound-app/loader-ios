@@ -1,7 +1,9 @@
 #include <Foundation/Foundation.h>
 
-@interface RCTCxxBridge : NSObject {}
+@interface RCTCxxBridge : NSObject
+{
+}
 
-- (void) executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async;
+- (void)executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async;
 
 @end
