@@ -27,3 +27,4 @@ after-stage::
 
 after-package::
 	$(ECHO_NOTHING)rm resources/preload.js$(ECHO_END)
+
