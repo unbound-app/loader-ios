@@ -150,6 +150,7 @@
 %end
 %end
 
+#ifdef DEBUG
 %group Debug
 %hook  NSError
 - (id)initWithDomain:(id)domain code:(int)code userInfo:(id)userInfo
@@ -179,6 +180,7 @@
 };
 %end
 %end
+#endif
 
 %ctor
 {
