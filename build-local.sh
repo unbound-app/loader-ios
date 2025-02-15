@@ -42,8 +42,12 @@ if [ -z "$IPA_FILE" ]; then
 fi
 
 print_status "Building tweak..."
-make package DEBUG="$WITH_DEBUG"
 
+if [ "$UNAME" = "Darwin" ]; then
+	gmake package DEBUG="$WITH_DEBUG"
+else
+	make package DEBUG="$WITH_DEBUG"
+fi
 if [ $? -ne 0 ]; then
 	print_error "Failed to build tweak"
 	exit 1
