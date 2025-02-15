@@ -1,4 +1,7 @@
 #import "Unbound.h"
+#import <CommonCrypto/CommonCrypto.h>
+#import "FileSystem.h"
+#import <rootless.h>
 
 @interface Utilities : NSObject
 {

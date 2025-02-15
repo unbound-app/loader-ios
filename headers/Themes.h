@@ -1,4 +1,6 @@
 #import "Unbound.h"
+#import <objc/runtime.h>
+#import <substrate.h>
 
 @interface DCDTheme : NSObject
 + (NSInteger)themeIndex;
