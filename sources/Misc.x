@@ -1,5 +1,4 @@
 #import "Misc.h"
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 %hook SentrySDK
 + (void)startWithOptions:(id)options
