@@ -402,7 +402,7 @@ BOOL isRecoveryModeEnabled(void)
                                      preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:loadingAlert animated:YES completion:nil];
 
-    NSURL *url = [NSURL URLWithString:@"https://api.github.com/repos/unbound-mod/builds/branches"];
+    NSURL *url = [NSURL URLWithString:@"https://api.github.com/repos/unbound-app/builds/branches"];
     NSURLSession *session = [NSURLSession
         sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
 
@@ -490,7 +490,7 @@ BOOL isRecoveryModeEnabled(void)
 
     NSString *commitsUrl = [NSString
         stringWithFormat:
-            @"https://api.github.com/repos/unbound-mod/builds/commits?sha=%@&per_page=10", branch];
+            @"https://api.github.com/repos/unbound-app/builds/commits?sha=%@&per_page=10", branch];
     NSURL    *commitsURL = [NSURL URLWithString:commitsUrl];
 
     [[session
@@ -563,7 +563,7 @@ BOOL isRecoveryModeEnabled(void)
                                                                                    @"raw."
                                                                                    @"githubusercont"
                                                                                    @"ent.com/"
-                                                                                   @"unbound-mod/"
+                                                                                   @"unbound-app/"
                                                                                    @"builds/%@/"
                                                                                    @"unbound.js",
                                                                                    sha];
@@ -746,7 +746,7 @@ BOOL isRecoveryModeEnabled(void)
                                                                      URLQueryAllowedCharacterSet]];
 
     NSString *urlString = [NSString
-        stringWithFormat:@"https://github.com/unbound-mod/client/issues/new?title=%@&body=%@",
+        stringWithFormat:@"https://github.com/unbound-app/client/issues/new?title=%@&body=%@",
                          encodedTitle, encodedBody];
     NSURL    *url       = [NSURL URLWithString:urlString];
     [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];

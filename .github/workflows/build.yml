@@ -136,7 +136,7 @@ jobs:
       - name: Clone patcher
         uses: actions/checkout@v4
         with:
-          repository: unbound-mod/patcher-ios
+          repository: unbound-app/patcher-ios
           path: patcher-ios
 
       - name: Build and run patcher
