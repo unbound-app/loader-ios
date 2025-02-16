@@ -14,6 +14,7 @@ $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers
 
 BUNDLE_NAME = UnboundResources
 $(BUNDLE_NAME)_INSTALL_PATH = "/Library/Application\ Support/"
+$(BUNDLE_NAME)_RESOURCE_DIRS = "resources"
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
