@@ -56,7 +56,7 @@ print_success "Built tweak"
 
 print_status "Building patcher..."
 rm -rf patcher-ios
-git clone https://github.com/unbound-mod/patcher-ios
+git clone https://github.com/unbound-app/patcher-ios
 cd patcher-ios
 go build -o patcher
 cd ..

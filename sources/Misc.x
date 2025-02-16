@@ -1,5 +1,4 @@
 #import "Misc.h"
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 %hook SentrySDK
 + (void)startWithOptions:(id)options
@@ -150,6 +149,7 @@
 %end
 %end
 
+#ifdef DEBUG
 %group Debug
 %hook  NSError
 - (id)initWithDomain:(id)domain code:(int)code userInfo:(id)userInfo
@@ -179,6 +179,7 @@
 };
 %end
 %end
+#endif
 
 %ctor
 {
