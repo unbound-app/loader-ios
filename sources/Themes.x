@@ -1,6 +1,4 @@
 #import "Themes.h"
-#import <objc/runtime.h>
-#import <substrate.h>
 
 @implementation Themes
 static NSMutableDictionary<NSString *, NSValue *> *originalRawImplementations;

@@ -1,6 +1,3 @@
-#include <Foundation/Foundation.h>
-#include <UIKit/UIKit.h>
-
 #import "FileSystem.h"
 #import "Fonts.h"
 #import "Plugins.h"
@@ -10,6 +7,9 @@
 #import "Utilities.h"
 
 #include "Discord/RCT.h"
+
+#include <Foundation/Foundation.h>
+#include <UIKit/UIKit.h>
 
 #ifdef DEBUG
 #define IS_DEBUG        true
