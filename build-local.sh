@@ -22,23 +22,36 @@ UNAME=$(uname)
 WITH_DEBUG=1
 
 if [ -z "$IPA_FILE" ]; then
-	print_status "No ipa found. Please enter Discord ipa URL:"
-	read DISCORD_URL
+    print_status "No ipa found. Please enter Discord ipa URL or file path:"
+    read DISCORD_INPUT
 
-	if [ -z "$DISCORD_URL" ]; then
-		print_error "No URL provided"
-		exit 1
-	fi
+    if [ -z "$DISCORD_INPUT" ]; then
+        print_error "No input provided"
+        exit 1
+    fi
 
-	print_status "Downloading Discord ipa..."
-	curl -L -o discord.ipa "$DISCORD_URL"
-
-	if [ $? -ne 0 ]; then
-		print_error "Failed to download Discord ipa"
-		exit 1
-	fi
-	IPA_FILE="discord.ipa"
-	print_success "Downloaded Discord ipa"
+    if [[ "$DISCORD_INPUT" =~ ^https?:// ]]; then
+        print_status "Downloading Discord ipa..."
+        curl -L -o discord.ipa "$DISCORD_INPUT"
+        if [ $? -ne 0 ]; then
+            print_error "Failed to download Discord ipa"
+            exit 1
+        fi
+        print_success "Downloaded Discord ipa"
+    else
+        if [ ! -f "$DISCORD_INPUT" ]; then
+            print_error "File not found: $DISCORD_INPUT"
+            exit 1
+        fi
+        print_status "Copying Discord ipa..."
+        cp "$DISCORD_INPUT" discord.ipa
+        if [ $? -ne 0 ]; then
+            print_error "Failed to copy Discord ipa"
+            exit 1
+        fi
+        print_success "Copied Discord ipa"
+    fi
+    IPA_FILE="discord.ipa"
 fi
 
 print_status "Building tweak..."
