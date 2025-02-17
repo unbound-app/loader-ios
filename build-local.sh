@@ -148,9 +148,10 @@ fi
 print_success "Installed cyan"
 
 DEB_FILE=$(find packages -maxdepth 1 -name "*.deb" -print -quit)
+NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
 
 print_status "Injecting tweak..."
-yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE""$SAFARI_EXT"
+yes | cyan -duwsgq -i "$IPA_FILE" -o "${NAME}.ipa" -f "$DEB_FILE""$SAFARI_EXT"
 
 if [ $? -ne 0 ]; then
 	print_error "Failed to inject tweak"
