@@ -19,7 +19,16 @@ print_error() {
 
 IPA_FILE=$(find . -maxdepth 1 -name "*.ipa" -print -quit)
 UNAME=$(uname)
-WITH_DEBUG=1
+
+print_status "Build debug version? (y/n):"
+read DEBUG_INPUT
+if [[ $DEBUG_INPUT =~ ^[Yy]$ ]]; then
+    DEBUG_ARG="DEBUG=1"
+    print_status "Building with debug enabled..."
+else
+    DEBUG_ARG=""
+    print_status "Building release version..."
+fi
 
 if [ -z "$IPA_FILE" ]; then
     print_status "No ipa found. Please enter Discord ipa URL or file path:"
@@ -57,9 +66,9 @@ fi
 print_status "Building tweak..."
 
 if [ "$UNAME" = "Darwin" ]; then
-	gmake package DEBUG="$WITH_DEBUG"
+	gmake package $DEBUG_ARG
 else
-	make package DEBUG="$WITH_DEBUG"
+	make package $DEBUG_ARG
 fi
 if [ $? -ne 0 ]; then
 	print_error "Failed to build tweak"
