@@ -125,17 +125,7 @@ if [ $? -ne 0 ]; then
 fi
 print_success "Installed cyan"
 
-NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
-PACKAGE=$(grep '^Package:' control | cut -d ' ' -f 2)
-VERSION=$(grep '^Version:' control | cut -d ' ' -f 2)
-
-if [ $WITH_DEBUG = 1 ]; then
-	DEBUG="+debug"
-else
-	DEBUG=""
-fi
-
-DEB_FILE="packages/${PACKAGE}_${VERSION}${DEBUG}_iphoneos-arm64.deb"
+DEB_FILE=$(find packages -maxdepth 1 -name "*.deb" -print -quit)
 
 print_status "Injecting tweak..."
 yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE""$SAFARI_EXT"
