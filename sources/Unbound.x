@@ -114,7 +114,7 @@ id gBridge = nil;
 
         NSLog(@"Attempting to execute bundle...");
         %orig(bundle, SOURCE, true);
-        NSLog(@"Unbound's bundle successfully executed.");
+        NSLog(@"Unbound's bundle was successfully executed.");
     }
     @catch (NSException *e)
     {

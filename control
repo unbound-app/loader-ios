@@ -8,5 +8,5 @@ Author: Unbound Team
 Section: Tweaks
 Depends: mobilesubstrate (>= 0.9.5000)
 SileoDepiction: https://repo.unbound.rip/depictions/unbound.json
-Icon: https://repo.unbound.rip/icons/Unbound.png
+Icon: https://assets.unbound.rip/logo/logo.png
 Conflicts: app.enmity, mod.vendetta, app.pyoncord

@@ -720,7 +720,9 @@ BOOL isRecoveryModeEnabled(void)
     NSString *deviceModel = DEVICE_MODELS[deviceId] ?: deviceId;
     NSString *appVersion =
         [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
-    NSString *buildNumber = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
+    NSString *buildNumber   = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
+    BOOL      isAppStoreApp = [[NSFileManager defaultManager]
+        fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
 
     NSString *body =
         [NSString stringWithFormat:@"### Device Information\n"
@@ -728,6 +730,8 @@ BOOL isRecoveryModeEnabled(void)
                                     "- iOS Version: %@\n"
                                     "- Tweak Version: %@\n"
                                     "- App Version: %@ (%@)\n"
+                                    "- Hermes Bytecode Version: %u\n"
+                                    "- Sideloaded: %@\n"
                                     "- Jailbroken: %@\n\n"
                                     "### Issue Description\n"
                                     "<!-- Describe your issue here -->\n\n"
@@ -736,7 +740,8 @@ BOOL isRecoveryModeEnabled(void)
                                     "### Expected Behavior\n\n"
                                     "### Actual Behavior\n",
                                    deviceModel, device.systemVersion, PACKAGE_VERSION, appVersion,
-                                   buildNumber, isJailbroken ? @"Yes" : @"No"];
+                                   buildNumber, [Utilities getHermesBytecodeVersion],
+                                   isAppStoreApp ? @"No" : @"Yes", isJailbroken ? @"Yes" : @"No"];
 
     NSString *encodedTitle = [@"bug(iOS): "
         stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet
