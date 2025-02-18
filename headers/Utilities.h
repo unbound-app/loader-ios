@@ -29,5 +29,7 @@
                                    block:(dispatch_block_t)block;
 
 + (uint32_t)getHermesBytecodeVersion;
++ (BOOL)isHermesBytecode:(NSData *)data;
++ (void *)getHermesSymbol:(const char *)symbol error:(NSString **)error;
 
 @end
