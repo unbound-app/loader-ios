@@ -1,6 +1,7 @@
 name: Build validation
 
 on:
+  workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -11,4 +12,4 @@ jobs:
     with:
       release: false
       caller_workflow: "ci"
-    secrets: inherit 
+    secrets: inherit
