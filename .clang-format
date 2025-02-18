@@ -52,17 +52,3 @@ SpacesInCStyleCastParentheses: false
 SpacesInContainerLiterals: true
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
-
-# Import ordering
-SortIncludes: true
-IncludeBlocks: Regroup
-IncludeCategories:
-  # Main header (matching filename)
-  - Regex: '^"[^/]*\.h"$'
-    Priority: 1
-  # Local/Project headers
-  - Regex: '^"'
-    Priority: 2
-  # System headers with brackets
-  - Regex: "^<"
-    Priority: 3

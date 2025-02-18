@@ -9,7 +9,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Unbound
 $(TWEAK_NAME)_FILES = $(shell find sources -name "*.x*" -o -name "*.m*")
-$(TWEAK_NAME)_CFLAGS =  -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DLOGS=$(LOGS) -I$(THEOS_PROJECT_DIR)/headers
+$(TWEAK_NAME)_CFLAGS =  -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -I$(THEOS_PROJECT_DIR)/headers
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers
 
 BUNDLE_NAME = UnboundResources
@@ -34,4 +34,3 @@ after-stage::
 after-package::
 	$(ECHO_NOTHING)rm resources/preload.js$(ECHO_END)
 	
-
