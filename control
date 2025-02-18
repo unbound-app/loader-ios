@@ -3,7 +3,7 @@ Description: Discord mobile client aimed at providing the user control, stabilit
 Version: 1.1.0
 Package: app.unbound.ios
 Architecture: iphoneos-arm
-Maintainer: eternal
+Maintainer: eternal, acquitelol, Adrian Castro
 Author: Unbound Team
 Section: Tweaks
 Depends: mobilesubstrate (>= 0.9.5000)
