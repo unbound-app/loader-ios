@@ -1,10 +1,6 @@
 #import "FileSystem.h"
 #import "Unbound.h"
 #import <CommonCrypto/CommonCrypto.h>
-#import "FileSystem.h"
-#import <rootless.h>
-
-#import <CommonCrypto/CommonCrypto.h>
 #import <rootless.h>
 
 @interface Utilities : NSObject
@@ -31,5 +27,9 @@
 + (dispatch_source_t)createDebounceTimer:(double)delay
                                    queue:(dispatch_queue_t)queue
                                    block:(dispatch_block_t)block;
+
++ (uint32_t)getHermesBytecodeVersion;
++ (BOOL)isHermesBytecode:(NSData *)data;
++ (void *)getHermesSymbol:(const char *)symbol error:(NSString **)error;
 
 @end

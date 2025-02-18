@@ -1,4 +1,5 @@
 #import "Utilities.h"
+#import <dlfcn.h>
 
 @implementation Utilities
 static NSString *bundle = nil;
@@ -141,4 +142,62 @@ static NSString *bundle = nil;
 
     return timer;
 }
+
++ (void *)getHermesSymbol:(const char *)symbol error:(NSString **)error
+{
+    NSString *bundlePath     = [[NSBundle mainBundle] bundlePath];
+    NSString *executablePath = [bundlePath stringByAppendingPathComponent:@"Discord"];
+
+    void *handle = dlopen([executablePath UTF8String], RTLD_LAZY);
+    if (!handle)
+    {
+        if (error)
+            *error = [NSString stringWithUTF8String:dlerror()];
+        return NULL;
+    }
+
+    void *sym = dlsym(handle, symbol);
+    if (!sym)
+    {
+        if (error)
+            *error = [NSString stringWithUTF8String:dlerror()];
+        dlclose(handle);
+        return NULL;
+    }
+
+    return sym;
+}
+
++ (uint32_t)getHermesBytecodeVersion
+{
+    NSString *error                  = nil;
+    uint32_t (*getBytecodeVersion)() = (uint32_t (*)())
+        [self getHermesSymbol:"_ZN8facebook6hermes13HermesRuntime18getBytecodeVersionEv"
+                        error:&error];
+
+    if (!getBytecodeVersion)
+    {
+        NSLog(@"Failed to get bytecode version: %@", error);
+        return 0;
+    }
+
+    return getBytecodeVersion();
+}
+
++ (BOOL)isHermesBytecode:(NSData *)data
+{
+    NSString *error                                   = nil;
+    BOOL (*isHermesBytecode)(const uint8_t *, size_t) = (BOOL(*)(const uint8_t *, size_t))
+        [self getHermesSymbol:"_ZN8facebook6hermes13HermesRuntime16isHermesBytecodeEPKhm"
+                        error:&error];
+
+    if (!isHermesBytecode)
+    {
+        NSLog(@"Failed to check Hermes bytecode: %@", error);
+        return NO;
+    }
+
+    return isHermesBytecode((const uint8_t *) [data bytes], [data length]);
+}
+
 @end

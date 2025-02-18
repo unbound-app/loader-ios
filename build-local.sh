@@ -19,34 +19,77 @@ print_error() {
 
 IPA_FILE=$(find . -maxdepth 1 -name "*.ipa" -print -quit)
 UNAME=$(uname)
-WITH_DEBUG=1
+
+print_status "Build debug version? (y/n):"
+read -t 3 DEBUG_INPUT
+if [ $? -gt 128 ]; then
+    echo "n"
+    DEBUG_ARG=""
+    print_status "Building release version... (default)"
+elif [[ $DEBUG_INPUT =~ ^[Yy]$ ]]; then
+    DEBUG_ARG="DEBUG=1"
+    print_status "Building debug version..."
+else
+    DEBUG_ARG=""
+    print_status "Building release version..."
+fi
+
+USE_EXTENSION=0
+if [ "$UNAME" = "Darwin" ]; then
+    print_status "Include Safari extension? (y/n):"
+    read -t 3 SAFARI_INPUT
+    if [ $? -gt 128 ]; then
+        echo "y"
+        USE_EXTENSION=1
+        print_status "Including Safari extension... (default)"
+    elif [[ $SAFARI_INPUT =~ ^[Nn]$ ]]; then
+        USE_EXTENSION=0
+        print_status "Skipping Safari extension..."
+    else
+        USE_EXTENSION=1
+        print_status "Including Safari extension..."
+    fi
+fi
 
 if [ -z "$IPA_FILE" ]; then
-	print_status "No ipa found. Please enter Discord ipa URL:"
-	read DISCORD_URL
+    print_status "No ipa found. Please enter Discord ipa URL or file path:"
+    read DISCORD_INPUT
 
-	if [ -z "$DISCORD_URL" ]; then
-		print_error "No URL provided"
-		exit 1
-	fi
+    if [ -z "$DISCORD_INPUT" ]; then
+        print_error "No input provided"
+        exit 1
+    fi
 
-	print_status "Downloading Discord ipa..."
-	curl -L -o discord.ipa "$DISCORD_URL"
-
-	if [ $? -ne 0 ]; then
-		print_error "Failed to download Discord ipa"
-		exit 1
-	fi
-	IPA_FILE="discord.ipa"
-	print_success "Downloaded Discord ipa"
+    if [[ "$DISCORD_INPUT" =~ ^https?:// ]]; then
+        print_status "Downloading Discord ipa..."
+        curl -L -o discord.ipa "$DISCORD_INPUT"
+        if [ $? -ne 0 ]; then
+            print_error "Failed to download Discord ipa"
+            exit 1
+        fi
+        print_success "Downloaded Discord ipa"
+    else
+        if [ ! -f "$DISCORD_INPUT" ]; then
+            print_error "File not found: $DISCORD_INPUT"
+            exit 1
+        fi
+        print_status "Copying Discord ipa..."
+        cp "$DISCORD_INPUT" discord.ipa
+        if [ $? -ne 0 ]; then
+            print_error "Failed to copy Discord ipa"
+            exit 1
+        fi
+        print_success "Copied Discord ipa"
+    fi
+    IPA_FILE="discord.ipa"
 fi
 
 print_status "Building tweak..."
 
 if [ "$UNAME" = "Darwin" ]; then
-	gmake package DEBUG="$WITH_DEBUG"
+	gmake package $DEBUG_ARG
 else
-	make package DEBUG="$WITH_DEBUG"
+	make package $DEBUG_ARG
 fi
 if [ $? -ne 0 ]; then
 	print_error "Failed to build tweak"
@@ -75,79 +118,74 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 print_success "Patched ipa"
-if [ "$UNAME" = "Darwin" ]; then
-	print_status "Cloning Safari extension..."
-	rm -rf OpenInDiscord
-	git clone https://github.com/castdrian/OpenInDiscord
 
-	if [ $? -ne 0 ]; then
-		print_error "Failed to clone Safari extension"
-		exit 1
-	fi
-	print_success "Cloned Safari extension"
+SAFARI_EXT=""
+if [ "$USE_EXTENSION" = "1" ] && [ "$UNAME" = "Darwin" ]; then
+    print_status "Cloning Safari extension..."
+    rm -rf OpenInDiscord
+    git clone https://github.com/castdrian/OpenInDiscord
 
-	print_status "Building Safari extension..."
-	cd OpenInDiscord
-	xcodebuild build \
-		-target "OpenInDiscord Extension" \
-		-configuration Release \
-		-sdk iphoneos \
-		CONFIGURATION_BUILD_DIR="build" \
-		PRODUCT_NAME="OpenInDiscord" \
-		PRODUCT_BUNDLE_IDENTIFIER="com.hammerandchisel.discord.OpenInDiscord" \
-		PRODUCT_MODULE_NAME="OpenInDiscordExt" \
-		SKIP_INSTALL=NO \
-		DEVELOPMENT_TEAM="" \
-		CODE_SIGN_IDENTITY="" \
-		CODE_SIGNING_REQUIRED=NO \
-		CODE_SIGNING_ALLOWED=NO \
-		ONLY_ACTIVE_ARCH=NO
-	cd ..
+    if [ $? -ne 0 ]; then
+        print_error "Failed to clone Safari extension"
+        exit 1
+    fi
+    print_success "Cloned Safari extension"
 
-	if [ $? -ne 0 ]; then
-		print_error "Failed to build Safari extension"
-		exit 1
-	fi
-	print_success "Built Safari extension"
-	SAFARI_EXT=" OpenInDiscord/build/OpenInDiscord.appex"
-else
-	print_status "Not running on MacOS, skipping Safari Extension"
-	SAFARI_EXT=""
+    print_status "Building Safari extension..."
+    cd OpenInDiscord
+    xcodebuild build \
+        -target "OpenInDiscord Extension" \
+        -configuration Release \
+        -sdk iphoneos \
+        CONFIGURATION_BUILD_DIR="build" \
+        PRODUCT_NAME="OpenInDiscord" \
+        PRODUCT_BUNDLE_IDENTIFIER="com.hammerandchisel.discord.OpenInDiscord" \
+        PRODUCT_MODULE_NAME="OpenInDiscordExt" \
+        SKIP_INSTALL=NO \
+        DEVELOPMENT_TEAM="" \
+        CODE_SIGN_IDENTITY="" \
+        CODE_SIGNING_REQUIRED=NO \
+        CODE_SIGNING_ALLOWED=NO \
+        ONLY_ACTIVE_ARCH=NO
+    cd ..
+
+    if [ $? -ne 0 ]; then
+        print_error "Failed to build Safari extension"
+        exit 1
+    fi
+    print_success "Built Safari extension"
+    SAFARI_EXT="OpenInDiscord/build/OpenInDiscord.appex"
 fi
+
 print_status "Setting up Python environment..."
 python3 -m venv venv
 source venv/bin/activate
 pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip Pillow
 
 if [ $? -ne 0 ]; then
-	print_error "Failed to install cyan"
-	exit 1
+    print_error "Failed to install cyan"
+    exit 1
 fi
 print_success "Installed cyan"
 
+DEB_FILE=$(find packages -maxdepth 1 -name "*.deb" -print -quit)
 NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
-PACKAGE=$(grep '^Package:' control | cut -d ' ' -f 2)
-VERSION=$(grep '^Version:' control | cut -d ' ' -f 2)
-
-if [ $WITH_DEBUG = 1 ]; then
-	DEBUG="+debug"
-else
-	DEBUG=""
-fi
-
-DEB_FILE="packages/${PACKAGE}_${VERSION}${DEBUG}_iphoneos-arm64.deb"
 
 print_status "Injecting tweak..."
-yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE""$SAFARI_EXT"
+if [ "$USE_EXTENSION" = "1" ] && [ -n "$SAFARI_EXT" ]; then
+    yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE" "$SAFARI_EXT"
+else
+    yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE"
+fi
 
 if [ $? -ne 0 ]; then
-	print_error "Failed to inject tweak"
-	exit 1
+    print_error "Failed to inject tweak"
+    exit 1
 fi
 
 deactivate
 
 print_status "Cleaning up..."
-rm -rf patcher-ios OpenInDiscord venv
+rm -rf packages patcher-ios OpenInDiscord venv
 
 print_success "Successfully created $NAME.ipa"
