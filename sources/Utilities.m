@@ -1,4 +1,5 @@
 #import "Utilities.h"
+#import <dlfcn.h>
 
 @implementation Utilities
 static NSString *bundle = nil;
@@ -141,4 +142,33 @@ static NSString *bundle = nil;
 
     return timer;
 }
+
++ (uint32_t)getHermesBytecodeVersion
+{
+    NSString *bundlePath     = [[NSBundle mainBundle] bundlePath];
+    NSString *executablePath = [bundlePath stringByAppendingPathComponent:@"Discord"];
+
+    void *handle = dlopen([executablePath UTF8String], RTLD_LAZY);
+    if (!handle)
+    {
+        NSLog(@"Failed to open Discord binary: %s", dlerror());
+        return 0;
+    }
+
+    uint32_t (*getBytecodeVersion)() =
+        (uint32_t (*)()) dlsym(handle, "_ZN8facebook6hermes13HermesRuntime18getBytecodeVersionEv");
+
+    if (!getBytecodeVersion)
+    {
+        NSLog(@"Failed to find getBytecodeVersion: %s", dlerror());
+        dlclose(handle);
+        return 0;
+    }
+
+    uint32_t version = getBytecodeVersion();
+    dlclose(handle);
+
+    return version;
+}
+
 @end

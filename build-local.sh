@@ -173,9 +173,9 @@ NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
 
 print_status "Injecting tweak..."
 if [ "$USE_EXTENSION" = "1" ] && [ -n "$SAFARI_EXT" ]; then
-    yes | cyan -duwsgq -i "$IPA_FILE" -o "$NAME.ipa" -f "$DEB_FILE" -f "$SAFARI_EXT"
+    yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE" "$SAFARI_EXT"
 else
-    yes | cyan -duwsgq -i "$IPA_FILE" -o "$NAME.ipa" -f "$DEB_FILE"
+    yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE"
 fi
 
 if [ $? -ne 0 ]; then
