@@ -109,9 +109,6 @@ BOOL isRecoveryModeEnabled(void)
 #pragma mark - Menu Setup
 
 @implementation UnboundMenuViewController
-{
-    BOOL isJailbroken;
-}
 
 - (NSString *)bundlePath
 {
@@ -121,7 +118,6 @@ BOOL isRecoveryModeEnabled(void)
 - (void)viewDidLoad
 {
     [super viewDidLoad];
-    isJailbroken = [Utilities isJailbroken];
     [self setupTableView];
     [self setupMenuItems];
 }
@@ -692,7 +688,7 @@ BOOL isRecoveryModeEnabled(void)
 
 - (void)openAppFolder
 {
-    if (isJailbroken)
+    if ([Utilities isJailbroken])
     {
         NSString *filzaPath = [NSString stringWithFormat:@"filza://view%@", FileSystem.documents];
         NSURL    *filzaURL =
