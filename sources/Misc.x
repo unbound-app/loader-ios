@@ -151,18 +151,80 @@
 
 #ifdef DEBUG
 %group Debug
-%hook  NSError
+
+static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *info)
+{
+    // Firebase Dynamic Links errors
+    if ([domain isEqualToString:@"com.firebase.dynamicLinks"] && code == 1)
+    {
+        return YES;
+    }
+
+    // AppSSO errors
+    if ([domain isEqualToString:@"com.apple.AppSSO.AuthorizationError"] && (code == -1000))
+    {
+        return YES;
+    }
+
+    // RCT JavaScript loader errors
+    if ([domain isEqualToString:@"RCTJavaScriptLoaderErrorDomain"] && code == 1000)
+    {
+        return YES;
+    }
+
+    // File not found errors
+    if ([domain isEqualToString:@"NSPOSIXErrorDomain"] && code == 2)
+    {
+        return YES;
+    }
+
+    // BS Action errors
+    if ([domain isEqualToString:@"BSActionErrorDomain"] && code == 1)
+    {
+        return YES;
+    }
+
+    // Related Cocoa errors
+    if ([domain isEqualToString:@"NSCocoaErrorDomain"])
+    {
+        // File not found related
+        if (code == 260)
+        {
+            return YES;
+        }
+        // NSKeyedUnarchiver null data
+        if (code == 4864)
+        {
+            return YES;
+        }
+        // Saved application state errors
+        if (code == 4)
+        {
+            return YES;
+        }
+    }
+
+    return NO;
+}
+
+%hook NSError
 - (id)initWithDomain:(id)domain code:(int)code userInfo:(id)userInfo
 {
-    NSLog(@"[Error] Initialized with info: %@ %@ %d", userInfo, domain, code);
+    if (!shouldIgnoreError(domain, code, userInfo))
+    {
+        NSLog(@"[Error] Initialized with info: %@ %@ %d", userInfo, domain, code);
+    }
     return %orig;
-};
+}
 
 + (id)errorWithDomain:(id)domain code:(int)code userInfo:(id)userInfo
 {
-    NSLog(@"[Error] Initialized with info: %@ %@ %d", userInfo, domain, code);
+    if (!shouldIgnoreError(domain, code, userInfo))
+    {
+        NSLog(@"[Error] Initialized with info: %@ %@ %d", userInfo, domain, code);
+    }
     return %orig;
-};
+}
 %end
 
 %hook NSException
@@ -170,13 +232,13 @@
 {
     NSLog(@"[Exception] Initialized with info: %@ %@ %@", userInfo, name, reason);
     return %orig;
-};
+}
 
 + (id)exceptionWithName:(id)name reason:(id)reason userInfo:(id)userInfo
 {
     NSLog(@"[Exception] Initialized with info: %@ %@ %@", userInfo, name, reason);
     return %orig;
-};
+}
 %end
 %end
 #endif
