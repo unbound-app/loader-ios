@@ -32,5 +32,7 @@
 + (uint32_t)getHermesBytecodeVersion;
 + (BOOL)isHermesBytecode:(NSData *)data;
 + (void *)getHermesSymbol:(const char *)symbol error:(NSString **)error;
++ (BOOL)isAppStoreApp;
++ (BOOL)isJailbroken;
 
 @end

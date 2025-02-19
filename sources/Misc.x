@@ -245,16 +245,13 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 
 %ctor
 {
-    BOOL isAppStoreApp = [[NSFileManager defaultManager]
-        fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
-
     %init();
 
 #ifdef DEBUG
     %init(Debug);
 #endif
 
-    if (!isAppStoreApp)
+    if (![Utilities isAppStoreApp])
     {
         %init(Sideloading);
     }

@@ -1,5 +1,6 @@
-#import "Utilities.h"
 #import <dlfcn.h>
+
+#import "Utilities.h"
 
 @implementation Utilities
 static NSString *bundle = nil;
@@ -198,6 +199,17 @@ static NSString *bundle = nil;
     }
 
     return isHermesBytecode((const uint8_t *) [data bytes], [data length]);
+}
+
++ (BOOL)isAppStoreApp
+{
+    return [[NSFileManager defaultManager]
+        fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
+}
+
++ (BOOL)isJailbroken
+{
+    return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];
 }
 
 @end

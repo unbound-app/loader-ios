@@ -121,7 +121,7 @@ BOOL isRecoveryModeEnabled(void)
 - (void)viewDidLoad
 {
     [super viewDidLoad];
-    isJailbroken = [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];
+    isJailbroken = [Utilities isJailbroken];
     [self setupTableView];
     [self setupMenuItems];
 }
@@ -720,9 +720,7 @@ BOOL isRecoveryModeEnabled(void)
     NSString *deviceModel = DEVICE_MODELS[deviceId] ?: deviceId;
     NSString *appVersion =
         [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
-    NSString *buildNumber   = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
-    BOOL      isAppStoreApp = [[NSFileManager defaultManager]
-        fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
+    NSString *buildNumber = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
 
     NSString *body =
         [NSString stringWithFormat:@"### Device Information\n"
@@ -741,7 +739,8 @@ BOOL isRecoveryModeEnabled(void)
                                     "### Actual Behavior\n",
                                    deviceModel, device.systemVersion, PACKAGE_VERSION, appVersion,
                                    buildNumber, [Utilities getHermesBytecodeVersion],
-                                   isAppStoreApp ? @"No" : @"Yes", isJailbroken ? @"Yes" : @"No"];
+                                   [Utilities isAppStoreApp] ? @"No" : @"Yes",
+                                   [Utilities isJailbroken] ? @"Yes" : @"No"];
 
     NSString *encodedTitle = [@"bug(iOS): "
         stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet
