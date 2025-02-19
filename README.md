@@ -17,15 +17,15 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 <a href="tbd"><img src="https://i.imgur.com/dsbDLK9.png" width="230"></a>
 <a href="tbd"><img src="https://i.imgur.com/46qhEAv.png" width="230"></a>
 
-> [!NOTE]
-> TrollStore may display an encryption warning, which you can disregard.
+> [!WARNING]
+> Trying to use non-substrate tweak runtimes (such as TrollFools or LiveContainer's TweakLoader) will likely break functionality. Please always use the pre-patched ipa when sideloading.
 
 - Download and install [Unbound.ipa](https://github.com/unbound-app/loader-ios/releases/latest/download/Unbound.ipa) using your preferred sideloading method.
 
 ## Building
 
 > [!NOTE]
-> Unless you plan on modifying the source code, you should fork the repository and use the provided workflow if you want to build the tweak or pre-patched ipa.
+> Unless you plan on modifying the source code you should fork the repository and use the provided workflow to build the tweak/ipa.
 
 <details>
 <summary>Instructions</summary>
