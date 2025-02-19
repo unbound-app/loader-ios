@@ -146,17 +146,10 @@ jobs:
           cd ..
           ./patcher-ios/patcher discord.ipa
 
-      - name: Clone OpenInDiscord
-        if: inputs.add_extension == true
-        uses: actions/checkout@v4
-        with:
-          repository: castdrian/OpenInDiscord
-          path: OpenInDiscord
-
       - name: Build Safari Extension
         if: inputs.add_extension == true
         run: |
-          cd OpenInDiscord
+          cd extensions/OpenInDiscord
           xcodebuild build \
             -target "OpenInDiscord Extension" \
             -configuration Release \
@@ -183,7 +176,7 @@ jobs:
       - name: Inject tweak (and extension)
         run: |
           if [ ${{ inputs.add_extension }} == true ]; then
-            yes | cyan -duwsgq -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb OpenInDiscord/build/OpenInDiscord.appex
+            yes | cyan -duwsgq -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
           else
             yes | cyan -duwsgq -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
           fi
