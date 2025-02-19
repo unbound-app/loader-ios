@@ -1,3 +1,6 @@
 [submodule "resources"]
 	path = resources
 	url = https://github.com/unbound-app/bootstrap
+[submodule "extensions/OpenInDiscord"]
+	path = extensions/OpenInDiscord
+	url = https://github.com/castdrian/OpenInDiscord

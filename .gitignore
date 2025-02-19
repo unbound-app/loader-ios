@@ -1,6 +1,5 @@
-packages
+*.ipa
 .theos
 .DS_Store
-node_modules
+packages
 binaries
-*.ipa

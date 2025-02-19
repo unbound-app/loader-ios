@@ -17,6 +17,14 @@ print_error() {
 	echo -e "${RED}[-]${NC} $1"
 }
 
+print_status "Initializing submodules..."
+git submodule update --init --recursive
+if [ $? -ne 0 ]; then
+    print_error "Failed to initialize submodules"
+    exit 1
+fi
+print_success "Initialized submodules"
+
 IPA_FILE=$(find . -maxdepth 1 -name "*.ipa" -print -quit)
 UNAME=$(uname)
 
@@ -121,18 +129,8 @@ print_success "Patched ipa"
 
 SAFARI_EXT=""
 if [ "$USE_EXTENSION" = "1" ] && [ "$UNAME" = "Darwin" ]; then
-    print_status "Cloning Safari extension..."
-    rm -rf OpenInDiscord
-    git clone https://github.com/castdrian/OpenInDiscord
-
-    if [ $? -ne 0 ]; then
-        print_error "Failed to clone Safari extension"
-        exit 1
-    fi
-    print_success "Cloned Safari extension"
-
     print_status "Building Safari extension..."
-    cd OpenInDiscord
+    cd extensions/OpenInDiscord
     xcodebuild build \
         -target "OpenInDiscord Extension" \
         -configuration Release \
@@ -147,14 +145,14 @@ if [ "$USE_EXTENSION" = "1" ] && [ "$UNAME" = "Darwin" ]; then
         CODE_SIGNING_REQUIRED=NO \
         CODE_SIGNING_ALLOWED=NO \
         ONLY_ACTIVE_ARCH=NO
-    cd ..
+    cd ../..  # Changed from cd .. to cd ../.. to return to root directory
 
     if [ $? -ne 0 ]; then
         print_error "Failed to build Safari extension"
         exit 1
     fi
     print_success "Built Safari extension"
-    SAFARI_EXT="OpenInDiscord/build/OpenInDiscord.appex"
+    SAFARI_EXT="extensions/OpenInDiscord/build/OpenInDiscord.appex"
 fi
 
 print_status "Setting up Python environment..."
@@ -186,6 +184,6 @@ fi
 deactivate
 
 print_status "Cleaning up..."
-rm -rf packages patcher-ios OpenInDiscord venv
+rm -rf venv packages patcher-ios extensions/OpenInDiscord/build
 
 print_success "Successfully created $NAME.ipa"
