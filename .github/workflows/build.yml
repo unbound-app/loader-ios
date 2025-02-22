@@ -178,9 +178,17 @@ jobs:
       - name: Inject tweak (and extension)
         run: |
           if [ ${{ inputs.add_extension }} == true ]; then
-            yes | cyan -duwsgq -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+            if [ ${{ inputs.is_testflight }} == true ]; then
+              yes | cyan -duwsgq -n "Discord" -b "com.hammerandchisel.discord.testflight" -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+            else
+              yes | cyan -duwsgq -n "Discord" -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+            fi
           else
-            yes | cyan -duwsgq -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+            if [ ${{ inputs.is_testflight }} == true ]; then
+              yes | cyan -duwsgq -n "Discord" -b "com.hammerandchisel.discord.testflight" -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+            else
+              yes | cyan -duwsgq -n "Discord" -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+            fi
           fi
 
       - name: Upload ipa as artifact
@@ -213,9 +221,6 @@ jobs:
           if [[ ${{ inputs.is_testflight }} == true ]]; then
             BUILD=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleVersion | cut -d '"' -f 4)
             VERSION="${VERSION}_${BUILD}"
-            echo "IS_PRERELEASE=true" >> $GITHUB_ENV
-          else
-            echo "IS_PRERELEASE=false" >> $GITHUB_ENV
           fi
           
           echo "DISCORD_VERSION=$VERSION" >> $GITHUB_ENV
@@ -229,7 +234,7 @@ jobs:
             *.deb
             *.ipa
           generate_release_notes: true
-          prerelease: ${{ env.IS_PRERELEASE }}
+          prerelease: ${{ inputs.is_testflight }}
           fail_on_unmatched_files: true
           token: ${{ env.GITHUB_TOKEN }}
         env:
