@@ -25,7 +25,7 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 ## Building
 
 > [!NOTE]
-> Unless you plan on modifying the source code you should fork the repository and use the provided workflow to build the tweak/ipa.
+> Unless you plan on modifying source code you should fork this repository and use the provided workflow.
 
 <details>
 <summary>Instructions</summary>
