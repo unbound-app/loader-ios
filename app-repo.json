@@ -6,25 +6,22 @@
     {
       "name": "Unbound",
       "bundleIdentifier": "com.hammerandchisel.discord",
-      "developerName": "eternal",
-      "iconURL": "https://repo.unbound.rip/icons/Unbound.png",
+      "developerName": "Unbound Team",
+      "iconURL": "https://assets.unbound.rip/logo/logo.png",
       "localizedDescription": "A client mod for Discord",
       "subtitle": "A client mod for Discord",
       "tintColor": "aa454d",
-      "versions": [],
-      "appPermissions": {}
+      "versions": []
     },
     {
       "name": "Unbound (TestFlight)",
       "bundleIdentifier": "com.hammerandchisel.discord.testflight",
-      "developerName": "eternal",
-      "iconURL": "https://repo.unbound.rip/icons/Unbound.png",
+      "developerName": "Unbound Team",
+      "iconURL": "https://assets.unbound.rip/logo/logo.png",
       "localizedDescription": "A client mod for Discord (TestFlight builds)",
       "subtitle": "A client mod for Discord (TestFlight builds)",
       "tintColor": "aa454d",
-      "versions": [],
-      "appPermissions": {}
-    }
-  ],
-  "news": []
+      "versions": []
+	}
+  ]
 }
