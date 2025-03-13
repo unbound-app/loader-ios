@@ -4,6 +4,9 @@ on:
   repository_dispatch:
     types: [ipa-update]
 
+permissions:
+  contents: write
+
 jobs:
   trigger-deploy:
     uses: ./.github/workflows/build.yml

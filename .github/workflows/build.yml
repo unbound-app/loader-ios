@@ -38,6 +38,9 @@ on:
       caller_workflow:
         type: string
 
+permissions:
+  contents: write
+
 env:
   GH_TOKEN: ${{ github.token }}
 
@@ -201,8 +204,6 @@ jobs:
     if: inputs.caller_workflow != 'ci' && inputs.release == true
     runs-on: macos-15
     needs: build-ipa
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout code
