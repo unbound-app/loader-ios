@@ -824,31 +824,15 @@ BOOL isRecoveryModeEnabled(void)
     { // App icon toggle
         NSString *iconName = sender.on ? @"UnboundIcon" : nil;
 
-        [[UIApplication sharedApplication]
-            setAlternateIconName:iconName
-               completionHandler:^(NSError *error) {
-                   if (error)
-                   {
-                       [Logger error:LOG_CATEGORY_RECOVERY
-                              format:@"Error changing app icon: %@", error.localizedDescription];
-
-                       // Revert switch state if error occurs
-                       dispatch_async(dispatch_get_main_queue(),
-                                      ^{ [sender setOn:!sender.on animated:YES]; });
-
-                       // Show error alert
-                       UIAlertController *alert =
-                           [UIAlertController alertControllerWithTitle:@"Icon Change Failed"
-                                                               message:error.localizedDescription
-                                                        preferredStyle:UIAlertControllerStyleAlert];
-
-                       [alert addAction:[UIAlertAction actionWithTitle:@"OK"
-                                                                 style:UIAlertActionStyleDefault
-                                                               handler:nil]];
-
-                       [self presentViewController:alert animated:YES completion:nil];
-                   }
-               }];
+        [[UIApplication sharedApplication] setAlternateIconName:iconName
+                                              completionHandler:^(NSError *error) {
+                                                  if (error)
+                                                  {
+                                                      dispatch_async(dispatch_get_main_queue(), ^{
+                                                          [sender setOn:!sender.on animated:YES];
+                                                      });
+                                                  }
+                                              }];
     }
 
     [defaults synchronize];

@@ -15,7 +15,7 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 
 <a href="https://tinyurl.com/bdejdwwm"><img src="https://adriancastro.dev/0byxzkzdsauj.png" width="230"></a>
 <a href="https://tinyurl.com/2bpk9kd5"><img src="https://i.imgur.com/dsbDLK9.png" width="230"></a>
-<a href="https://tinyurl.com/yvcu8fc8"><img src="https://adriancastro.dev/3ki33ph6niw9.jpg" width="230"></a>
+<a href="https://tinyurl.com/yvcu8fc8"><img src="https://adriancastro.dev/basmxxk8sj3k.png" width="230"></a>
 
 > [!WARNING]
 > Trying to use non-substrate tweak runtimes (such as TrollFools or LiveContainer's TweakLoader) will likely break functionality. Please always use the pre-patched ipa when sideloading.
