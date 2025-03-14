@@ -11,6 +11,7 @@
       "localizedDescription": "A client mod for Discord",
       "subtitle": "A client mod for Discord",
       "tintColor": "aa454d",
+	  "category": "social",
       "versions": []
     },
     {
@@ -22,6 +23,7 @@
       "localizedDescription": "A client mod for Discord (TestFlight builds)",
       "subtitle": "A client mod for Discord (TestFlight builds)",
       "tintColor": "aa454d",
+	  "category": "social",
       "versions": []
 	}
   ]

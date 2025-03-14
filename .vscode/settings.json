@@ -17,7 +17,7 @@
 		},
 		{
 			"label": "$(package) Build IPA",
-			"task": "Build IPA", 
+			"task": "Build IPA",
 			"tooltip": "Build IPA locally"
 		}
 	],
@@ -42,5 +42,6 @@
 			"*.github/workflows/*.yml",
 		]
 	},
-	"editor.formatOnSave": true
+	"editor.formatOnSave": true,
+	"markdown.validate.enabled": true
 }
