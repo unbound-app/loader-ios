@@ -107,7 +107,7 @@ static NSString            *path = nil;
     }
     @catch (NSException *e)
     {
-        NSLog(@"Settings set failed. %@", e);
+        [Logger error:LOG_CATEGORY_SETTINGS format:@"Settings set failed. %@", e];
     }
 }
 

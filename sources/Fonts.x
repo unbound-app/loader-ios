@@ -64,32 +64,32 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
 
     for (NSString *file in contents)
     {
-        NSLog(@"[Fonts] Attempting to load %@...", file);
+        [Logger info:LOG_CATEGORY_FONTS format:@"Attempting to load %@...", file];
 
         @try
         {
             NSString *font = [NSString pathWithComponents:@[ path, file ]];
             NSString *name = [Fonts getFontName:font];
 
-            NSLog(@"[Fonts] Registering font: %@", font);
+            [Logger info:LOG_CATEGORY_FONTS format:@"Registering font: %@", font];
 
             [fonts addObject:@{@"name" : name, @"file" : file, @"path" : font}];
         }
         @catch (NSException *e)
         {
-            NSLog(@"[Fonts] Failed to load %@ (%@)", file, e.reason);
+            [Logger error:LOG_CATEGORY_FONTS format:@"Failed to load %@ (%@)", file, e.reason];
         }
     }
 
     @try
     {
-        NSLog(@"[Fonts] Loading...");
+        [Logger info:LOG_CATEGORY_FONTS format:@"Loading..."];
         [Fonts apply];
-        NSLog(@"[Fonts] Successfully loaded.");
+        [Logger info:LOG_CATEGORY_FONTS format:@"Successfully loaded."];
     }
     @catch (NSException *e)
     {
-        NSLog(@"[Fonts] [Error] Failed to load. (%@)", e.reason);
+        [Logger error:LOG_CATEGORY_FONTS format:@"Failed to load. (%@)", e.reason];
     }
 };
 
@@ -112,9 +112,9 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
 
         if ([custom count] == 0 && [systemFonts count] == 0)
         {
-            NSLog(@"[Fonts] [Error] Failed to replace \"%@\" with \"%@\". The requested font isn't "
-                  @"loaded.",
-                  state, override);
+            [Logger error:LOG_CATEGORY_FONTS
+                   format:@"Failed to replace \"%@\" with \"%@\". The requested font isn't loaded.",
+                          state, override];
             continue;
         }
 
@@ -138,7 +138,8 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
         }
         @catch (NSException *e)
         {
-            NSLog(@"[Fonts] Failed to load font \"%@\". (%@)", override, e.reason);
+            [Logger error:LOG_CATEGORY_FONTS
+                   format:@"Failed to load font \"%@\". (%@)", override, e.reason];
         }
     }
 }
@@ -154,7 +155,7 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
     CTFontManagerRegisterGraphicsFont(ref, nil);
     CGFontRelease(ref);
 
-    NSLog(@"[Fonts] Loaded font: %@.", [Fonts getFontNameByRef:ref]);
+    [Logger info:LOG_CATEGORY_FONTS format:@"Loaded font: %@.", [Fonts getFontNameByRef:ref]];
 }
 
 + (NSString *)getFontName:(NSString *)path

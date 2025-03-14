@@ -829,7 +829,8 @@ BOOL isRecoveryModeEnabled(void)
                completionHandler:^(NSError *error) {
                    if (error)
                    {
-                       NSLog(@"Error changing app icon: %@", error.localizedDescription);
+                       [Logger error:LOG_CATEGORY_RECOVERY
+                              format:@"Error changing app icon: %@", error.localizedDescription];
 
                        // Revert switch state if error occurs
                        dispatch_async(dispatch_get_main_queue(),

@@ -119,7 +119,7 @@ static NSString                                               *documents = nil;
         dispatch_source_cancel(source);
 
         [monitors removeObjectForKey:filePath];
-        NSLog(@"monitor for %@ was destroyed", filePath);
+        [Logger debug:LOG_CATEGORY_FILESYSTEM format:@"monitor for %@ was destroyed", filePath];
     };
 
     monitor[@"debounce_timer"] = nil;
@@ -141,14 +141,15 @@ static NSString                                               *documents = nil;
     });
 
     dispatch_source_set_cancel_handler(source, ^(void) {
-        NSLog(@"[Watcher] event listener got cancelled for %@", filePath);
+        [Logger debug:LOG_CATEGORY_FILESYSTEM
+               format:@"event listener got cancelled for %@", filePath];
         close(fdescriptor);
 
         // If this dispatch source was canceled because of a rename or delete notification, recreate
         // it
         if (autoRestart)
         {
-            NSLog(@"Restarting file watcher.");
+            [Logger debug:LOG_CATEGORY_FILESYSTEM format:@"Restarting file watcher."];
             [FileSystem monitor:filePath onChange:onChange autoRestart:autoRestart];
         }
     });
@@ -215,7 +216,8 @@ static NSString                                               *documents = nil;
                       }
                       else if ([response statusCode] != 304)
                       {
-                          NSLog(@"Saving file from %@ to %@", url, path);
+                          [Logger info:LOG_CATEGORY_FILESYSTEM
+                                format:@"Saving file from %@ to %@", url, path];
                           [data writeToFile:path atomically:YES];
                       }
 

@@ -29,7 +29,7 @@ static NSMutableArray *plugins = nil;
 
     for (NSString *folder in contents)
     {
-        NSLog(@"[Plugins] Attempting to load %@...", folder);
+        [Logger info:LOG_CATEGORY_PLUGINS format:@"Attempting to load %@...", folder];
 
         @try
         {
@@ -37,14 +37,16 @@ static NSMutableArray *plugins = nil;
 
             if (![FileSystem isDirectory:dir])
             {
-                NSLog(@"[Plugins] Skipping %@ as it is not a directory.", folder);
+                [Logger info:LOG_CATEGORY_PLUGINS
+                      format:@"Skipping %@ as it is not a directory.", folder];
                 continue;
             }
 
             NSString *data = [NSString pathWithComponents:@[ dir, @"manifest.json" ]];
             if (![FileSystem exists:data])
             {
-                NSLog(@"[Plugins] Skipping %@ as it is missing a manifest.", folder);
+                [Logger info:LOG_CATEGORY_PLUGINS
+                      format:@"Skipping %@ as it is missing a manifest.", folder];
                 continue;
             }
 
@@ -60,21 +62,24 @@ static NSMutableArray *plugins = nil;
                 }
                 else
                 {
-                    NSLog(@"[Plugins] Skipping %@ as its manifest is invalid.", folder);
+                    [Logger info:LOG_CATEGORY_PLUGINS
+                          format:@"Skipping %@ as its manifest is invalid.", folder];
                     continue;
                 }
             }
             @catch (NSException *e)
             {
-                NSLog(@"[Plugins] Skipping %@ as its manifest failed to be parsed. (%@)", folder,
-                      e.reason);
+                [Logger error:LOG_CATEGORY_PLUGINS
+                       format:@"Skipping %@ as its manifest failed to be parsed. (%@)", folder,
+                              e.reason];
                 continue;
             }
 
             NSString *entry = [NSString pathWithComponents:@[ dir, @"bundle.js" ]];
             if (![FileSystem exists:entry])
             {
-                NSLog(@"[Plugins] Skipping %@ as it is missing a bundle.", folder);
+                [Logger info:LOG_CATEGORY_PLUGINS
+                      format:@"Skipping %@ as it is missing a bundle.", folder];
                 continue;
             }
 
@@ -90,7 +95,7 @@ static NSMutableArray *plugins = nil;
         }
         @catch (NSException *e)
         {
-            NSLog(@"[Plugins] Failed to load %@ (%@)", folder, e.reason);
+            [Logger error:LOG_CATEGORY_PLUGINS format:@"Failed to load %@ (%@)", folder, e.reason];
         }
     }
 };
