@@ -144,6 +144,33 @@ BOOL isRecoveryModeEnabled(void)
 
 - (void)setupMenuItems
 {
+    // Create a mutable array for the settings section items
+    NSMutableArray *settingsItems =
+        [NSMutableArray arrayWithObjects:@{
+            @"title" : @"Enable Shake Motion",
+            @"icon" : @"iphone.gen3.radiowaves.left.and.right",
+            @"isSwitch" : @YES,
+            @"key" : @"UnboundShakeGestureEnabled"
+        },
+                                         @{
+                                             @"title" : @"Enable Three Finger Press",
+                                             @"icon" : @"hand.tap",
+                                             @"isSwitch" : @YES,
+                                             @"key" : @"UnboundThreeFingerGestureEnabled"
+                                         },
+                                         nil];
+
+    // Only add app icon toggle if the app is sideloaded
+    if (![Utilities isAppStoreApp])
+    {
+        [settingsItems addObject:@{
+            @"title" : @"Use Unbound Icon",
+            @"icon" : @"app.badge",
+            @"isSwitch" : @YES,
+            @"key" : @"UnboundAppIconEnabled"
+        }];
+    }
+
     self.menuSections = @[
         @{
             @"title" : @"",
@@ -230,23 +257,7 @@ BOOL isRecoveryModeEnabled(void)
                 }
             ]
         },
-        @{
-            @"title" : @"Settings",
-            @"items" : @[
-                @{
-                    @"title" : @"Enable Shake Motion",
-                    @"icon" : @"iphone.gen3.radiowaves.left.and.right",
-                    @"isSwitch" : @YES,
-                    @"key" : @"UnboundShakeGestureEnabled"
-                },
-                @{
-                    @"title" : @"Enable Three Finger Press",
-                    @"icon" : @"hand.tap",
-                    @"isSwitch" : @YES,
-                    @"key" : @"UnboundThreeFingerGestureEnabled"
-                }
-            ]
-        }
+        @{@"title" : @"Settings", @"items" : settingsItems}
     ];
 }
 
@@ -300,8 +311,19 @@ BOOL isRecoveryModeEnabled(void)
             forControlEvents:UIControlEventValueChanged];
 
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        toggle.on =
-            [defaults objectForKey:item[@"key"]] == nil ? YES : [defaults boolForKey:item[@"key"]];
+
+        // Special handling for app icon toggle
+        if ([item[@"key"] isEqualToString:@"UnboundAppIconEnabled"])
+        {
+            NSString *currentIcon = [[UIApplication sharedApplication] alternateIconName];
+            toggle.on             = [currentIcon isEqualToString:@"UnboundIcon"];
+        }
+        else
+        {
+            toggle.on = [defaults objectForKey:item[@"key"]] == nil
+                            ? YES
+                            : [defaults boolForKey:item[@"key"]];
+        }
 
         cell.accessoryView = toggle;
     }
@@ -777,7 +799,7 @@ BOOL isRecoveryModeEnabled(void)
             }
         }
     }
-    else
+    else if (sender.tag == 1)
     { // Three finger gesture
         [defaults setBool:sender.on forKey:@"UnboundThreeFingerGestureEnabled"];
         if (!sender.on)
@@ -798,6 +820,36 @@ BOOL isRecoveryModeEnabled(void)
             }
         }
     }
+    else if (sender.tag == 2)
+    { // App icon toggle
+        NSString *iconName = sender.on ? @"UnboundIcon" : nil;
+
+        [[UIApplication sharedApplication]
+            setAlternateIconName:iconName
+               completionHandler:^(NSError *error) {
+                   if (error)
+                   {
+                       NSLog(@"Error changing app icon: %@", error.localizedDescription);
+
+                       // Revert switch state if error occurs
+                       dispatch_async(dispatch_get_main_queue(),
+                                      ^{ [sender setOn:!sender.on animated:YES]; });
+
+                       // Show error alert
+                       UIAlertController *alert =
+                           [UIAlertController alertControllerWithTitle:@"Icon Change Failed"
+                                                               message:error.localizedDescription
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+
+                       [alert addAction:[UIAlertAction actionWithTitle:@"OK"
+                                                                 style:UIAlertActionStyleDefault
+                                                               handler:nil]];
+
+                       [self presentViewController:alert animated:YES completion:nil];
+                   }
+               }];
+    }
+
     [defaults synchronize];
 }
 
