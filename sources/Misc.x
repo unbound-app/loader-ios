@@ -3,13 +3,13 @@
 %hook SentrySDK
 + (void)startWithOptions:(id)options
 {
-    NSLog(@"Blocked SentrySDK.");
+    [Logger info:LOG_CATEGORY_DEFAULT format:@"Blocked SentrySDK."];
     return;
 }
 
 + (void)startWithConfigureOptions:(id)callback
 {
-    NSLog(@"Blocked SentrySDK.");
+    [Logger info:LOG_CATEGORY_DEFAULT format:@"Blocked SentrySDK."];
     return;
 }
 
@@ -22,7 +22,7 @@
 %hook FIRInstallations
 + (void)load
 {
-    NSLog(@"Blocked Firebase Installations.");
+    [Logger info:LOG_CATEGORY_DEFAULT format:@"Blocked Firebase Installations."];
     return;
 }
 %end
@@ -45,7 +45,8 @@
 
         if (error)
         {
-            NSLog(@"[Error] Failed getting documents directory: %@", error);
+            [Logger error:LOG_CATEGORY_DEFAULT
+                   format:@"Failed getting documents directory: %@", error];
             return %orig(identifier);
         }
 
@@ -173,9 +174,15 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
     }
 
     // File not found errors
-    if ([domain isEqualToString:@"NSPOSIXErrorDomain"] && code == 2)
+    if ([domain isEqualToString:@"NSPOSIXErrorDomain"])
     {
-        return YES;
+        // Error code 2: No such file
+        if (code == 2)
+            return YES;
+
+        // Error code 17: File exists (harmless error when creating directories/files)
+        if (code == 17)
+            return YES;
     }
 
     // BS Action errors
@@ -184,24 +191,32 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
         return YES;
     }
 
+    // Filter NSOSStatusErrorDomain errors related to FSNode
+    if ([domain isEqualToString:@"NSOSStatusErrorDomain"])
+    {
+        // -10813: Common error related to FSNode getHFSType
+        if (code == -10813)
+            return YES;
+    }
+
     // Related Cocoa errors
     if ([domain isEqualToString:@"NSCocoaErrorDomain"])
     {
         // File not found related
         if (code == 260)
-        {
             return YES;
-        }
+
+        // File exists related error
+        if (code == 516)
+            return YES;
+
         // NSKeyedUnarchiver null data
         if (code == 4864)
-        {
             return YES;
-        }
+
         // Saved application state errors
         if (code == 4)
-        {
             return YES;
-        }
     }
 
     return NO;
@@ -212,7 +227,8 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 {
     if (!shouldIgnoreError(domain, code, userInfo))
     {
-        NSLog(@"[Error] Initialized with info: %@ %@ %d", userInfo, domain, code);
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"Initialized with info: %@ %@ %d", userInfo, domain, code];
     }
     return %orig;
 }
@@ -221,7 +237,8 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 {
     if (!shouldIgnoreError(domain, code, userInfo))
     {
-        NSLog(@"[Error] Initialized with info: %@ %@ %d", userInfo, domain, code);
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"Initialized with info: %@ %@ %d", userInfo, domain, code];
     }
     return %orig;
 }
@@ -230,13 +247,15 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 %hook NSException
 - (id)initWithName:(id)name reason:(id)reason userInfo:(id)userInfo
 {
-    NSLog(@"[Exception] Initialized with info: %@ %@ %@", userInfo, name, reason);
+    [Logger error:LOG_CATEGORY_DEFAULT
+           format:@"Initialized with info: %@ %@ %@", userInfo, name, reason];
     return %orig;
 }
 
 + (id)exceptionWithName:(id)name reason:(id)reason userInfo:(id)userInfo
 {
-    NSLog(@"[Exception] Initialized with info: %@ %@ %@", userInfo, name, reason);
+    [Logger error:LOG_CATEGORY_DEFAULT
+           format:@"Initialized with info: %@ %@ %@", userInfo, name, reason];
     return %orig;
 }
 %end

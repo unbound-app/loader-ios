@@ -119,7 +119,7 @@ fi
 print_success "Built patcher"
 
 print_status "Patching ipa..."
-./patcher-ios/patcher "$IPA_FILE"
+./patcher-ios/patcher -i "$IPA_FILE" -o "$NAME.ipa"
 
 if [ $? -ne 0 ]; then
 	print_error "Failed to patch ipa"
@@ -145,7 +145,7 @@ if [ "$USE_EXTENSION" = "1" ] && [ "$UNAME" = "Darwin" ]; then
         CODE_SIGNING_REQUIRED=NO \
         CODE_SIGNING_ALLOWED=NO \
         ONLY_ACTIVE_ARCH=NO
-    cd ../..  # Changed from cd .. to cd ../.. to return to root directory
+    cd ../..
 
     if [ $? -ne 0 ]; then
         print_error "Failed to build Safari extension"

@@ -59,34 +59,39 @@ jobs:
 
       - name: Download Tweak
         if: inputs.caller_workflow != 'ci'
-        run: |
-          set +e
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            set +e
 
-          release_info=$(gh api --header 'Accept: application/vnd.github+json' repos/${{ github.repository }}/releases/latest)
-          status_code=$(echo $release_info | jq -r ".status")
+            release_info=$(gh api --header 'Accept: application/vnd.github+json' repos/${{ github.repository }}/releases/latest)
+            status_code=$(echo $release_info | jq -r ".status")
 
-          if [ "$status_code" != "null" ]; then
-            echo "No releases found or request failed, status code: $status_code"
-            echo "DEB_DOWNLOADED=false" >> $GITHUB_ENV
-            exit 0
-          fi
+            if [ "$status_code" != "null" ]; then
+              echo "No releases found or request failed, status code: $status_code"
+              echo "DEB_DOWNLOADED=false" >> $GITHUB_ENV
+              exit 0
+            fi
 
-          set -e
+            set -e
 
-          release_version=$(echo "$release_info" | jq -r '.assets[] | select(.name | contains("iphoneos-arm64.deb")) | .name' | grep -o '_[0-9.]\+_' | tr -d '_')
-          control_version=$(grep '^Version:' control | cut -d ' ' -f 2)
+            release_version=$(echo "$release_info" | jq -r '.assets[] | select(.name | contains("iphoneos-arm64.deb")) | .name' | grep -o '_[0-9.]\+_' | tr -d '_')
+            control_version=$(grep '^Version:' control | cut -d ' ' -f 2)
 
-          if [ "$release_version" = "$control_version" ]; then
-            echo "Versions match. Downloading DEB files..."
-            mkdir -p packages
-            cd packages
-            echo "$release_info" | jq -r '.assets[] | select(.name | endswith("arm64.deb")) | .browser_download_url' | xargs -I {} curl -L -O {}
-            echo "DEB_DOWNLOADED=true" >> $GITHUB_ENV
-          else
-            echo "Versions do not match. No files will be downloaded."
-            echo "DEB_DOWNLOADED=false" >> $GITHUB_ENV
-            exit 0
-          fi
+            if [ "$release_version" = "$control_version" ]; then
+              echo "Versions match. Downloading DEB files..."
+              mkdir -p packages
+              cd packages
+              echo "$release_info" | jq -r '.assets[] | select(.name | endswith("arm64.deb")) | .browser_download_url' | xargs -I {} curl -L -O {}
+              echo "DEB_DOWNLOADED=true" >> $GITHUB_ENV
+            else
+              echo "Versions do not match. No files will be downloaded."
+              echo "DEB_DOWNLOADED=false" >> $GITHUB_ENV
+              exit 0
+            fi
 
       - name: Check cache
         if: env.DEB_DOWNLOADED == 'false'
@@ -131,7 +136,12 @@ jobs:
           merge-multiple: true
 
       - name: Download Discord ipa
-        run: curl -L -o discord.ipa ${{ inputs.ipa_url }}
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 15
+          command: curl -L -o discord.ipa ${{ inputs.ipa_url }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -148,8 +158,7 @@ jobs:
         run: |
           cd patcher-ios
           go build -o patcher
-          cd ..
-          ./patcher-ios/patcher discord.ipa
+          ./patcher -i ../discord.ipa -o ../discord.ipa
 
       - name: Build Safari Extension
         if: inputs.add_extension == true
@@ -182,15 +191,15 @@ jobs:
         run: |
           if [ ${{ inputs.add_extension }} == true ]; then
             if [ ${{ inputs.is_testflight }} == true ]; then
-              yes | cyan -duwsgq -n "Discord" -b "com.hammerandchisel.discord.testflight" -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+              yes | cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
             else
-              yes | cyan -duwsgq -n "Discord" -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+              yes | cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
             fi
           else
             if [ ${{ inputs.is_testflight }} == true ]; then
-              yes | cyan -duwsgq -n "Discord" -b "com.hammerandchisel.discord.testflight" -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+              yes | cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
             else
-              yes | cyan -duwsgq -n "Discord" -i ${{ env.APP_NAME }}.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+              yes | cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
             fi
           fi
 

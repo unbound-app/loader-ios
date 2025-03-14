@@ -64,7 +64,7 @@ static NSString                                   *currentThemeId = nil;
 
     for (NSString *folder in contents)
     {
-        NSLog(@"[Themes] Attempting to load %@...", folder);
+        [Logger info:LOG_CATEGORY_THEMES format:@"Attempting to load %@...", folder];
 
         @try
         {
@@ -72,14 +72,16 @@ static NSString                                   *currentThemeId = nil;
 
             if (![FileSystem isDirectory:dir])
             {
-                NSLog(@"[Themes] Skipping %@ as it is not a directory.", folder);
+                [Logger info:LOG_CATEGORY_THEMES
+                      format:@"Skipping %@ as it is not a directory.", folder];
                 continue;
             }
 
             NSString *data = [NSString pathWithComponents:@[ dir, @"manifest.json" ]];
             if (![FileSystem exists:data])
             {
-                NSLog(@"[Themes] Skipping %@ as it is missing a manifest.", folder);
+                [Logger info:LOG_CATEGORY_THEMES
+                      format:@"Skipping %@ as it is missing a manifest.", folder];
                 continue;
             }
 
@@ -95,21 +97,24 @@ static NSString                                   *currentThemeId = nil;
                 }
                 else
                 {
-                    NSLog(@"[Themes] Skipping %@ as its manifest is invalid.", folder);
+                    [Logger info:LOG_CATEGORY_THEMES
+                          format:@"Skipping %@ as its manifest is invalid.", folder];
                     continue;
                 }
             }
             @catch (NSException *e)
             {
-                NSLog(@"[Themes] Skipping %@ as its manifest failed to be parsed. (%@)", folder,
-                      e.reason);
+                [Logger error:LOG_CATEGORY_THEMES
+                       format:@"Skipping %@ as its manifest failed to be parsed. (%@)", folder,
+                              e.reason];
                 continue;
             }
 
             NSString *entry = [NSString pathWithComponents:@[ dir, @"bundle.json" ]];
             if (![FileSystem exists:entry])
             {
-                NSLog(@"[Themes] Skipping %@ as it is missing a bundle.", folder);
+                [Logger info:LOG_CATEGORY_THEMES
+                      format:@"Skipping %@ as it is missing a bundle.", folder];
                 continue;
             }
 
@@ -125,14 +130,16 @@ static NSString                                   *currentThemeId = nil;
                 }
                 else
                 {
-                    NSLog(@"[Themes] Skipping %@ as its bundle is invalid JSON.", folder);
+                    [Logger info:LOG_CATEGORY_THEMES
+                          format:@"Skipping %@ as its bundle is invalid JSON.", folder];
                     continue;
                 }
             }
             @catch (NSException *e)
             {
-                NSLog(@"[Themes] Skipping %@ as its bundle failed to be parsed. (%@)", folder,
-                      e.reason);
+                [Logger error:LOG_CATEGORY_THEMES
+                       format:@"Skipping %@ as its bundle failed to be parsed. (%@)", folder,
+                              e.reason];
                 continue;
             }
 
@@ -143,7 +150,7 @@ static NSString                                   *currentThemeId = nil;
         }
         @catch (NSException *e)
         {
-            NSLog(@"[Themes] Failed to load %@ (%@)", folder, e.reason);
+            [Logger error:LOG_CATEGORY_THEMES format:@"Failed to load %@ (%@)", folder, e.reason];
         }
     }
 
@@ -158,7 +165,7 @@ static NSString                                   *currentThemeId = nil;
     // Get the class reference for UIColor
     Class instance = object_getClass(NSClassFromString(@"UIColor"));
 
-    NSLog(@"[Themes] Attempting swizzle raw colors...");
+    [Logger info:LOG_CATEGORY_THEMES format:@"Attempting swizzle raw colors..."];
 
     @try
     {
@@ -178,7 +185,8 @@ static NSString                                   *currentThemeId = nil;
                 }
                 @catch (NSException *e)
                 {
-                    NSLog(@"[Themes] Failed to use modified raw color %@. (%@)", raw, e.reason);
+                    [Logger error:LOG_CATEGORY_THEMES
+                           format:@"Failed to use modified raw color %@. (%@)", raw, e.reason];
                 }
 
                 // Call the original implementation if parsing fails
@@ -192,11 +200,11 @@ static NSString                                   *currentThemeId = nil;
             originalRawImplementations[raw] = [NSValue valueWithPointer:(void *) original];
         }
 
-        NSLog(@"[Themes] Raw color swizzle completed.");
+        [Logger info:LOG_CATEGORY_THEMES format:@"Raw color swizzle completed."];
     }
     @catch (NSException *e)
     {
-        NSLog(@"[Themes] Failed to swizzle raw colors. (%@)", e.reason);
+        [Logger error:LOG_CATEGORY_THEMES format:@"Failed to swizzle raw colors. (%@)", e.reason];
     }
 }
 
@@ -217,8 +225,9 @@ static NSString                                   *currentThemeId = nil;
         }
         else
         {
-            NSLog(@"[Themes] Failed to restore implementation for %@: Original IMP is NULL",
-                  selectorName);
+            [Logger error:LOG_CATEGORY_THEMES
+                   format:@"Failed to restore implementation for %@: Original IMP is NULL",
+                          selectorName];
         }
     }
 
@@ -228,7 +237,7 @@ static NSString                                   *currentThemeId = nil;
 
 + (void)swizzleSemanticColors
 {
-    NSLog(@"[Themes] Attempting swizzle semantic colors...");
+    [Logger info:LOG_CATEGORY_THEMES format:@"Attempting swizzle semantic colors..."];
 
     @try
     {
@@ -311,7 +320,8 @@ static NSString                                   *currentThemeId = nil;
                     }
                     @catch (NSException *e)
                     {
-                        NSLog(@"[Themes] Failed to use modified color %@. (%@)", name, e.reason);
+                        [Logger error:LOG_CATEGORY_THEMES
+                               format:@"Failed to use modified color %@. (%@)", name, e.reason];
                     }
                 }
 
@@ -325,11 +335,12 @@ static NSString                                   *currentThemeId = nil;
         }
 
         free(methods);
-        NSLog(@"[Themes] Semantic color swizzle completed.");
+        [Logger info:LOG_CATEGORY_THEMES format:@"Semantic color swizzle completed."];
     }
     @catch (NSException *e)
     {
-        NSLog(@"[Themes] Failed to swizzle semantic colors. (%@)", e.reason);
+        [Logger error:LOG_CATEGORY_THEMES
+               format:@"Failed to swizzle semantic colors. (%@)", e.reason];
     }
 }
 
@@ -443,7 +454,7 @@ static NSString                                   *currentThemeId = nil;
         return %orig;
     }
 
-    NSLog(@"[Themes] Theme updated. (%@)", theme);
+    [Logger info:LOG_CATEGORY_THEMES format:@"Theme updated. (%@)", theme];
     currentThemeId = theme;
 
     [Themes restoreOriginalRawColors];

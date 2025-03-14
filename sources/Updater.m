@@ -5,7 +5,7 @@ static NSString *etag = nil;
 
 + (void)downloadBundle:(NSString *)path
 {
-    NSLog(@"[Updater] Ensuring bundle is up to date...");
+    [Logger info:LOG_CATEGORY_UPDATER format:@"Ensuring bundle is up to date..."];
 
     NSString *etag = [Settings getString:@"unbound" key:@"loader.update.etag" def:@""];
     NSURL    *url  = [Updater getDownloadURL];
@@ -25,11 +25,11 @@ static NSString *etag = nil;
 
     if ([response statusCode] == 304)
     {
-        NSLog(@"[Updater] No update found.");
+        [Logger info:LOG_CATEGORY_UPDATER format:@"No update found."];
     }
     else
     {
-        NSLog(@"[Updater] Successfully updated to the latest version.");
+        [Logger info:LOG_CATEGORY_UPDATER format:@"Successfully updated to the latest version."];
         [Settings set:@"unbound"
                   key:@"loader.update.etag"
                 value:[response valueForHTTPHeaderField:@"etag"]];

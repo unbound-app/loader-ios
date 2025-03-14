@@ -13,7 +13,7 @@ id gBridge = nil;
     // Don't load bundle and addons if not configured to do so.
     if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES])
     {
-        NSLog(@"Loader is disabled. Aborting.");
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Loader is disabled. Aborting."];
         return %orig(script, url, true);
     }
 
@@ -31,13 +31,14 @@ id gBridge = nil;
         {
             NSData *bundle = [Utilities getResource:@"devtools" data:true ext:@"js"];
 
-            NSLog(@"Attempting to execute DevTools bundle...");
+            [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute DevTools bundle..."];
             %orig(bundle, SOURCE, true);
-            NSLog(@"Successfully executed DevTools bundle.");
+            [Logger info:LOG_CATEGORY_DEFAULT format:@"Successfully executed DevTools bundle."];
         }
         @catch (NSException *e)
         {
-            NSLog(@"React DevTools failed to initialize. %@", e);
+            [Logger error:LOG_CATEGORY_DEFAULT
+                   format:@"React DevTools failed to initialize. %@", e];
         }
     }
 
@@ -46,13 +47,14 @@ id gBridge = nil;
     {
         NSData *bundle = [Utilities getResource:@"modules" data:true ext:@"js"];
 
-        NSLog(@"Attempting to execute modules patch...");
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute modules patch..."];
         %orig(bundle, SOURCE, true);
-        NSLog(@"Successfully executed modules patch.");
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Successfully executed modules patch."];
     }
     @catch (NSException *e)
     {
-        NSLog(@"Modules patch injection failed, expect issues. %@", e);
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"Modules patch injection failed, expect issues. %@", e];
     }
 
     // Preload Unbound's settings, plugins & themes
@@ -70,13 +72,16 @@ id gBridge = nil;
             [NSString stringWithFormat:bundle, settings, plugins, themes, fonts, availableFonts];
         NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
 
-        NSLog(@"Pre-loading settings, plugins, fonts and themes...");
+        [Logger info:LOG_CATEGORY_DEFAULT
+              format:@"Pre-loading settings, plugins, fonts and themes..."];
         %orig(data, SOURCE, true);
-        NSLog(@"Pre-loaded settings, plugins, fonts and themes.");
+        [Logger info:LOG_CATEGORY_DEFAULT
+              format:@"Pre-loaded settings, plugins, fonts and themes."];
     }
     @catch (NSException *e)
     {
-        NSLog(@"Failed to pre-load settings, plugins, fonts and themes. %@", e);
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"Failed to pre-load settings, plugins, fonts and themes. %@", e];
     }
 
     %orig(script, url, true);
@@ -88,7 +93,7 @@ id gBridge = nil;
     }
     @catch (NSException *e)
     {
-        NSLog(@"Bundle download failed. (%@)", e);
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"Bundle download failed. (%@)", e];
 
         if (![FileSystem exists:BUNDLE])
         {
@@ -112,13 +117,14 @@ id gBridge = nil;
     {
         NSData *bundle = [FileSystem readFile:BUNDLE];
 
-        NSLog(@"Attempting to execute bundle...");
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
         %orig(bundle, SOURCE, true);
-        NSLog(@"Unbound's bundle was successfully executed.");
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Unbound's bundle was successfully executed."];
     }
     @catch (NSException *e)
     {
-        NSLog(@"Unbound's bundle failed execution, aborting. (%@)", e.reason);
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"Unbound's bundle failed execution, aborting. (%@)", e.reason];
         return [Utilities alert:@"Failed to load Unbound's bundle. Please report "
                                 @"this to the developers."];
     }

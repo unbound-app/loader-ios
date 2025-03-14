@@ -9,7 +9,7 @@ static NSString *bundle = nil;
 {
     if (bundle)
     {
-        NSLog(@"Using cached bundle URL.");
+        [Logger info:LOG_CATEGORY_UTILITIES format:@"Using cached bundle URL."];
         return bundle;
     }
 
@@ -178,7 +178,7 @@ static NSString *bundle = nil;
 
     if (!getBytecodeVersion)
     {
-        NSLog(@"Failed to get bytecode version: %@", error);
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to get bytecode version: %@", error];
         return 0;
     }
 
@@ -188,13 +188,13 @@ static NSString *bundle = nil;
 + (BOOL)isHermesBytecode:(NSData *)data
 {
     NSString *error                                   = nil;
-    BOOL (*isHermesBytecode)(const uint8_t *, size_t) = (BOOL(*)(const uint8_t *, size_t))
+    BOOL (*isHermesBytecode)(const uint8_t *, size_t) = (BOOL (*)(const uint8_t *, size_t))
         [self getHermesSymbol:"_ZN8facebook6hermes13HermesRuntime16isHermesBytecodeEPKhm"
                         error:&error];
 
     if (!isHermesBytecode)
     {
-        NSLog(@"Failed to check Hermes bytecode: %@", error);
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to check Hermes bytecode: %@", error];
         return NO;
     }
 
