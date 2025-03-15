@@ -11,20 +11,27 @@
       "localizedDescription": "A client mod for Discord",
       "subtitle": "A client mod for Discord",
       "tintColor": "aa454d",
-	  "category": "social",
+      "category": "social",
       "versions": []
     },
     {
       "name": "Unbound (TestFlight)",
       "bundleIdentifier": "com.hammerandchisel.discord.testflight",
       "developerName": "Unbound Team",
-	  "beta": true,
+      "beta": true,
       "iconURL": "https://assets.unbound.rip/logo/logo.png",
       "localizedDescription": "A client mod for Discord (TestFlight builds)",
       "subtitle": "A client mod for Discord (TestFlight builds)",
       "tintColor": "aa454d",
-	  "category": "social",
-      "versions": []
-	}
+      "category": "social",
+      "versions": [
+        {
+          "version": "271.0_73724",
+          "date": "2025-03-15",
+          "size": 88117558,
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v271.0_73724/Unbound.ipa"
+        }
+      ]
+    }
   ]
 }
