@@ -1,6 +1,6 @@
 Name: Unbound
 Description: Discord mobile client aimed at providing the user control, stability and customizability.
-Version: 1.2.0
+Version: 1.3.0
 Package: app.unbound.ios
 Architecture: iphoneos-arm
 Maintainer: eternal, acquitelol, Adrian Castro
