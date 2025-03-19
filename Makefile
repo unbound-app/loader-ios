@@ -26,11 +26,10 @@ before-all::
 	fi
 
 	$(ECHO_NOTHING)VERSION_NUM=$$(echo "$(THEOS_PACKAGE_BASE_VERSION)" | cut -d'.' -f1,2) && \
-		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.template.js > resources/preload.js$(ECHO_END)
+		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.template.js > resources/preload.js && cp Info.plist resources/Info.plist$(ECHO_END)
 
 after-stage::
 	$(ECHO_NOTHING)find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete$(ECHO_END)
 
 after-package::
-	$(ECHO_NOTHING)rm resources/preload.js$(ECHO_END)
-	
+	$(ECHO_NOTHING)rm resources/preload.js resources/Info.plist$(ECHO_END)
