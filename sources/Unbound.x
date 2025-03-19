@@ -130,3 +130,20 @@ id gBridge = nil;
     }
 }
 %end
+
+%hook UIApplication
+- (BOOL)openURL:(NSURL *)url
+              options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options
+    completionHandler:(void (^)(BOOL))completion
+{
+    if ([url.scheme isEqualToString:@"unbound"])
+    {
+        [[URLSchemeHandler sharedHandler] handleURL:url];
+        if (completion)
+            completion(YES);
+        return YES;
+    }
+
+    return %orig;
+}
+%end
