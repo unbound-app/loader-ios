@@ -322,10 +322,16 @@ static NSString *bundle = nil;
 
 + (void)addDynamicIslandOverlay
 {
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Checking if device has Dynamic Island..."];
+
     if (![self deviceHasDynamicIsland])
     {
+        [Logger info:LOG_CATEGORY_UTILITIES
+              format:@"Device does not have Dynamic Island, skipping overlay"];
         return;
     }
+
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Device has Dynamic Island, adding overlay..."];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         CGFloat width  = 126.0;
@@ -334,6 +340,10 @@ static NSString *bundle = nil;
         CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
         CGFloat x           = (screenWidth - width) / 2;
         CGFloat y           = 11.0;
+
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"Creating Dynamic Island overlay view at x:%f y:%f width:%f height:%f", x, y,
+                      width, height];
 
         UIView *islandView         = [[UIView alloc] initWithFrame:CGRectMake(x, y, width, height)];
         islandView.backgroundColor = [UIColor blackColor];
@@ -347,10 +357,13 @@ static NSString *bundle = nil;
         maskLayer.path          = path.CGPath;
         islandView.layer.mask   = maskLayer;
 
-        UIImage     *logoImage = [self createLogoImage];
-        UIImageView *logoView  = [[UIImageView alloc] init];
-        logoView.image         = logoImage;
-        logoView.contentMode   = UIViewContentModeScaleAspectFit;
+        UIImage *logoImage = [self createLogoImage];
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"Created logo image for Dynamic Island overlay"];
+
+        UIImageView *logoView = [[UIImageView alloc] init];
+        logoView.image        = logoImage;
+        logoView.contentMode  = UIViewContentModeScaleAspectFit;
 
         CGFloat logoHeight  = height * 0.99;
         CGFloat aspectRatio = logoImage.size.width / logoImage.size.height;
@@ -375,6 +388,13 @@ static NSString *bundle = nil;
             islandView.alpha = 1.0;
             [keyWindow addSubview:islandView];
             [keyWindow bringSubviewToFront:islandView];
+            [Logger info:LOG_CATEGORY_UTILITIES
+                  format:@"Successfully added Dynamic Island overlay to key window"];
+        }
+        else
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES
+                   format:@"Failed to find key window for Dynamic Island overlay"];
         }
     });
 }
