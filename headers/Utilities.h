@@ -35,4 +35,8 @@
 + (BOOL)isAppStoreApp;
 + (BOOL)isJailbroken;
 
++ (NSString *)getDeviceModelIdentifier;
++ (BOOL)deviceHasDynamicIsland;
++ (void)addDynamicIslandOverlay;
+
 @end
