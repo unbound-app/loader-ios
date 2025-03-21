@@ -1,6 +1,3 @@
-#include <sys/utsname.h>
-
-#import "DeviceModels.h"
 #import "Unbound.h"
 
 id gBridge = nil;
