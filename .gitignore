@@ -3,3 +3,6 @@
 .DS_Store
 packages
 binaries
+extensions/*/build
+venv
+patcher-ios

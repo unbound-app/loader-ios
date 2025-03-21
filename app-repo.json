@@ -48,7 +48,7 @@
           "date": "2025-03-18",
           "size": 88098309,
           "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v271.0/Unbound.ipa",
-		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         }
       ]
     },
@@ -97,21 +97,22 @@
           "version": "272.0_74108",
           "date": "2025-03-21",
           "size": 88145825,
-          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v272.0_74108/Unbound.ipa"
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v272.0_74108/Unbound.ipa",
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "272.0_73751",
           "date": "2025-03-19",
           "size": 88126076,
           "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v272.0_73751/Unbound.ipa",
-		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "271.0_73724",
           "date": "2025-03-15",
           "size": 88117558,
           "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v271.0_73724/Unbound.ipa",
-		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."  
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."  
         }
       ]
     }
