@@ -1,6 +1,9 @@
 #import <CommonCrypto/CommonCrypto.h>
+#import <dlfcn.h>
 #import <rootless.h>
+#import <sys/utsname.h>
 
+#import "DeviceModels.h"
 #import "FileSystem.h"
 #import "Unbound.h"
 
@@ -37,6 +40,8 @@
 
 + (NSString *)getDeviceModelIdentifier;
 + (BOOL)deviceHasDynamicIsland;
-+ (void)addDynamicIslandOverlay;
++ (void)initializeDynamicIslandOverlay;
++ (void)showDynamicIslandOverlay;
++ (void)hideDynamicIslandOverlay;
 
 @end

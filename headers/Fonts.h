@@ -1,7 +1,7 @@
-#include <CoreGraphics/CGFont.h>
-#include <CoreText/CoreText.h>
-#include <objc/runtime.h>
-#include <substrate.h>
+#import <CoreGraphics/CGFont.h>
+#import <CoreText/CoreText.h>
+#import <objc/runtime.h>
+#import <substrate.h>
 
 #import "Unbound.h"
 

@@ -1,11 +1,8 @@
-#import <dlfcn.h>
-#include <sys/utsname.h>
-
-#import "DeviceModels.h"
 #import "Utilities.h"
 
 @implementation Utilities
-static NSString *bundle = nil;
+static NSString *bundle            = nil;
+static UIView   *islandOverlayView = nil;
 
 + (NSString *)getBundlePath
 {
@@ -239,7 +236,6 @@ static NSString *bundle = nil;
 
     [[UIColor whiteColor] setFill];
 
-    // Draw right part
     UIBezierPath *rightPath = [UIBezierPath bezierPath];
     [rightPath moveToPoint:CGPointMake(272.52, 177.27)];
     [rightPath addLineToPoint:CGPointMake(277.81, 215.63)];
@@ -320,7 +316,114 @@ static NSString *bundle = nil;
     return result;
 }
 
-+ (void)addDynamicIslandOverlay
++ (void)showDynamicIslandOverlay
+{
+    if (!islandOverlayView)
+    {
+        [self createDynamicIslandOverlayView];
+    }
+
+    if (islandOverlayView && !islandOverlayView.hidden && islandOverlayView.alpha >= 1.0)
+    {
+        return;
+    }
+
+    islandOverlayView.hidden = NO;
+
+    [UIView animateWithDuration:0.2 animations:^{ islandOverlayView.alpha = 1.0; }];
+
+    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Showing Dynamic Island overlay"];
+}
+
++ (void)hideDynamicIslandOverlay
+{
+    if (!islandOverlayView || islandOverlayView.hidden)
+    {
+        return;
+    }
+
+    islandOverlayView.alpha  = 0.0;
+    islandOverlayView.hidden = YES;
+
+    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Hiding Dynamic Island overlay"];
+}
+
++ (void)createDynamicIslandOverlayView
+{
+    if (islandOverlayView)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"Island overlay view already exists, skipping creation"];
+        return;
+    }
+
+    CGFloat width  = 126.0;
+    CGFloat height = 37.33;
+
+    CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+    CGFloat x           = (screenWidth - width) / 2;
+    CGFloat y           = 11.0;
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"Creating Dynamic Island overlay view at x:%f y:%f width:%f height:%f", x, y,
+                  width, height];
+
+    islandOverlayView = [[UIView alloc] initWithFrame:CGRectMake(x, y, width, height)];
+    islandOverlayView.backgroundColor = [UIColor blackColor];
+    islandOverlayView.alpha           = 0.0;
+    islandOverlayView.hidden          = YES;
+
+    islandOverlayView.userInteractionEnabled = NO;
+
+    UIBezierPath *path =
+        [UIBezierPath bezierPathWithRoundedRect:islandOverlayView.bounds
+                              byRoundingCorners:UIRectCornerAllCorners
+                                    cornerRadii:CGSizeMake(height / 2, height / 2)];
+
+    CAShapeLayer *maskLayer      = [CAShapeLayer layer];
+    maskLayer.path               = path.CGPath;
+    islandOverlayView.layer.mask = maskLayer;
+
+    UIImage *logoImage = [self createLogoImage];
+    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Created logo image for Dynamic Island overlay"];
+
+    UIImageView *logoView = [[UIImageView alloc] init];
+    logoView.image        = logoImage;
+    logoView.contentMode  = UIViewContentModeScaleAspectFit;
+
+    CGFloat logoHeight  = height * 0.99;
+    CGFloat aspectRatio = logoImage.size.width / logoImage.size.height;
+    CGFloat logoWidth   = logoHeight * aspectRatio;
+    logoView.frame =
+        CGRectMake((width - logoWidth) / 2, (height - logoHeight) / 2, logoWidth, logoHeight);
+
+    [islandOverlayView addSubview:logoView];
+
+    UIWindow *keyWindow = nil;
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
+    {
+        if (scene.activationState == UISceneActivationStateForegroundActive)
+        {
+            keyWindow = ((UIWindowScene *) scene).windows.firstObject;
+            break;
+        }
+    }
+
+    if (keyWindow)
+    {
+        [keyWindow addSubview:islandOverlayView];
+        [keyWindow bringSubviewToFront:islandOverlayView];
+        [Logger info:LOG_CATEGORY_UTILITIES
+              format:@"Successfully added Dynamic Island overlay to key window"];
+    }
+    else
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Failed to find key window for Dynamic Island overlay"];
+    }
+}
+
++ (void)initializeDynamicIslandOverlay
 {
     [Logger info:LOG_CATEGORY_UTILITIES format:@"Checking if device has Dynamic Island..."];
 
@@ -331,72 +434,46 @@ static NSString *bundle = nil;
         return;
     }
 
-    [Logger info:LOG_CATEGORY_UTILITIES format:@"Device has Dynamic Island, adding overlay..."];
+    static BOOL isInitialized = NO;
+    if (isInitialized)
+    {
+        [Logger info:LOG_CATEGORY_UTILITIES format:@"Dynamic Island overlay already initialized"];
+        return;
+    }
+    isInitialized = YES;
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        CGFloat width  = 126.0;
-        CGFloat height = 37.33;
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Setting up Dynamic Island overlay notifications"];
 
-        CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-        CGFloat x           = (screenWidth - width) / 2;
-        CGFloat y           = 11.0;
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 
-        [Logger debug:LOG_CATEGORY_UTILITIES
-               format:@"Creating Dynamic Island overlay view at x:%f y:%f width:%f height:%f", x, y,
-                      width, height];
+    [center addObserverForName:UIApplicationDidBecomeActiveNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification *note) {
+                        [Logger debug:LOG_CATEGORY_UTILITIES
+                               format:@"App did become active, showing overlay"];
+                        dispatch_async(dispatch_get_main_queue(),
+                                       ^{ [self showDynamicIslandOverlay]; });
+                    }];
 
-        UIView *islandView         = [[UIView alloc] initWithFrame:CGRectMake(x, y, width, height)];
-        islandView.backgroundColor = [UIColor blackColor];
+    [center addObserverForName:UIApplicationWillResignActiveNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification *note) {
+                        [Logger debug:LOG_CATEGORY_UTILITIES
+                               format:@"App will resign active, hiding overlay"];
+                        dispatch_async(dispatch_get_main_queue(),
+                                       ^{ [self hideDynamicIslandOverlay]; });
+                    }];
 
-        UIBezierPath *path =
-            [UIBezierPath bezierPathWithRoundedRect:islandView.bounds
-                                  byRoundingCorners:UIRectCornerAllCorners
-                                        cornerRadii:CGSizeMake(height / 2, height / 2)];
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            [Logger info:LOG_CATEGORY_UTILITIES format:@"Creating Dynamic Island overlay..."];
+            [self createDynamicIslandOverlayView];
 
-        CAShapeLayer *maskLayer = [CAShapeLayer layer];
-        maskLayer.path          = path.CGPath;
-        islandView.layer.mask   = maskLayer;
-
-        UIImage *logoImage = [self createLogoImage];
-        [Logger debug:LOG_CATEGORY_UTILITIES
-               format:@"Created logo image for Dynamic Island overlay"];
-
-        UIImageView *logoView = [[UIImageView alloc] init];
-        logoView.image        = logoImage;
-        logoView.contentMode  = UIViewContentModeScaleAspectFit;
-
-        CGFloat logoHeight  = height * 0.99;
-        CGFloat aspectRatio = logoImage.size.width / logoImage.size.height;
-        CGFloat logoWidth   = logoHeight * aspectRatio;
-        logoView.frame =
-            CGRectMake((width - logoWidth) / 2, (height - logoHeight) / 2, logoWidth, logoHeight);
-
-        [islandView addSubview:logoView];
-
-        UIWindow *keyWindow = nil;
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
-        {
-            if (scene.activationState == UISceneActivationStateForegroundActive)
-            {
-                keyWindow = ((UIWindowScene *) scene).windows.firstObject;
-                break;
-            }
-        }
-
-        if (keyWindow)
-        {
-            islandView.alpha = 1.0;
-            [keyWindow addSubview:islandView];
-            [keyWindow bringSubviewToFront:islandView];
-            [Logger info:LOG_CATEGORY_UTILITIES
-                  format:@"Successfully added Dynamic Island overlay to key window"];
-        }
-        else
-        {
-            [Logger error:LOG_CATEGORY_UTILITIES
-                   format:@"Failed to find key window for Dynamic Island overlay"];
-        }
-    });
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC),
+                           dispatch_get_main_queue(), ^{ [self showDynamicIslandOverlay]; });
+        });
 }
 
 @end
