@@ -271,7 +271,6 @@ static UIView   *islandOverlayView = nil;
     [rightPath addLineToPoint:CGPointMake(272.52, 177.27)];
     [rightPath closePath];
 
-    // Draw left part
     UIBezierPath *leftPath = [UIBezierPath bezierPath];
     [leftPath moveToPoint:CGPointMake(164.04, 160.07)];
     [leftPath addCurveToPoint:CGPointMake(87.66, 223.57)

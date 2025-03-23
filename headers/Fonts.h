@@ -21,7 +21,6 @@
 + (NSString *)makeAvailableJSON;
 + (NSString *)makeJSON;
 
-// Properties
 + (NSMutableDictionary<NSString *, NSString *> *)overrides;
 
 @end
