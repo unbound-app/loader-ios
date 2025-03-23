@@ -859,26 +859,47 @@ void showMenuSheet(void)
                                                       action:@selector(dismiss)];
     settingsVC.navigationItem.rightBarButtonItem = doneButton;
 
-    UIWindow *window = nil;
-    NSSet    *scenes = [[UIApplication sharedApplication] connectedScenes];
-    for (UIScene *scene in scenes)
+    // Create a high-level window that displays above everything
+    UIWindowScene *activeScene = nil;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes)
     {
-        if (scene.activationState == UISceneActivationStateForegroundActive)
+        if (scene.activationState == UISceneActivationStateForegroundActive &&
+            [scene isKindOfClass:[UIWindowScene class]])
         {
-            window = ((UIWindowScene *) scene).windows.firstObject;
+            activeScene = (UIWindowScene *) scene;
             break;
         }
     }
 
-    if (!window)
-    {
-        window = [[UIApplication sharedApplication] windows].firstObject;
-    }
+    if (!activeScene)
+        return;
 
-    if (window && window.rootViewController)
-    {
-        [window.rootViewController presentViewController:navController animated:YES completion:nil];
-    }
+    UIWindow *topWindow       = [[UIWindow alloc] initWithWindowScene:activeScene];
+    topWindow.windowLevel     = UIWindowLevelAlert + 100;
+    topWindow.backgroundColor = [UIColor clearColor];
+
+    UIViewController *rootVC     = [UIViewController new];
+    rootVC.view.backgroundColor  = [UIColor clearColor];
+    topWindow.rootViewController = rootVC;
+    [topWindow makeKeyAndVisible];
+
+    [rootVC presentViewController:navController animated:YES completion:nil];
+
+    // Store window reference so it stays alive
+    objc_setAssociatedObject(navController, "recoveryTopWindow", topWindow,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    Method dismissMethod =
+        class_getInstanceMethod([UnboundMenuViewController class], @selector(dismiss));
+    method_setImplementation(
+        dismissMethod, imp_implementationWithBlock(^(id _self) {
+            [_self dismissViewControllerAnimated:YES
+                                      completion:^{
+                                          UIWindow *storedWindow = objc_getAssociatedObject(
+                                              navController, "recoveryTopWindow");
+                                          storedWindow.hidden = YES;
+                                      }];
+        }));
 }
 
 @end
