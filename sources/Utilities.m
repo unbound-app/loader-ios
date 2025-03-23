@@ -348,7 +348,7 @@ static UIView   *islandOverlayView = nil;
     [islandOverlayView.superview setNeedsLayout];
     [islandOverlayView.superview layoutIfNeeded];
 
-    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Hiding Dynamic Island overlay immediately"];
+    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Hiding Dynamic Island overlay"];
 }
 
 + (void)createDynamicIslandOverlayView
