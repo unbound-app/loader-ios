@@ -9,7 +9,7 @@
     Class moduleClass = NSClassFromString(moduleName);
     if (!moduleClass)
     {
-        [Logger error:LOG_CATEGORY_DEFAULT format:@"NativeBridge: Module %@ not found", moduleName];
+        [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Module %@ not found", moduleName];
         @throw [NSException
             exceptionWithName:@"ModuleNotFound"
                        reason:[NSString stringWithFormat:@"Module %@ not found", moduleName]
@@ -26,8 +26,8 @@
     SEL selector = NSSelectorFromString(selectorName);
     if (![moduleClass respondsToSelector:selector])
     {
-        [Logger error:LOG_CATEGORY_DEFAULT
-               format:@"NativeBridge: Method %@ not found on %@", selectorName, moduleName];
+        [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+               format:@"Method %@ not found on %@", selectorName, moduleName];
 
         if (arguments.count == 1)
         {
@@ -98,9 +98,9 @@
 
                 if (moduleName && methodName)
                 {
-                    [Logger debug:LOG_CATEGORY_DEFAULT
-                           format:@"NativeBridge: Calling %@.%@ with %lu args via Clipboard",
-                                  moduleName, methodName, (unsigned long) args.count];
+                    [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
+                           format:@"Calling %@.%@ with %lu args via Clipboard", moduleName,
+                                  methodName, (unsigned long) args.count];
 
                     @try
                     {
@@ -110,9 +110,9 @@
                     }
                     @catch (NSException *exception)
                     {
-                        [Logger error:LOG_CATEGORY_DEFAULT
-                               format:@"NativeBridge: Error calling %@.%@: %@", moduleName,
-                                      methodName, exception.reason];
+                        [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+                               format:@"Error calling %@.%@: %@", moduleName, methodName,
+                                      exception.reason];
                     }
                     return;
                 }
@@ -120,8 +120,8 @@
         }
         @catch (NSException *exception)
         {
-            [Logger error:LOG_CATEGORY_DEFAULT
-                   format:@"NativeBridge: Error parsing bridge call: %@", exception.reason];
+            [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+                   format:@"Error parsing bridge call: %@", exception.reason];
         }
     }
 
