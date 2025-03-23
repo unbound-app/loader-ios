@@ -185,7 +185,7 @@ jobs:
         run: |
           cd patcher-ios
           go build -o patcher
-          ./patcher -i ../discord.ipa -o ../discord.ipa
+          ./patcher -i ../discord.ipa -o ../patched.ipa
 
       - name: Build Safari Extension
         if: inputs.add_extension == true
@@ -218,15 +218,15 @@ jobs:
         run: |
           if [ ${{ inputs.add_extension }} == true ]; then
             if [ ${{ inputs.is_testflight }} == true ]; then
-              yes | cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+              cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
             else
-              yes | cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+              cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
             fi
           else
             if [ ${{ inputs.is_testflight }} == true ]; then
-              yes | cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+              cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
             else
-              yes | cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+              cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
             fi
           fi
 
