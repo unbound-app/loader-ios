@@ -33,6 +33,12 @@
       "category": "social",
       "versions": [
         {
+          "version": "273.0_74288",
+          "date": "2025-03-24",
+          "size": 88156846,
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v273.0_74288/Unbound.ipa"
+        },
+        {
           "version": "272.0_74225",
           "date": "2025-03-22",
           "size": 88138964,
