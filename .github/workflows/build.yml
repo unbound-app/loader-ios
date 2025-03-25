@@ -37,6 +37,19 @@ on:
         type: boolean
       caller_workflow:
         type: string
+    outputs:
+      deb_url:
+        description: "Download URL for the deb package artifact"
+        value: ${{ jobs.build-tweak.outputs.deb_url }}
+      ipa_url:
+        description: "Download URL for the ipa file artifact"
+        value: ${{ jobs.build-ipa.outputs.ipa_url }}
+      deb_filename:
+        description: "Filename of the deb package"
+        value: ${{ jobs.build-tweak.outputs.deb_filename }}
+      ipa_filename:
+        description: "Filename of the ipa file"
+        value: ${{ jobs.build-ipa.outputs.ipa_filename }}
 
 permissions:
   contents: write
@@ -47,6 +60,9 @@ env:
 jobs:
   build-tweak:
     runs-on: macos-15
+    outputs:
+      deb_url: ${{ steps.upload-deb.outputs.artifact-url }}
+      deb_filename: ${{ steps.set-deb-filename.outputs.filename }}
 
     env:
       DEB_DOWNLOADED: false
@@ -114,15 +130,25 @@ jobs:
         run: gmake package
 
       - name: Upload rootless package
+        id: upload-deb
         uses: actions/upload-artifact@v4
         with:
           name: rootless package
           path: packages/*.deb
 
+      - name: Set deb filename
+        id: set-deb-filename
+        run: |
+          DEB_FILE=$(ls packages/*.deb)
+          DEB_FILENAME=$(basename "$DEB_FILE")
+          echo "filename=$DEB_FILENAME" >> $GITHUB_OUTPUT
+
   build-ipa:
-    if: inputs.caller_workflow != 'ci'
     runs-on: macos-15
     needs: build-tweak
+    outputs:
+      ipa_url: ${{ steps.upload-ipa.outputs.artifact-url }}
+      ipa_filename: ${{ steps.set-ipa-filename.outputs.filename }}
 
     steps:
       - name: Checkout code
@@ -179,7 +205,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO | xcbeautify
 
-      - name: Extract App Name
+      - name: Extract app name
         run: |
           NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
           echo "APP_NAME=$NAME" >> $GITHUB_ENV
@@ -204,10 +230,15 @@ jobs:
           fi
 
       - name: Upload ipa as artifact
+        id: upload-ipa
         uses: actions/upload-artifact@v4
         with:
           name: ipa
           path: ${{ env.APP_NAME }}.ipa
+
+      - name: Set ipa filename
+        id: set-ipa-filename
+        run: echo "filename=${{ env.APP_NAME }}.ipa" >> $GITHUB_OUTPUT
 
   release-app:
     if: inputs.caller_workflow != 'ci' && inputs.release == true
