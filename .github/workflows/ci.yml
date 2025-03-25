@@ -47,7 +47,7 @@ jobs:
         run: |
           COMMIT_HASH=$(git rev-parse --short HEAD)
           COMMIT_MESSAGE=$(git log -1 --pretty=%B | tr -d '\n')
-          COMMIT_TIME=$(git log -1 --format:'%Y-%m-%d %H:%M:%S')
+          COMMIT_TIME=$(git log -1 --format="%Y-%m-%d %H:%M:%S")
           echo "hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
           echo "message=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
           echo "time=$COMMIT_TIME" >> $GITHUB_OUTPUT
