@@ -37,6 +37,19 @@ on:
         type: boolean
       caller_workflow:
         type: string
+    outputs:
+      deb_url:
+        description: "Download URL for the deb package artifact"
+        value: ${{ jobs.build-tweak.outputs.deb_url }}
+      ipa_url:
+        description: "Download URL for the ipa file artifact"
+        value: ${{ jobs.build-ipa.outputs.ipa_url }}
+      deb_filename:
+        description: "Filename of the deb package"
+        value: ${{ jobs.build-tweak.outputs.deb_filename }}
+      ipa_filename:
+        description: "Filename of the ipa file"
+        value: ${{ jobs.build-ipa.outputs.ipa_filename }}
 
 permissions:
   contents: write
@@ -49,7 +62,7 @@ jobs:
     runs-on: macos-15
     outputs:
       deb_url: ${{ steps.upload-deb.outputs.artifact-url }}
-      deb_filename: ${{ steps.get-deb-filename.outputs.filename }}
+      deb_filename: ${{ steps.set-deb-filename.outputs.filename }}
 
     env:
       DEB_DOWNLOADED: false
@@ -135,7 +148,7 @@ jobs:
     needs: build-tweak
     outputs:
       ipa_url: ${{ steps.upload-ipa.outputs.artifact-url }}
-      ipa_filename: ${{ steps.get-ipa-filename.outputs.filename }}
+      ipa_filename: ${{ steps.set-ipa-filename.outputs.filename }}
 
     steps:
       - name: Checkout code
@@ -226,16 +239,6 @@ jobs:
       - name: Set ipa filename
         id: set-ipa-filename
         run: echo "filename=${{ env.APP_NAME }}.ipa" >> $GITHUB_OUTPUT
-
-  collect-outputs:
-    if: inputs.caller_workflow == 'ci'
-    runs-on: ubuntu-latest
-    needs: [build-tweak, build-ipa]
-    outputs:
-      deb_url: ${{ needs.build-tweak.outputs.deb_url }}
-      ipa_url: ${{ needs.build-ipa.outputs.ipa_url }}
-      deb_filename: ${{ needs.build-tweak.outputs.deb_filename }}
-      ipa_filename: ${{ needs.build-ipa.outputs.ipa_filename }}
 
   release-app:
     if: inputs.caller_workflow != 'ci' && inputs.release == true
