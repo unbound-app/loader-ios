@@ -236,8 +236,6 @@ jobs:
       ipa_url: ${{ needs.build-ipa.outputs.ipa_url }}
       deb_filename: ${{ needs.build-tweak.outputs.deb_filename }}
       ipa_filename: ${{ needs.build-ipa.outputs.ipa_filename }}
-    steps:
-      - run: echo "Collected URLs and filenames for CI workflow"
 
   release-app:
     if: inputs.caller_workflow != 'ci' && inputs.release == true
