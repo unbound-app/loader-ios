@@ -57,14 +57,11 @@ jobs:
           echo "message=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
           echo "time=$COMMIT_TIME" >> $GITHUB_OUTPUT
 
-      - name: Print debug info 
-        run: |
-
       - name: Comment on current PR
         uses: thollander/actions-comment-pull-request@v3
         with:
           message: |
-            ### Build Results for #${{ github.event.pull_request.number }}
+            ### Build for #${{ github.event.pull_request.number }}
 
             **Commit**: [#${{ steps.commit-info.outputs.hash }}](https://github.com/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}) `${{ steps.commit-info.outputs.message }}`
             **Build Time**: ${{ steps.commit-info.outputs.time }}
