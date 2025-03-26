@@ -46,13 +46,11 @@ jobs:
           fetch-depth: 1
 
       - name: Delete existing comment
-        uses: maheshrayas/action-pr-comment-delete@v3.0
-        with:
-          github_token: '${{ secrets.GITHUB_TOKEN }}'
-          org: ${{ github.repository_owner }}
-          repo: ${{ github.event.repository.name }}
-          user: 'github-actions[bot]'
-          issue: '${{ github.event.number }}'
+        uses: izhangzhihao/delete-comment@master
+        with: 
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          delete_user_name: github-actions[bot]
+          issue_number: ${{ github.event.number }}
 
       - name: Get build info
         id: build-info
@@ -67,8 +65,8 @@ jobs:
         uses: thollander/actions-comment-pull-request@v3
         with:
           message: |
-            **Commit**: [#${{ steps.commit-info.outputs.hash }}](https://github.com/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }})
-            **Build Time**: `${{ steps.commit-info.outputs.time }}`
+            **Commit**: [#${{ steps.build-info.outputs.hash }}](https://github.com/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }})
+            **Build Time**: `${{ steps.build-info.outputs.time }}`
             
             #### Artifacts:
             - [**${{ needs.build.outputs.deb_filename }}**](${{ needs.build.outputs.deb_url }})
