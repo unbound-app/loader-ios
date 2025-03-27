@@ -77,7 +77,6 @@
 @end
 
 %hook RCTLinkingManager
-
 - (void)openURL:(NSURL *)URL resolve:(id)resolve reject:(id)reject
 {
     if (URL && [URL.scheme isEqualToString:@"nativebridge"])
@@ -189,5 +188,4 @@
 
     %orig;
 }
-
 %end
