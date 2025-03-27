@@ -133,9 +133,24 @@
                 return;
             }
 
+            NSString *methodSignature = methodName;
+            if (args.count == 1)
+            {
+                methodSignature = [NSString stringWithFormat:@"%@:", methodName];
+            }
+            else if (args.count > 1)
+            {
+                NSMutableString *signature = [NSMutableString stringWithString:methodName];
+                for (NSUInteger i = 0; i < args.count; i++)
+                {
+                    [signature appendString:@":"];
+                }
+                methodSignature = signature;
+            }
+
             [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
-                   format:@"Executing %@.%@ via bridge with %lu args", moduleName, methodName,
-                          (unsigned long) (args ? args.count : 0)];
+                   format:@"Executing [%@ %@] via bridge with %lu args", moduleName,
+                          methodSignature, (unsigned long) (args ? args.count : 0)];
 
             @try
             {
@@ -152,7 +167,7 @@
             @catch (NSException *exception)
             {
                 [Logger error:LOG_CATEGORY_NATIVEBRIDGE
-                       format:@"Error executing native method: %@",
+                       format:@"Error executing [%@ %@]: %@", moduleName, methodSignature,
                               exception.reason ?: @"Unknown error"];
 
                 if (rejectBlock)
