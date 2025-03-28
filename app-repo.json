@@ -17,25 +17,29 @@
           "version": "279.0",
           "date": "2025-05-14",
           "size": 90247340,
-          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v279.0/Unbound.ipa"
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v279.0/Unbound.ipa",
+		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "278.1",
           "date": "2025-05-14",
           "size": 90518423,
-          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v278.1/Unbound.ipa"
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v278.1/Unbound.ipa",
+		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "275.0",
           "date": "2025-04-17",
           "size": 89648900,
-          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v275.0/Unbound.ipa"
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v275.0/Unbound.ipa",
+		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "273.0",
           "date": "2025-04-17",
           "size": 88155972,
-          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v273.0/Unbound.ipa"
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v273.0/Unbound.ipa",
+		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "272.0",
@@ -68,7 +72,9 @@
           "version": "274.0_74656",
           "date": "2025-03-30",
           "size": 89602414,
-          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v274.0_74656/Unbound.ipa"
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v274.0_74656/Unbound.ipa",
+		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
+
         },
         {
           "version": "273.0_74481",
