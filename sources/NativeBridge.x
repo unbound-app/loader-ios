@@ -184,6 +184,7 @@
                 rejectBlock(@"BRIDGE_ERROR", exception.reason ?: @"Unknown error", nil);
             return;
         }
+        return;
     }
 
     %orig;
