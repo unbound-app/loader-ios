@@ -1,6 +1,9 @@
 #import <CommonCrypto/CommonCrypto.h>
+#import <dlfcn.h>
 #import <rootless.h>
+#import <sys/utsname.h>
 
+#import "DeviceModels.h"
 #import "FileSystem.h"
 #import "Unbound.h"
 
@@ -34,5 +37,11 @@
 + (void *)getHermesSymbol:(const char *)symbol error:(NSString **)error;
 + (BOOL)isAppStoreApp;
 + (BOOL)isJailbroken;
+
++ (NSString *)getDeviceModelIdentifier;
++ (BOOL)deviceHasDynamicIsland;
++ (void)initializeDynamicIslandOverlay;
++ (void)showDynamicIslandOverlay;
++ (void)hideDynamicIslandOverlay;
 
 @end
