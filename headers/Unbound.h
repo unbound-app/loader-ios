@@ -10,4 +10,4 @@
 #import "Updater.h"
 #import "Utilities.h"
 
-#include "Discord/RCT.h"
+#import "Discord/RCT.h"

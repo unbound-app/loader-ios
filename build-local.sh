@@ -17,6 +17,19 @@ print_error() {
 	echo -e "${RED}[-]${NC} $1"
 }
 
+if [ ! -f "control" ]; then
+    print_error "Control file not found. Cannot continue."
+    exit 1
+fi
+
+NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
+if [ -z "$NAME" ]; then
+    print_error "Package name not found in control file. Cannot continue."
+    exit 1
+fi
+
+print_status "Building package: $NAME"
+
 print_status "Initializing submodules..."
 git submodule update --init --recursive
 if [ $? -ne 0 ]; then
@@ -105,21 +118,28 @@ if [ $? -ne 0 ]; then
 fi
 print_success "Built tweak"
 
-print_status "Building patcher..."
-rm -rf patcher-ios
-git clone https://github.com/unbound-app/patcher-ios
-cd patcher-ios
-go build -o patcher
-cd ..
+if [ ! -f "patcher-ios/patcher" ]; then
+    print_status "Building patcher..."
+    rm -rf patcher-ios
+    git clone https://github.com/unbound-app/patcher-ios
+    cd patcher-ios
+    go build -o patcher
+    cd ..
 
-if [ $? -ne 0 ]; then
-	print_error "Failed to build patcher"
-	exit 1
+    if [ $? -ne 0 ]; then
+        print_error "Failed to build patcher"
+        exit 1
+    fi
+    print_success "Built patcher"
+else
+    print_status "Using existing patcher..."
 fi
-print_success "Built patcher"
+
+OUTPUT_IPA="${NAME}.ipa"
+TEMP_PATCHED_IPA="patched.ipa"
 
 print_status "Patching ipa..."
-./patcher-ios/patcher -i "$IPA_FILE" -o "$NAME.ipa"
+./patcher-ios/patcher -i "$IPA_FILE" -o "$TEMP_PATCHED_IPA"
 
 if [ $? -ne 0 ]; then
 	print_error "Failed to patch ipa"
@@ -129,51 +149,62 @@ print_success "Patched ipa"
 
 SAFARI_EXT=""
 if [ "$USE_EXTENSION" = "1" ] && [ "$UNAME" = "Darwin" ]; then
-    print_status "Building Safari extension..."
-    cd extensions/OpenInDiscord
-    xcodebuild build \
-        -target "OpenInDiscord Extension" \
-        -configuration Release \
-        -sdk iphoneos \
-        CONFIGURATION_BUILD_DIR="build" \
-        PRODUCT_NAME="OpenInDiscord" \
-        PRODUCT_BUNDLE_IDENTIFIER="com.hammerandchisel.discord.OpenInDiscord" \
-        PRODUCT_MODULE_NAME="OpenInDiscordExt" \
-        SKIP_INSTALL=NO \
-        DEVELOPMENT_TEAM="" \
-        CODE_SIGN_IDENTITY="" \
-        CODE_SIGNING_REQUIRED=NO \
-        CODE_SIGNING_ALLOWED=NO \
-        ONLY_ACTIVE_ARCH=NO
-    cd ../..
+    SAFARI_EXT="extensions/OpenInDiscord/build/OpenInDiscord.appex"
+    
+    if [ ! -f "$SAFARI_EXT" ]; then
+        print_status "Building Safari extension..."
+        mkdir -p extensions/OpenInDiscord/build
+        cd extensions/OpenInDiscord
+        xcodebuild build \
+            -target "OpenInDiscord Extension" \
+            -configuration Release \
+            -sdk iphoneos \
+            CONFIGURATION_BUILD_DIR="build" \
+            PRODUCT_NAME="OpenInDiscord" \
+            PRODUCT_BUNDLE_IDENTIFIER="com.hammerandchisel.discord.OpenInDiscord" \
+            PRODUCT_MODULE_NAME="OpenInDiscordExt" \
+            SKIP_INSTALL=NO \
+            DEVELOPMENT_TEAM="" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO
+        cd ../..
+
+        if [ $? -ne 0 ]; then
+            print_error "Failed to build Safari extension"
+            exit 1
+        fi
+        print_success "Built Safari extension"
+    else
+        print_status "Using existing Safari extension..."
+    fi
+fi
+
+if [ ! -d "venv" ] || [ ! -f "venv/bin/cyan" ]; then
+    print_status "Setting up Python environment..."
+    [ -d "venv" ] && rm -rf venv
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip Pillow
 
     if [ $? -ne 0 ]; then
-        print_error "Failed to build Safari extension"
+        print_error "Failed to install cyan"
         exit 1
     fi
-    print_success "Built Safari extension"
-    SAFARI_EXT="extensions/OpenInDiscord/build/OpenInDiscord.appex"
+    print_success "Installed cyan"
+else
+    print_status "Using existing Python environment..."
+    source venv/bin/activate
 fi
-
-print_status "Setting up Python environment..."
-python3 -m venv venv
-source venv/bin/activate
-pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip Pillow
-
-if [ $? -ne 0 ]; then
-    print_error "Failed to install cyan"
-    exit 1
-fi
-print_success "Installed cyan"
 
 DEB_FILE=$(find packages -maxdepth 1 -name "*.deb" -print -quit)
-NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
 
 print_status "Injecting tweak..."
 if [ "$USE_EXTENSION" = "1" ] && [ -n "$SAFARI_EXT" ]; then
-    yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE" "$SAFARI_EXT"
+    cyan -duwsgq -i "$TEMP_PATCHED_IPA" -o "$OUTPUT_IPA" -f "$DEB_FILE" "$SAFARI_EXT"
 else
-    yes | cyan -duwsgq -i "$NAME.ipa" -o "$NAME.ipa" -f "$DEB_FILE"
+    cyan -duwsgq -i "$TEMP_PATCHED_IPA" -o "$OUTPUT_IPA" -f "$DEB_FILE"
 fi
 
 if [ $? -ne 0 ]; then
@@ -184,6 +215,6 @@ fi
 deactivate
 
 print_status "Cleaning up..."
-rm -rf venv packages patcher-ios extensions/OpenInDiscord/build
+rm -rf packages "$TEMP_PATCHED_IPA"
 
-print_success "Successfully created $NAME.ipa"
+print_success "Successfully created $OUTPUT_IPA"

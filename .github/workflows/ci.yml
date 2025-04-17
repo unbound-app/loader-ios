@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   fetch-latest-ipa:
-    name: Get latest ipa
+    name: Get latest stable ipa
     runs-on: ubuntu-latest
     outputs:
       ipa_url: ${{ steps.get-latest-ipa.outputs.ipa_url }}
@@ -45,26 +45,28 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
-      - name: Get commit info
-        id: commit-info
+      - name: Delete existing comment
+        uses: izhangzhihao/delete-comment@master
+        with: 
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          delete_user_name: github-actions[bot]
+          issue_number: ${{ github.event.number }}
+
+      - name: Get build info
+        id: build-info
         run: |
-          # Get PR commit info
           COMMIT_HASH=$(git rev-parse --short HEAD)
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B | tr -d '\n')
-          COMMIT_TIME=$(date "+%Y-%m-%d %H:%M:%S")
+          BUILD_TIME=$(date "+%Y-%m-%d %H:%M:%S")
           
           echo "hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
-          echo "message=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
-          echo "time=$COMMIT_TIME" >> $GITHUB_OUTPUT
+          echo "time=$BUILD_TIME" >> $GITHUB_OUTPUT
 
       - name: Comment on current PR
         uses: thollander/actions-comment-pull-request@v3
         with:
           message: |
-            ### Build for #${{ github.event.pull_request.number }}
-
-            **Commit**: [#${{ steps.commit-info.outputs.hash }}](https://github.com/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}) `${{ steps.commit-info.outputs.message }}`
-            **Build Time**: ${{ steps.commit-info.outputs.time }}
+            **Commit**: [#${{ steps.build-info.outputs.hash }}](https://github.com/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }})
+            **Build Time**: `${{ steps.build-info.outputs.time }}`
             
             #### Artifacts:
             - [**${{ needs.build.outputs.deb_filename }}**](${{ needs.build.outputs.deb_url }})
