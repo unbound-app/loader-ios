@@ -172,6 +172,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
+          cache: false
           go-version: 'stable'
 
       - name: Clone patcher
@@ -184,7 +185,7 @@ jobs:
         run: |
           cd patcher-ios
           go build -o patcher
-          ./patcher -i ../discord.ipa -o ../discord.ipa
+          ./patcher -i ../discord.ipa -o ../patched.ipa
 
       - name: Build Safari Extension
         if: inputs.add_extension == true
@@ -217,15 +218,15 @@ jobs:
         run: |
           if [ ${{ inputs.add_extension }} == true ]; then
             if [ ${{ inputs.is_testflight }} == true ]; then
-              yes | cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+              cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
             else
-              yes | cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+              cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
             fi
           else
             if [ ${{ inputs.is_testflight }} == true ]; then
-              yes | cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+              cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
             else
-              yes | cyan -duwsgq -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
+              cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
             fi
           fi
 
@@ -313,7 +314,7 @@ jobs:
           DATE=$(date -u +"%Y-%m-%d")
           IPA_SIZE=$(stat -f %z "$APP_FILE")
           DOWNLOAD_URL=https://github.com/${{ github.repository }}/releases/download/v$VERSION/$NAME.ipa
-          NEW_ENTRY=$(jq -n --arg version "$VERSION" --arg date "$DATE" --arg size "$IPA_SIZE" --arg downloadURL "$DOWNLOAD_URL" '{version: $version, date: $date, size: ($size | tonumber), downloadURL: $downloadURL}')
+          NEW_ENTRY=$(jq -n --arg version "$VERSION" --arg date "$DATE" --arg size "$IPA_SIZE" --arg downloadURL "$DOWNLOAD_URL" '{version: $version, date: $date, size: ($size | tonumber), downloadURL: $downloadURL, localizedDescription: "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."}')
           
           VERSION_EXISTS=$(jq --arg version "$VERSION" --argjson index "$APP_INDEX" '.apps[$index].versions | map(select(.version == $version)) | length' app-repo.json)
           if [ "$VERSION_EXISTS" -gt 0 ]; then
