@@ -6,4 +6,4 @@
 	url = https://github.com/castdrian/OpenInDiscord
 [submodule "extensions/ShareToDiscord"]
 	path = extensions/ShareToDiscord
-	url = https://github.com/castdrian/ShareToDiscord.git
+	url = https://github.com/castdrian/ShareToDiscord
