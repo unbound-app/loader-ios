@@ -17,9 +17,9 @@ on:
         default: false
         description: "This is a TestFlight build"
         type: boolean
-      add_extension:
+      add_extensions:
         default: true
-        description: "Include OpenInDiscord"
+        description: "Include extensions (OpenInDiscord & ShareToDiscord)"
         type: boolean
   workflow_call:
     inputs:
@@ -32,7 +32,7 @@ on:
       is_testflight:
         default: false
         type: boolean
-      add_extension:
+      add_extensions:
         default: true
         type: boolean
       caller_workflow:
@@ -187,9 +187,25 @@ jobs:
           go build -o patcher
           ./patcher -i ../discord.ipa -o ../patched.ipa
 
-      - name: Build Safari Extension
-        if: inputs.add_extension == true
+      - name: Update ShareToDiscord Info.plist
+        if: inputs.add_extensions == true
         run: |
+          INFO_PLIST="extensions/ShareToDiscord/Share/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :URLScheme unbound" "$INFO_PLIST" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Add :URLScheme string unbound" "$INFO_PLIST"
+          echo "Updated ShareToDiscord Info.plist - Changed URLScheme to 'unbound'"
+
+      - name: Build Extensions
+        if: inputs.add_extensions == true
+        run: |
+          if [ ${{ inputs.is_testflight }} == true ]; then
+            SAFARI_EXT_BUNDLE_ID="com.hammerandchisel.discord.testflight.OpenInDiscord"
+            SHARE_EXT_BUNDLE_ID="com.hammerandchisel.discord.testflight.Share"
+          else
+            SAFARI_EXT_BUNDLE_ID="com.hammerandchisel.discord.OpenInDiscord"
+            SHARE_EXT_BUNDLE_ID="com.hammerandchisel.discord.Share"
+          fi
+          
           cd extensions/OpenInDiscord
           xcodebuild build \
             -target "OpenInDiscord Extension" \
@@ -197,7 +213,7 @@ jobs:
             -sdk iphoneos \
             CONFIGURATION_BUILD_DIR="build" \
             PRODUCT_NAME="OpenInDiscord" \
-            PRODUCT_BUNDLE_IDENTIFIER="com.hammerandchisel.discord.OpenInDiscord" \
+            PRODUCT_BUNDLE_IDENTIFIER="$SAFARI_EXT_BUNDLE_ID" \
             PRODUCT_MODULE_NAME="OpenInDiscordExt" \
             SKIP_INSTALL=NO \
             DEVELOPMENT_TEAM="" \
@@ -205,6 +221,23 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO | xcbeautify
+          
+          cd ../ShareToDiscord
+          xcodebuild build \
+            -target "Share" \
+            -configuration Release \
+            -sdk iphoneos \
+            CONFIGURATION_BUILD_DIR="build" \
+            PRODUCT_NAME="Share" \
+            PRODUCT_BUNDLE_IDENTIFIER="$SHARE_EXT_BUNDLE_ID" \
+            PRODUCT_MODULE_NAME="Share" \
+            SKIP_INSTALL=NO \
+            DEVELOPMENT_TEAM="" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO | xcbeautify
+          cd ../../
 
       - name: Extract app name
         run: |
@@ -214,13 +247,13 @@ jobs:
       - name: Install cyan
         run: pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip Pillow
 
-      - name: Inject tweak (and extension)
+      - name: Inject tweak (and extensions)
         run: |
-          if [ ${{ inputs.add_extension }} == true ]; then
+          if [ ${{ inputs.add_extensions }} == true ]; then
             if [ ${{ inputs.is_testflight }} == true ]; then
-              cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+              cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex extensions/ShareToDiscord/build/Share.appex
             else
-              cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex
+              cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex extensions/ShareToDiscord/build/Share.appex
             fi
           else
             if [ ${{ inputs.is_testflight }} == true ]; then
