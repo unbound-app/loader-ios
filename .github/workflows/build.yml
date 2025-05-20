@@ -198,7 +198,14 @@ jobs:
       - name: Build Extensions
         if: inputs.add_extensions == true
         run: |
-          # Build OpenInDiscord Extension
+          if [ ${{ inputs.is_testflight }} == true ]; then
+            SAFARI_EXT_BUNDLE_ID="com.hammerandchisel.discord.testflight.OpenInDiscord"
+            SHARE_EXT_BUNDLE_ID="com.hammerandchisel.discord.testflight.Share"
+          else
+            SAFARI_EXT_BUNDLE_ID="com.hammerandchisel.discord.OpenInDiscord"
+            SHARE_EXT_BUNDLE_ID="com.hammerandchisel.discord.Share"
+          fi
+          
           cd extensions/OpenInDiscord
           xcodebuild build \
             -target "OpenInDiscord Extension" \
@@ -206,7 +213,7 @@ jobs:
             -sdk iphoneos \
             CONFIGURATION_BUILD_DIR="build" \
             PRODUCT_NAME="OpenInDiscord" \
-            PRODUCT_BUNDLE_IDENTIFIER="com.hammerandchisel.discord.OpenInDiscord" \
+            PRODUCT_BUNDLE_IDENTIFIER="$SAFARI_EXT_BUNDLE_ID" \
             PRODUCT_MODULE_NAME="OpenInDiscordExt" \
             SKIP_INSTALL=NO \
             DEVELOPMENT_TEAM="" \
@@ -215,7 +222,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO | xcbeautify
           
-          # Build ShareToDiscord Extension
           cd ../ShareToDiscord
           xcodebuild build \
             -target "Share" \
@@ -223,7 +229,7 @@ jobs:
             -sdk iphoneos \
             CONFIGURATION_BUILD_DIR="build" \
             PRODUCT_NAME="Share" \
-            PRODUCT_BUNDLE_IDENTIFIER="com.hammerandchisel.discord.Share" \
+            PRODUCT_BUNDLE_IDENTIFIER="$SHARE_EXT_BUNDLE_ID" \
             PRODUCT_MODULE_NAME="Share" \
             SKIP_INSTALL=NO \
             DEVELOPMENT_TEAM="" \
