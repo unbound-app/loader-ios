@@ -14,32 +14,39 @@
       "category": "social",
       "versions": [
         {
+          "version": "280.0",
+          "date": "2025-05-21",
+          "size": 90460070,
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v280.0/Unbound.ipa",
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
+        },
+        {
           "version": "279.0",
           "date": "2025-05-14",
           "size": 90247340,
           "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v279.0/Unbound.ipa",
-		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "278.1",
           "date": "2025-05-14",
           "size": 90518423,
           "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v278.1/Unbound.ipa",
-		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "275.0",
           "date": "2025-04-17",
           "size": 89648900,
           "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v275.0/Unbound.ipa",
-		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "273.0",
           "date": "2025-04-17",
           "size": 88155972,
           "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v273.0/Unbound.ipa",
-		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "272.0",
@@ -73,8 +80,7 @@
           "date": "2025-03-30",
           "size": 89602414,
           "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v274.0_74656/Unbound.ipa",
-		  "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
-
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         },
         {
           "version": "273.0_74481",
@@ -123,7 +129,7 @@
           "date": "2025-03-15",
           "size": 88117558,
           "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v271.0_73724/Unbound.ipa",
-          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."  
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
         }
       ]
     }
