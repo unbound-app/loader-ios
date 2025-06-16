@@ -478,4 +478,15 @@ static UIView   *islandOverlayView = nil;
         });
 }
 
++ (BOOL)isLoadedWithElleKit
+{
+    void *EKEnableThreadSafetyPtr = dlsym(RTLD_DEFAULT, "EKEnableThreadSafety");
+    if (EKEnableThreadSafetyPtr != NULL)
+    {
+        return YES;
+    }
+
+    return NO;
+}
+
 @end

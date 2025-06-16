@@ -44,4 +44,6 @@
 + (void)showDynamicIslandOverlay;
 + (void)hideDynamicIslandOverlay;
 
++ (BOOL)isLoadedWithElleKit;
+
 @end
