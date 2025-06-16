@@ -250,9 +250,9 @@ DEB_FILE=$(find packages -maxdepth 1 -name "*.deb" -print -quit)
 
 print_status "Injecting tweak..."
 if [ "$USE_EXTENSION" = "1" ] && [ -n "$EXTENSIONS" ]; then
-    cyan -duwsgq -i "$TEMP_PATCHED_IPA" -o "$OUTPUT_IPA" -f "$DEB_FILE" $EXTENSIONS
+    yes | cyan -duwsgq -i "$TEMP_PATCHED_IPA" -o "$OUTPUT_IPA" -f "$DEB_FILE" $EXTENSIONS
 else
-    cyan -duwsgq -i "$TEMP_PATCHED_IPA" -o "$OUTPUT_IPA" -f "$DEB_FILE"
+    yes | cyan -duwsgq -i "$TEMP_PATCHED_IPA" -o "$OUTPUT_IPA" -f "$DEB_FILE"
 fi
 
 if [ $? -ne 0 ]; then
@@ -264,5 +264,15 @@ deactivate
 
 print_status "Cleaning up..."
 rm -rf packages "$TEMP_PATCHED_IPA"
+
+print_status "Restoring ShareToDiscord Info.plist to original state..."
+if [ -d "extensions/ShareToDiscord" ]; then
+    (cd extensions/ShareToDiscord && git checkout -- Share/Info.plist)
+    if [ $? -eq 0 ]; then
+        print_success "Restored ShareToDiscord Info.plist to original state"
+    else
+        print_error "Failed to restore ShareToDiscord Info.plist"
+    fi
+fi
 
 print_success "Successfully created $OUTPUT_IPA"
