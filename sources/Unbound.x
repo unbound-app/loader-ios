@@ -57,7 +57,7 @@ id gBridge = nil;
                format:@"Modules patch injection failed, expect issues. %@", e];
     }
 
-    // Preload Unbound's settings, plugins & themes
+    // Preload Unbound's settings, plugins, themes and fonts
     @try
     {
         NSString *bundle   = [Utilities getResource:@"preload"];
@@ -143,11 +143,10 @@ id gBridge = nil;
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
                    ^{
-                       BOOL isLoadedWithElleKit = [Utilities isLoadedWithElleKit];
-                       if (!isLoadedWithElleKit)
+                       if (![Utilities isLoadedWithElleKit])
                        {
-                           [Utilities alert:@"Warning: Tweak is not loaded through ElleKit "
-                                            @"runtime. Some functionality may not work as expected."
+                           [Utilities alert:@"Warning: Tweak is not loaded through ElleKit. "
+                                            @"Functionality is not guaranteed."
                                       title:@"Runtime Detection"];
                        }
                    });
