@@ -44,4 +44,9 @@
 + (void)showDynamicIslandOverlay;
 + (void)hideDynamicIslandOverlay;
 
++ (BOOL)isLoadedWithElleKit;
+
+// TODO: remove before initial release
++ (void)showDevelopmentBuildBanner;
+
 @end

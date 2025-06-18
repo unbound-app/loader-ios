@@ -57,7 +57,7 @@ id gBridge = nil;
                format:@"Modules patch injection failed, expect issues. %@", e];
     }
 
-    // Preload Unbound's settings, plugins & themes
+    // Preload Unbound's settings, plugins, themes and fonts
     @try
     {
         NSString *bundle   = [Utilities getResource:@"preload"];
@@ -133,6 +133,33 @@ id gBridge = nil;
 
 %ctor
 {
+    // TODO: remove before initial release
+#ifndef DEBUG
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            [Utilities alert:@"This is a development build that is not designed for end users. "
+                             @"Please do not use it and refrain from reporting any issues."
+                       title:@"⚠️ DEVELOPMENT BUILD"];
+        });
+#endif
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
+                   ^{
+                       if (![Utilities isLoadedWithElleKit])
+                       {
+                           [Utilities alert:@"Warning: Tweak is not loaded through ElleKit. "
+                                            @"Functionality is not guaranteed."
+                                      title:@"Runtime Detection"];
+                       }
+                   });
+
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
-                   ^{ [Utilities initializeDynamicIslandOverlay]; });
+                   ^{
+                       [Utilities initializeDynamicIslandOverlay];
+
+        // TODO: remove before initial release
+#ifndef DEBUG
+                       [Utilities showDevelopmentBuildBanner];
+#endif
+                   });
 }

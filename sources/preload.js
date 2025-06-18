@@ -6,6 +6,6 @@ this.UNBOUND_AVAILABLE_FONTS = %@;
 
 this.UNBOUND_LOADER = {
         platform: 'iOS',
-        origin: 'Substrate',
+        origin: 'ElleKit',
         version: VERSION_PLACEHOLDER
 };

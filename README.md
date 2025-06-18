@@ -18,7 +18,7 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 <a href="https://tinyurl.com/yvcu8fc8"><img src="https://adriancastro.dev/basmxxk8sj3k.png" width="230"></a>
 
 > [!WARNING]
-> Trying to use non-substrate tweak runtimes (such as TrollFools or LiveContainer's TweakLoader) will likely break functionality. Please always use the pre-patched ipa when sideloading.
+> Trying to use non-ellekit tweak runtimes will likely break functionality. Ideally always use the pre-patched ipa when sideloading.
 
 - Download and install [Unbound.ipa](https://github.com/unbound-app/loader-ios/releases/latest/download/Unbound.ipa) using your preferred sideloading method.
 
@@ -36,7 +36,7 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 
 > If you want to revert the `xcode-select` change, run `sudo xcode-select -switch /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk`
 
-2. Install the required dependencies. You can do this by running `brew install make ldid` in your terminal. If you do not have brew installed, follow the instructions [here](https://brew.sh/).
+2. Install the required dependencies. You can do this by running `brew install make ldid` in your terminal. If you do not have brew installed, follow the instructions at the [Homebrew installation page](https://brew.sh/).
 
 3. Setup your gnu make path:
 

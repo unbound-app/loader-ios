@@ -78,16 +78,25 @@ static UIView   *islandOverlayView = nil;
         buttons:@[
             [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
 
-            [UIAlertAction actionWithTitle:@"Join Server"
-                                     style:UIAlertActionStyleDefault
-                                   handler:^(UIAlertAction *action) {
-                                       NSURL         *URL = [NSURL
-                                           URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
-                                       UIApplication *application =
-                                           [UIApplication sharedApplication];
+            [UIAlertAction
+                actionWithTitle:@"Join Server"
+                          style:UIAlertActionStyleDefault
+                        handler:^(UIAlertAction *action) {
+                            UIApplication *application = [UIApplication sharedApplication];
+                            NSURL         *discordURL =
+                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                            NSURL *webURL =
+                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
 
-                                       [application openURL:URL options:@{} completionHandler:nil];
-                                   }]
+                            if ([application canOpenURL:discordURL])
+                            {
+                                [application openURL:discordURL options:@{} completionHandler:nil];
+                            }
+                            else
+                            {
+                                [application openURL:webURL options:@{} completionHandler:nil];
+                            }
+                        }]
         ]];
 }
 
@@ -476,6 +485,64 @@ static UIView   *islandOverlayView = nil;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC),
                            dispatch_get_main_queue(), ^{ [self showDynamicIslandOverlay]; });
         });
+}
+
++ (BOOL)isLoadedWithElleKit
+{
+    void *EKEnableThreadSafetyPtr = dlsym(RTLD_DEFAULT, "EKEnableThreadSafety");
+    if (EKEnableThreadSafetyPtr != NULL)
+    {
+        return YES;
+    }
+
+    return NO;
+}
+
+// TODO: remove before initial release
++ (void)showDevelopmentBuildBanner
+{
+    static UILabel *devBuildLabel = nil;
+
+    if (devBuildLabel)
+    {
+        return;
+    }
+
+    UIWindow *window = nil;
+
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
+    {
+        if (scene.activationState == UISceneActivationStateForegroundActive)
+        {
+            UIWindowScene *windowScene = (UIWindowScene *) scene;
+            window                     = windowScene.windows.firstObject;
+            break;
+        }
+    }
+
+    if (!window)
+    {
+        return;
+    }
+
+    CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+    CGFloat height      = 20.0;
+    CGFloat yPosition   = window.safeAreaInsets.top;
+
+    devBuildLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, yPosition, screenWidth, height)];
+    devBuildLabel.backgroundColor = [UIColor colorWithRed:0.0 green:0.0 blue:0.0 alpha:0.7];
+    devBuildLabel.textColor       = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
+    devBuildLabel.font            = [UIFont boldSystemFontOfSize:12.0];
+    devBuildLabel.textAlignment   = NSTextAlignmentCenter;
+    devBuildLabel.text            = @"DEVELOPMENT BUILD - DO NOT USE";
+
+    devBuildLabel.layer.shadowColor   = [UIColor blackColor].CGColor;
+    devBuildLabel.layer.shadowOffset  = CGSizeMake(0.0, 1.0);
+    devBuildLabel.layer.shadowOpacity = 0.8;
+    devBuildLabel.layer.shadowRadius  = 1.0;
+
+    [window addSubview:devBuildLabel];
+    [window bringSubviewToFront:devBuildLabel];
 }
 
 @end
