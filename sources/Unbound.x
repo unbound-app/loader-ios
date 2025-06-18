@@ -133,15 +133,15 @@ id gBridge = nil;
 
 %ctor
 {
-	// TODO: remove before initial release
-    #ifndef DEBUG
+    // TODO: remove before initial release
+#ifndef DEBUG
     dispatch_after(
         dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             [Utilities alert:@"This is a development build that is not designed for end users. "
                              @"Please do not use it and refrain from reporting any issues."
                        title:@"⚠️ DEVELOPMENT BUILD"];
         });
-    #endif
+#endif
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
                    ^{
@@ -157,9 +157,9 @@ id gBridge = nil;
                    ^{
                        [Utilities initializeDynamicIslandOverlay];
 
-					   // TODO: remove before initial release
-                       #ifndef DEBUG
+        // TODO: remove before initial release
+#ifndef DEBUG
                        [Utilities showDevelopmentBuildBanner];
-                       #endif
+#endif
                    });
 }
