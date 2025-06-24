@@ -16,41 +16,94 @@
                      userInfo:nil];
     }
 
-    // Check if we need to append a colon based on argument count
-    NSString *selectorName = methodName;
-    if (arguments.count > 0 && ![selectorName hasSuffix:@":"])
+    NSMutableArray *possibleSelectors = [NSMutableArray array];
+
+    [possibleSelectors addObject:methodName];
+    [possibleSelectors addObject:[NSString stringWithFormat:@"%@:", methodName]];
+
+    if (arguments.count > 0)
     {
-        selectorName = [selectorName stringByAppendingString:@":"];
+        NSMutableString *selectorWithColons = [NSMutableString stringWithString:methodName];
+        for (NSUInteger i = 0; i < arguments.count; i++)
+        {
+            [selectorWithColons appendString:@":"];
+        }
+        [possibleSelectors addObject:selectorWithColons];
     }
 
-    SEL selector = NSSelectorFromString(selectorName);
-    if (![moduleClass respondsToSelector:selector])
+    SEL selectedSelector = NULL;
+    for (NSString *selectorStr in possibleSelectors)
+    {
+        SEL selector = NSSelectorFromString(selectorStr);
+        if ([moduleClass respondsToSelector:selector])
+        {
+            selectedSelector = selector;
+            [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
+                   format:@"Found matching selector: %@", selectorStr];
+            break;
+        }
+    }
+
+    if (!selectedSelector && arguments.count > 0)
+    {
+        unsigned int methodCount;
+        Method      *methodList = class_copyMethodList(object_getClass(moduleClass), &methodCount);
+
+        for (unsigned int i = 0; i < methodCount; i++)
+        {
+            Method    method         = methodList[i];
+            SEL       methodSelector = method_getName(method);
+            NSString *selectorName   = NSStringFromSelector(methodSelector);
+
+            if ([selectorName hasPrefix:methodName] &&
+                [selectorName characterAtIndex:[methodName length]] == ':')
+            {
+
+                NSUInteger colonCount = 0;
+                for (NSUInteger j = 0; j < [selectorName length]; j++)
+                {
+                    if ([selectorName characterAtIndex:j] == ':')
+                    {
+                        colonCount++;
+                    }
+                }
+
+                if (colonCount == arguments.count)
+                {
+                    selectedSelector = methodSelector;
+                    [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
+                           format:@"Found compatible selector: %@", selectorName];
+                    break;
+                }
+            }
+        }
+
+        if (methodList)
+        {
+            free(methodList);
+        }
+    }
+
+    if (!selectedSelector)
     {
         [Logger error:LOG_CATEGORY_NATIVEBRIDGE
-               format:@"Method %@ not found on %@", selectorName, moduleName];
+               format:@"No matching method found for %@ on %@ with %lu arguments", methodName,
+                      moduleName, (unsigned long) arguments.count];
 
-        if (arguments.count == 1)
-        {
-            selector = NSSelectorFromString([methodName stringByAppendingString:@":"]);
-        }
-        else if (arguments.count == 2)
-        {
-            selector = NSSelectorFromString([NSString stringWithFormat:@"%@::", methodName]);
-        }
-
-        if (![moduleClass respondsToSelector:selector])
-        {
-            @throw [NSException
-                exceptionWithName:@"MethodNotFound"
-                           reason:[NSString stringWithFormat:@"Method %@ not found on %@",
-                                                             methodName, moduleName]
-                         userInfo:nil];
-        }
+        @throw
+            [NSException exceptionWithName:@"MethodNotFound"
+                                    reason:[NSString stringWithFormat:@"Method %@ not found on %@",
+                                                                      methodName, moduleName]
+                                  userInfo:nil];
     }
 
-    NSMethodSignature *signature  = [moduleClass methodSignatureForSelector:selector];
+    [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
+           format:@"Executing native method: [%@ %@] with %lu arguments", moduleName,
+                  NSStringFromSelector(selectedSelector), (unsigned long) arguments.count];
+
+    NSMethodSignature *signature  = [moduleClass methodSignatureForSelector:selectedSelector];
     NSInvocation      *invocation = [NSInvocation invocationWithMethodSignature:signature];
-    [invocation setSelector:selector];
+    [invocation setSelector:selectedSelector];
     [invocation setTarget:moduleClass];
 
     // Set arguments
