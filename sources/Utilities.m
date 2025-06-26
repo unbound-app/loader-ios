@@ -104,6 +104,14 @@ static UIView   *islandOverlayView = nil;
         title:(NSString *)title
       buttons:(NSArray<UIAlertAction *> *)buttons
 {
+    [self alert:message title:title buttons:buttons timeout:0];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      timeout:(NSInteger)timeout
+{
     UIAlertController *alert =
         [UIAlertController alertControllerWithTitle:title
                                             message:message
@@ -114,11 +122,88 @@ static UIView   *islandOverlayView = nil;
         [alert addAction:button];
     }
 
+    if (timeout > 0)
+    {
+        for (UIAlertAction *action in alert.actions)
+        {
+            action.enabled = NO;
+        }
+
+        NSString *originalTitle = title;
+        alert.title = [NSString stringWithFormat:@"%@ (%ld)", originalTitle, (long) timeout];
+    }
+
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *controller =
             [[[[UIApplication sharedApplication] delegate] window] rootViewController];
-        [controller presentViewController:alert animated:YES completion:nil];
+        [controller
+            presentViewController:alert
+                         animated:YES
+                       completion:^{
+                           if (timeout > 0)
+                           {
+                               __block NSInteger countdown = timeout;
+                               dispatch_source_t timer     = dispatch_source_create(
+                                   DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+
+                               dispatch_source_set_timer(
+                                   timer, dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC),
+                                   1.0 * NSEC_PER_SEC, 0.1 * NSEC_PER_SEC);
+
+                               dispatch_source_set_event_handler(timer, ^{
+                                   countdown--;
+
+                                   if (countdown > 0)
+                                   {
+                                       alert.title = [NSString
+                                           stringWithFormat:@"%@ (%ld)", title, (long) countdown];
+                                   }
+                                   else
+                                   {
+                                       alert.title = title;
+                                       for (UIAlertAction *action in alert.actions)
+                                       {
+                                           action.enabled = YES;
+                                       }
+                                       dispatch_source_cancel(timer);
+                                   }
+                               });
+
+                               dispatch_resume(timer);
+                           }
+                       }];
     });
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
+{
+    return [Utilities
+          alert:message
+          title:title
+        buttons:@[
+            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
+
+            [UIAlertAction
+                actionWithTitle:@"Join Server"
+                          style:UIAlertActionStyleDefault
+                        handler:^(UIAlertAction *action) {
+                            UIApplication *application = [UIApplication sharedApplication];
+                            NSURL         *discordURL =
+                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                            NSURL *webURL =
+                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+
+                            if ([application canOpenURL:discordURL])
+                            {
+                                [application openURL:discordURL options:@{} completionHandler:nil];
+                            }
+                            else
+                            {
+                                [application openURL:webURL options:@{} completionHandler:nil];
+                            }
+                        }]
+        ]
+        timeout:timeout];
 }
 
 + (id)parseJSON:(NSData *)data
