@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <UserNotifications/UserNotifications.h>
+#import <UIKit/UIKit.h>
 #import "Logger.h"
 
 @interface PluginAPI : NSObject
@@ -9,5 +10,4 @@
                      timeDelay:(NSNumber *)timeDelay 
                   soundEnabled:(NSNumber *)soundEnabled
                     identifier:(NSString *)identifier;
-
 @end

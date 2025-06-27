@@ -40,8 +40,9 @@
              withCompletionHandler:^(NSError *_Nullable error) {
                  if (error)
                  {
-                     [Logger error:LOG_CATEGORY_PLUGIN
-                            format:@"Error scheduling notification: %@", error.localizedDescription];
+                     [Logger
+                          error:LOG_CATEGORY_PLUGIN
+                         format:@"Error scheduling notification: %@", error.localizedDescription];
                  }
                  else
                  {

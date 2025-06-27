@@ -14,4 +14,5 @@
 #import "Updater.h"
 #import "NativeBridge.h"
 #import "PluginAPI.h"
+#import "ChatUI.h"
 #import "Discord/RCT.h"
