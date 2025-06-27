@@ -12,7 +12,6 @@
 #import "Themes.h"
 #import "Fonts.h"
 #import "Updater.h"
-#import "Logger.h"
 #import "NativeBridge.h"
 #import "PluginAPI.h"
 #import "Discord/RCT.h"
