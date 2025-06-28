@@ -5,11 +5,14 @@
 static NSNumber   *customAvatarRadius  = nil;
 static const float defaultAvatarRadius = -1.0f;
 
-static NSNumber   *messageBubblesEnabled      = nil;
-static NSString   *messageBubbleLightColor    = nil;
-static NSString   *messageBubbleDarkColor     = nil;
-static NSNumber   *messageBubbleCornerRadius  = nil;
+static NSNumber *messageBubblesEnabled     = nil;
+static NSString *messageBubbleLightColor   = nil;
+static NSString *messageBubbleDarkColor    = nil;
+static NSNumber *messageBubbleCornerRadius = nil;
+
 static const float defaultMessageBubbleRadius = 10.0f;
+static const float messageBubbleWidthOffset   = 10.0f;
+static const float messageBubbleLeadingOffset = -5.0f;
 
 static UIColor *messageCellLightColor   = nil;
 static UIColor *messageCellDarkColor    = nil;
@@ -397,10 +400,10 @@ static UIColor *messageCellDynamicColor = nil;
                 constraintEqualToAnchor:cell.innerView.heightAnchor],
             [cell.customBackgroundView.widthAnchor
                 constraintEqualToAnchor:cell.innerView.widthAnchor
-                               constant:10.0F],
+                               constant:messageBubbleWidthOffset],
             [cell.customBackgroundView.leadingAnchor
                 constraintEqualToAnchor:cell.innerView.leadingAnchor
-                               constant:-5.0F],
+                               constant:messageBubbleLeadingOffset],
             [cell.customBackgroundView.topAnchor constraintEqualToAnchor:cell.innerView.topAnchor],
         ]];
     }
@@ -465,10 +468,10 @@ static UIColor *messageCellDynamicColor = nil;
                 constraintEqualToAnchor:self.innerView.heightAnchor],
             [self.customBackgroundView.widthAnchor
                 constraintEqualToAnchor:self.innerView.widthAnchor
-                               constant:10.0F],
+                               constant:messageBubbleWidthOffset],
             [self.customBackgroundView.leadingAnchor
                 constraintEqualToAnchor:self.innerView.leadingAnchor
-                               constant:-5.0F],
+                               constant:messageBubbleLeadingOffset],
             [self.customBackgroundView.topAnchor constraintEqualToAnchor:self.innerView.topAnchor],
         ]];
     }

@@ -9,7 +9,6 @@
 + (void)resetAvatarCornerRadius;
 + (float)getCurrentAvatarRadius;
 
-// Message bubble customization
 + (void)setMessageBubblesEnabled:(NSNumber *)enabled;
 + (void)setMessageBubblesEnabled:(NSNumber *)enabled
                       lightColor:(NSString *)lightColor
