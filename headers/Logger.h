@@ -39,5 +39,6 @@ typedef NS_ENUM(NSInteger, LogLevel) {
 #define LOG_CATEGORY_RECOVERY   "recovery"
 #define LOG_CATEGORY_FONTS      "fonts"
 #define LOG_CATEGORY_NATIVEBRIDGE "nativebridge"
+#define LOG_CATEGORY_PLUGIN     "plugin-api"
 
 NS_ASSUME_NONNULL_END
