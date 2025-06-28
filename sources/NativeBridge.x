@@ -58,6 +58,7 @@
             NSString *selectorName   = NSStringFromSelector(methodSelector);
 
             if ([selectorName hasPrefix:methodName] &&
+                [selectorName length] > [methodName length] &&
                 [selectorName characterAtIndex:[methodName length]] == ':')
             {
 
