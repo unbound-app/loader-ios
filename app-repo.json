@@ -1,7 +1,7 @@
 {
   "name": "Unbound App Repo",
   "identifier": "app.unbound.ios.repo",
-  "iconURL": "https://repo.unbound.rip/icons/Unbound.png",
+  "iconURL": "https://assets.unbound.rip/logo/logo.png",
   "apps": [
     {
       "name": "Unbound",
