@@ -22,19 +22,19 @@ static UIColor *messageCellDynamicColor = nil;
 {
     if (!radius)
     {
-        [Logger error:LOG_CATEGORY_PLUGIN format:@"Avatar corner radius cannot be nil"];
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"Avatar corner radius cannot be nil"];
         return;
     }
 
     float radiusValue = [radius floatValue];
     if (radiusValue < 0)
     {
-        [Logger error:LOG_CATEGORY_PLUGIN format:@"Avatar corner radius cannot be negative"];
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"Avatar corner radius cannot be negative"];
         return;
     }
 
     customAvatarRadius = radius;
-    [Logger info:LOG_CATEGORY_PLUGIN format:@"Avatar corner radius set to: %@", radius];
+    [Logger info:LOG_CATEGORY_DEFAULT format:@"Avatar corner radius set to: %@", radius];
 
     [self updateAllAvatarViews];
 }
@@ -47,7 +47,7 @@ static UIColor *messageCellDynamicColor = nil;
 + (void)resetAvatarCornerRadius
 {
     customAvatarRadius = nil;
-    [Logger info:LOG_CATEGORY_PLUGIN format:@"Avatar corner radius reset to default"];
+    [Logger info:LOG_CATEGORY_DEFAULT format:@"Avatar corner radius reset to default"];
 
     [self updateAllAvatarViews];
 }
@@ -94,7 +94,7 @@ static UIColor *messageCellDynamicColor = nil;
         {
             view.layer.cornerRadius = MIN(view.frame.size.width, view.frame.size.height) / 2.0f;
         }
-        [Logger debug:LOG_CATEGORY_PLUGIN
+        [Logger debug:LOG_CATEGORY_DEFAULT
                format:@"Updated DCDAvatarView corner radius to: %f", view.layer.cornerRadius];
     }
 
@@ -117,12 +117,12 @@ static UIColor *messageCellDynamicColor = nil;
 {
     if (!enabled)
     {
-        [Logger error:LOG_CATEGORY_PLUGIN format:@"Message bubbles enabled cannot be nil"];
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"Message bubbles enabled cannot be nil"];
         return;
     }
 
     messageBubblesEnabled = enabled;
-    [Logger info:LOG_CATEGORY_PLUGIN format:@"Message bubbles enabled set to: %@", enabled];
+    [Logger info:LOG_CATEGORY_DEFAULT format:@"Message bubbles enabled set to: %@", enabled];
 
     [self updateMessageBubbleSettings];
 }
@@ -133,7 +133,7 @@ static UIColor *messageCellDynamicColor = nil;
 {
     if (!enabled)
     {
-        [Logger error:LOG_CATEGORY_PLUGIN format:@"Message bubbles enabled cannot be nil"];
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"Message bubbles enabled cannot be nil"];
         return;
     }
 
@@ -149,7 +149,7 @@ static UIColor *messageCellDynamicColor = nil;
         messageBubbleDarkColor = darkColor;
     }
 
-    [Logger info:LOG_CATEGORY_PLUGIN
+    [Logger info:LOG_CATEGORY_DEFAULT
           format:@"Message bubbles enabled: %@, light color: %@, dark color: %@", enabled,
                  lightColor ?: @"default", darkColor ?: @"default"];
 
@@ -161,7 +161,7 @@ static UIColor *messageCellDynamicColor = nil;
     messageBubbleLightColor = lightColor;
     messageBubbleDarkColor  = darkColor;
 
-    [Logger info:LOG_CATEGORY_PLUGIN
+    [Logger info:LOG_CATEGORY_DEFAULT
           format:@"Message bubble colors set - light: %@, dark: %@", lightColor ?: @"default",
                  darkColor ?: @"default"];
 
@@ -172,20 +172,20 @@ static UIColor *messageCellDynamicColor = nil;
 {
     if (!radius)
     {
-        [Logger error:LOG_CATEGORY_PLUGIN format:@"Message bubble corner radius cannot be nil"];
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"Message bubble corner radius cannot be nil"];
         return;
     }
 
     float radiusValue = [radius floatValue];
     if (radiusValue < 0)
     {
-        [Logger error:LOG_CATEGORY_PLUGIN
+        [Logger error:LOG_CATEGORY_DEFAULT
                format:@"Message bubble corner radius cannot be negative"];
         return;
     }
 
     messageBubbleCornerRadius = radius;
-    [Logger info:LOG_CATEGORY_PLUGIN format:@"Message bubble corner radius set to: %@", radius];
+    [Logger info:LOG_CATEGORY_DEFAULT format:@"Message bubble corner radius set to: %@", radius];
 
     [self updateMessageBubbleSettings];
 }
@@ -216,7 +216,7 @@ static UIColor *messageCellDynamicColor = nil;
     messageBubbleLightColor   = nil;
     messageBubbleDarkColor    = nil;
     messageBubbleCornerRadius = nil;
-    [Logger info:LOG_CATEGORY_PLUGIN format:@"Message bubbles reset to default"];
+    [Logger info:LOG_CATEGORY_DEFAULT format:@"Message bubbles reset to default"];
 
     [self updateMessageBubbleSettings];
 }

@@ -41,12 +41,12 @@
                  if (error)
                  {
                      [Logger
-                          error:LOG_CATEGORY_PLUGIN
+                          error:LOG_CATEGORY_DEFAULT
                          format:@"Error scheduling notification: %@", error.localizedDescription];
                  }
                  else
                  {
-                     [Logger info:LOG_CATEGORY_PLUGIN
+                     [Logger info:LOG_CATEGORY_DEFAULT
                            format:@"Notification scheduled with id: %@", notificationId];
                  }
              }];

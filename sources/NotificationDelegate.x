@@ -12,7 +12,7 @@
        willPresentNotification:(UNNotification *)notification
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler
 {
-    [Logger debug:LOG_CATEGORY_PLUGIN
+    [Logger debug:LOG_CATEGORY_DEFAULT
            format:@"Notification received while app in foreground: %@",
                   notification.request.identifier];
 
@@ -24,7 +24,7 @@
     didReceiveNotificationResponse:(UNNotificationResponse *)response
              withCompletionHandler:(void (^)(void))completionHandler
 {
-    [Logger debug:LOG_CATEGORY_PLUGIN
+    [Logger debug:LOG_CATEGORY_DEFAULT
            format:@"User responded to notification: %@", response.notification.request.identifier];
     completionHandler();
 }
@@ -39,8 +39,7 @@ static UnboundNotificationDelegate *notificationDelegate = nil;
         dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             if (!notificationDelegate)
             {
-                [Logger info:LOG_CATEGORY_PLUGIN
-                      format:@"Setting up notification delegate"];
+                [Logger info:LOG_CATEGORY_DEFAULT format:@"Setting up notification delegate"];
                 notificationDelegate = [[UnboundNotificationDelegate alloc] init];
                 [UNUserNotificationCenter currentNotificationCenter].delegate =
                     notificationDelegate;
@@ -52,13 +51,13 @@ static UnboundNotificationDelegate *notificationDelegate = nil;
                                   completionHandler:^(BOOL granted, NSError *_Nullable error) {
                                       if (error)
                                       {
-                                          [Logger error:LOG_CATEGORY_PLUGIN
+                                          [Logger error:LOG_CATEGORY_DEFAULT
                                                  format:@"Notification permission error: %@",
                                                         error.localizedDescription];
                                       }
                                       else
                                       {
-                                          [Logger info:LOG_CATEGORY_PLUGIN
+                                          [Logger info:LOG_CATEGORY_DEFAULT
                                                 format:@"Notification permission %@",
                                                        granted ? @"granted" : @"denied"];
                                       }
@@ -68,4 +67,3 @@ static UnboundNotificationDelegate *notificationDelegate = nil;
 
     %init;
 }
-     

@@ -13,13 +13,10 @@ typedef NS_ENUM(NSInteger, LogLevel) {
 
 @interface Logger : NSObject
 
-// Ensure logger is properly initialized
 + (void)initialize;
 
-// Main logging methods
 + (void)log:(LogLevel)level category:(const char *)category format:(NSString *)format, ...;
 
-// Convenience methods
 + (void)debug:(const char *)category format:(NSString *)format, ...;
 + (void)info:(const char *)category format:(NSString *)format, ...;
 + (void)notice:(const char *)category format:(NSString *)format, ...;
@@ -28,7 +25,6 @@ typedef NS_ENUM(NSInteger, LogLevel) {
 
 @end
 
-// Log category constants for different components
 #define LOG_CATEGORY_DEFAULT    "default"
 #define LOG_CATEGORY_PLUGINS    "plugins"
 #define LOG_CATEGORY_THEMES     "themes"
@@ -39,6 +35,5 @@ typedef NS_ENUM(NSInteger, LogLevel) {
 #define LOG_CATEGORY_RECOVERY   "recovery"
 #define LOG_CATEGORY_FONTS      "fonts"
 #define LOG_CATEGORY_NATIVEBRIDGE "nativebridge"
-#define LOG_CATEGORY_PLUGIN     "plugin-api"
 
 NS_ASSUME_NONNULL_END
