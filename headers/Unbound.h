@@ -8,7 +8,6 @@
 #import "Settings.h"
 #import "Utilities.h"
 #import "FileSystem.h"
-#import "Plugins.h"
 #import "Themes.h"
 #import "Fonts.h"
 #import "Updater.h"
