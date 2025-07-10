@@ -56,6 +56,8 @@ else
 fi
 
 USE_EXTENSION=0
+BUILD_SIMULATOR=0
+
 if [ "$UNAME" = "Darwin" ]; then
     print_status "Include extensions? (y/n):"
     read -t 3 EXTENSIONS_INPUT
@@ -69,6 +71,20 @@ if [ "$UNAME" = "Darwin" ]; then
     else
         USE_EXTENSION=1
         print_status "Including extensions..."
+    fi
+
+    print_status "Build iOS Simulator version? (y/n):"
+    read -t 3 SIMULATOR_INPUT
+    if [ $? -gt 128 ]; then
+        echo "n"
+        BUILD_SIMULATOR=0
+        print_status "Skipping iOS Simulator build... (default)"
+    elif [[ $SIMULATOR_INPUT =~ ^[Yy]$ ]]; then
+        BUILD_SIMULATOR=1
+        print_status "Building iOS Simulator version..."
+    else
+        BUILD_SIMULATOR=0
+        print_status "Skipping iOS Simulator build..."
     fi
 fi
 
@@ -265,6 +281,68 @@ deactivate
 print_status "Cleaning up..."
 rm -rf packages "$TEMP_PATCHED_IPA"
 
+if [ "$BUILD_SIMULATOR" = "1" ] && [ "$UNAME" = "Darwin" ]; then
+    print_status "Building iOS Simulator version..."
+    
+    # Extract the IPA
+    TEMP_DIR="temp_extract"
+    mkdir -p "$TEMP_DIR"
+    cd "$TEMP_DIR"
+    unzip -q "../$OUTPUT_IPA"
+    cd ..
+    
+    # Download simforge if not present
+    if [ ! -f "simforge" ]; then
+        print_status "Downloading simforge..."
+        curl -L -o simforge https://github.com/EthanArbuckle/simforge/releases/latest/download/simforge
+        chmod +x simforge
+        if [ $? -ne 0 ]; then
+            print_error "Failed to download simforge"
+            rm -rf "$TEMP_DIR"
+            exit 1
+        fi
+        print_success "Downloaded simforge"
+    else
+        print_status "Using existing simforge..."
+    fi
+    
+    # Convert for iOS Simulator
+    print_status "Converting app for iOS Simulator..."
+    ./simforge convert "$TEMP_DIR/Payload/Discord.app"
+    if [ $? -ne 0 ]; then
+        print_error "Failed to convert app for iOS Simulator"
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+    
+    # Re-sign the app
+    print_status "Re-signing app for iOS Simulator..."
+    codesign -f -s - "$TEMP_DIR/Payload/Discord.app/Frameworks/"* 2>/dev/null || true
+    codesign -f -s - "$TEMP_DIR/Payload/Discord.app"
+    if [ $? -ne 0 ]; then
+        print_error "Failed to re-sign app for iOS Simulator"
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+    
+    # Create simulator zip
+    print_status "Creating iOS Simulator zip..."
+    cd "$TEMP_DIR/Payload"
+    zip -r "../../unbound-ios-simulator.zip" Discord.app
+    cd "../.."
+    
+    if [ $? -ne 0 ]; then
+        print_error "Failed to create iOS Simulator zip"
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+    
+    # Clean up temporary directory
+    rm -rf "$TEMP_DIR"
+    
+    print_success "Successfully created unbound-ios-simulator.zip"
+fi
+
 print_status "Restoring ShareToDiscord Info.plist to original state..."
 if [ -d "extensions/ShareToDiscord" ]; then
     (cd extensions/ShareToDiscord && git checkout -- Share/Info.plist)
@@ -276,3 +354,6 @@ if [ -d "extensions/ShareToDiscord" ]; then
 fi
 
 print_success "Successfully created $OUTPUT_IPA"
+if [ "$BUILD_SIMULATOR" = "1" ] && [ "$UNAME" = "Darwin" ]; then
+    print_success "Successfully created unbound-ios-simulator.zip"
+fi

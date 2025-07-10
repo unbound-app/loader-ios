@@ -70,6 +70,7 @@ jobs:
             
             #### Artifacts:
             - [**${{ needs.build.outputs.deb_filename }}**](${{ needs.build.outputs.deb_url }})
+            - [**${{ needs.build.outputs.simulator_filename }}**](${{ needs.build.outputs.simulator_url }})
             - [**${{ needs.build.outputs.ipa_filename }}**](${{ needs.build.outputs.ipa_url }})
 
             <sub>This comment was automatically generated. [View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>
