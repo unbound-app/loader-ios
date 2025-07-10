@@ -19,7 +19,8 @@
     NSMutableArray *possibleSelectors = [NSMutableArray array];
 
     [possibleSelectors addObject:methodName];
-    if (arguments.count >= 1) {
+    if (arguments.count >= 1)
+    {
         [possibleSelectors addObject:[NSString stringWithFormat:@"%@:", methodName]];
     }
 
@@ -81,10 +82,7 @@
             }
         }
 
-        if (methodList)
-        {
-            free(methodList);
-        }
+        free(methodList);
     }
 
     if (!selectedSelector)

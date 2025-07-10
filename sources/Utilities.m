@@ -177,7 +177,7 @@ static UIView   *islandOverlayView = nil;
 
 + (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
 {
-    return [Utilities
+    [Utilities
           alert:message
           title:title
         buttons:@[
