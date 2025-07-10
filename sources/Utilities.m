@@ -134,8 +134,44 @@ static UIView   *islandOverlayView = nil;
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIViewController *controller =
-            [[[[UIApplication sharedApplication] delegate] window] rootViewController];
+        UIViewController *controller = nil;
+
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
+        {
+            if (scene.activationState == UISceneActivationStateForegroundActive)
+            {
+                UIWindowScene *windowScene = (UIWindowScene *) scene;
+                UIWindow      *keyWindow   = windowScene.windows.firstObject;
+                for (UIWindow *window in windowScene.windows)
+                {
+                    if (window.isKeyWindow)
+                    {
+                        keyWindow = window;
+                        break;
+                    }
+                }
+                controller = keyWindow.rootViewController;
+                break;
+            }
+        }
+
+        if (!controller)
+        {
+            controller = [[[[UIApplication sharedApplication] delegate] window] rootViewController];
+        }
+
+        while (controller.presentedViewController)
+        {
+            controller = controller.presentedViewController;
+        }
+
+        if (!controller)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES
+                   format:@"Failed to find view controller to present alert"];
+            return;
+        }
+
         [controller
             presentViewController:alert
                          animated:YES
@@ -590,6 +626,57 @@ static UIView   *islandOverlayView = nil;
     }
 
     return NO;
+}
+
++ (NSArray<NSString *> *)getAvailableAppExtensions
+{
+    NSString *plugInsPath =
+        [[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"PlugIns"];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+
+    if (![fileManager fileExistsAtPath:plugInsPath])
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"No PlugIns folder found"];
+        return @[];
+    }
+
+    NSError *error    = nil;
+    NSArray *contents = [fileManager contentsOfDirectoryAtPath:plugInsPath error:&error];
+
+    if (error)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Failed to read PlugIns directory: %@", error.localizedDescription];
+        return @[];
+    }
+
+    NSMutableArray *extensions = [NSMutableArray array];
+    for (NSString *item in contents)
+    {
+        if ([item hasSuffix:@".appex"])
+        {
+            NSString *extensionName = [item stringByDeletingPathExtension];
+            [extensions addObject:extensionName];
+        }
+    }
+
+    [Logger info:LOG_CATEGORY_UTILITIES
+          format:@"Found %lu app extensions: %@", (unsigned long) extensions.count, extensions];
+    return [extensions copy];
+}
+
++ (BOOL)hasAppExtension:(NSString *)extensionName
+{
+    NSString *plugInsPath =
+        [[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"PlugIns"];
+    NSString *extensionPath = [plugInsPath
+        stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.appex", extensionName]];
+
+    BOOL exists = [[NSFileManager defaultManager] fileExistsAtPath:extensionPath];
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"App extension '%@' %@", extensionName, exists ? @"found" : @"not found"];
+
+    return exists;
 }
 
 // TODO: remove before initial release

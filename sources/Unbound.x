@@ -154,6 +154,47 @@ id gBridge = nil;
                        }
                    });
 
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            if (![Utilities isAppStoreApp])
+            {
+                [Logger info:LOG_CATEGORY_DEFAULT
+                      format:@"App is sideloaded, checking for critical extensions"];
+
+                BOOL hasOpenInDiscord = [Utilities hasAppExtension:@"OpenInDiscord"];
+                BOOL hasShare         = [Utilities hasAppExtension:@"Share"];
+
+                if (!hasOpenInDiscord)
+                {
+                    [Logger info:LOG_CATEGORY_DEFAULT
+                          format:@"OpenInDiscord extension missing, showing alert"];
+                    [Utilities alert:@"The Safari extension (OpenInDiscord.appex) is missing. "
+                                     @"You won't be able to open Discord links directly in the app."
+                               title:@"Missing Safari Extension"];
+                }
+
+                if (!hasShare)
+                {
+                    [Logger info:LOG_CATEGORY_DEFAULT
+                          format:@"Share extension missing, showing alert"];
+                    [Utilities alert:@"The Share extension (Share.appex) is missing. "
+                                     @"You won't be able to receive shared media and files "
+                                     @"from other apps through the share sheet."
+                               title:@"Missing Share Extension"];
+                }
+
+                if (hasOpenInDiscord && hasShare)
+                {
+                    [Logger info:LOG_CATEGORY_DEFAULT format:@"All critical extensions present"];
+                }
+            }
+            else
+            {
+                [Logger info:LOG_CATEGORY_DEFAULT
+                      format:@"App Store app detected, skipping extension checks"];
+            }
+        });
+
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
                    ^{
                        [Utilities initializeDynamicIslandOverlay];

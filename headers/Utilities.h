@@ -53,6 +53,9 @@
 
 + (BOOL)isLoadedWithElleKit;
 
++ (NSArray<NSString *> *)getAvailableAppExtensions;
++ (BOOL)hasAppExtension:(NSString *)extensionName;
+
 // TODO: remove before initial release
 + (void)showDevelopmentBuildBanner;
 
