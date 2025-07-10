@@ -5,7 +5,6 @@
 #import <spawn.h>
 #import <sys/utsname.h>
 
-#import "DeviceModels.h"
 #import "FileSystem.h"
 #import "Settings.h"
 #import "Updater.h"

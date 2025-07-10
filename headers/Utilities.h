@@ -3,7 +3,6 @@
 #import <rootless.h>
 #import <sys/utsname.h>
 
-#import "DeviceModels.h"
 #import "FileSystem.h"
 #import "Unbound.h"
 

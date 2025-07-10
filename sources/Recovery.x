@@ -733,16 +733,18 @@ BOOL isRecoveryModeEnabled(void)
 
 - (void)openGitHubIssue
 {
-    UIDevice *device      = [UIDevice currentDevice];
-    NSString *deviceId    = getDeviceIdentifier();
-    NSString *deviceModel = DEVICE_MODELS[deviceId] ?: deviceId;
+    UIDevice      *device = [UIDevice currentDevice];
+    MobileGestalt *mg     = [MobileGestalt sharedInstance];
+
+    NSString *deviceId    = [mg getProductType] ?: getDeviceIdentifier();
+    NSString *deviceModel = [mg getPhysicalHardwareNameString] ?: deviceId;
     NSString *appVersion =
         [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     NSString *buildNumber = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
 
     NSString *body =
         [NSString stringWithFormat:@"### Device Information\n"
-                                    "- Device: %@\n"
+                                    "- Device: %@ (%@)\n"
                                     "- iOS Version: %@\n"
                                     "- Tweak Version: %@\n"
                                     "- App Version: %@ (%@)\n"
@@ -755,8 +757,8 @@ BOOL isRecoveryModeEnabled(void)
                                     "1. \n2. \n3. \n\n"
                                     "### Expected Behavior\n\n"
                                     "### Actual Behavior\n",
-                                   deviceModel, device.systemVersion, PACKAGE_VERSION, appVersion,
-                                   buildNumber, [Utilities getHermesBytecodeVersion],
+                                   deviceModel, deviceId, device.systemVersion, PACKAGE_VERSION,
+                                   appVersion, buildNumber, [Utilities getHermesBytecodeVersion],
                                    [Utilities isAppStoreApp] ? @"No" : @"Yes",
                                    [Utilities isJailbroken] ? @"Yes" : @"No"];
 
@@ -906,6 +908,15 @@ void showMenuSheet(void)
 
 NSString *getDeviceIdentifier(void)
 {
+    MobileGestalt *mg          = [MobileGestalt sharedInstance];
+    NSString      *productType = [mg getProductType];
+
+    if (productType)
+    {
+        return productType;
+    }
+
+    // Fallback to utsname if MobileGestalt fails
     struct utsname systemInfo;
     uname(&systemInfo);
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];

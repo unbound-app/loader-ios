@@ -307,6 +307,15 @@ static UIView   *islandOverlayView = nil;
 
 + (NSString *)getDeviceModelIdentifier
 {
+    MobileGestalt *mg          = [MobileGestalt sharedInstance];
+    NSString      *productType = [mg getProductType];
+
+    if (productType)
+    {
+        return productType;
+    }
+
+    // Fallback to utsname if MobileGestalt fails
     struct utsname systemInfo;
     uname(&systemInfo);
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
