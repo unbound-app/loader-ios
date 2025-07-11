@@ -3,7 +3,6 @@
 #import <rootless.h>
 #import <sys/utsname.h>
 
-#import "DeviceModels.h"
 #import "FileSystem.h"
 #import "Unbound.h"
 
@@ -26,6 +25,14 @@
 + (void)alert:(NSString *)message title:(NSString *)title;
 + (void)alert:(NSString *)message;
 
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      timeout:(NSInteger)timeout;
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      timeout:(NSInteger)timeout;
+
 + (id)parseJSON:(NSData *)data;
 
 + (dispatch_source_t)createDebounceTimer:(double)delay
@@ -45,6 +52,9 @@
 + (void)hideDynamicIslandOverlay;
 
 + (BOOL)isLoadedWithElleKit;
+
++ (NSArray<NSString *> *)getAvailableAppExtensions;
++ (BOOL)hasAppExtension:(NSString *)extensionName;
 
 // TODO: remove before initial release
 + (void)showDevelopmentBuildBanner;

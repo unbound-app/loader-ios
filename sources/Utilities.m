@@ -104,6 +104,14 @@ static UIView   *islandOverlayView = nil;
         title:(NSString *)title
       buttons:(NSArray<UIAlertAction *> *)buttons
 {
+    [self alert:message title:title buttons:buttons timeout:0];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      timeout:(NSInteger)timeout
+{
     UIAlertController *alert =
         [UIAlertController alertControllerWithTitle:title
                                             message:message
@@ -114,11 +122,124 @@ static UIView   *islandOverlayView = nil;
         [alert addAction:button];
     }
 
+    if (timeout > 0)
+    {
+        for (UIAlertAction *action in alert.actions)
+        {
+            action.enabled = NO;
+        }
+
+        NSString *originalTitle = title;
+        alert.title = [NSString stringWithFormat:@"%@ (%ld)", originalTitle, (long) timeout];
+    }
+
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIViewController *controller =
-            [[[[UIApplication sharedApplication] delegate] window] rootViewController];
-        [controller presentViewController:alert animated:YES completion:nil];
+        UIViewController *controller = nil;
+
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
+        {
+            if (scene.activationState == UISceneActivationStateForegroundActive)
+            {
+                UIWindowScene *windowScene = (UIWindowScene *) scene;
+                UIWindow      *keyWindow   = windowScene.windows.firstObject;
+                for (UIWindow *window in windowScene.windows)
+                {
+                    if (window.isKeyWindow)
+                    {
+                        keyWindow = window;
+                        break;
+                    }
+                }
+                controller = keyWindow.rootViewController;
+                break;
+            }
+        }
+
+        if (!controller)
+        {
+            controller = [[[[UIApplication sharedApplication] delegate] window] rootViewController];
+        }
+
+        while (controller.presentedViewController)
+        {
+            controller = controller.presentedViewController;
+        }
+
+        if (!controller)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES
+                   format:@"Failed to find view controller to present alert"];
+            return;
+        }
+
+        [controller
+            presentViewController:alert
+                         animated:YES
+                       completion:^{
+                           if (timeout > 0)
+                           {
+                               __block NSInteger countdown = timeout;
+                               dispatch_source_t timer     = dispatch_source_create(
+                                   DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+
+                               dispatch_source_set_timer(
+                                   timer, dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC),
+                                   1.0 * NSEC_PER_SEC, 0.1 * NSEC_PER_SEC);
+
+                               dispatch_source_set_event_handler(timer, ^{
+                                   countdown--;
+
+                                   if (countdown > 0)
+                                   {
+                                       alert.title = [NSString
+                                           stringWithFormat:@"%@ (%ld)", title, (long) countdown];
+                                   }
+                                   else
+                                   {
+                                       alert.title = title;
+                                       for (UIAlertAction *action in alert.actions)
+                                       {
+                                           action.enabled = YES;
+                                       }
+                                       dispatch_source_cancel(timer);
+                                   }
+                               });
+
+                               dispatch_resume(timer);
+                           }
+                       }];
     });
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
+{
+    [Utilities
+          alert:message
+          title:title
+        buttons:@[
+            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
+
+            [UIAlertAction
+                actionWithTitle:@"Join Server"
+                          style:UIAlertActionStyleDefault
+                        handler:^(UIAlertAction *action) {
+                            UIApplication *application = [UIApplication sharedApplication];
+                            NSURL         *discordURL =
+                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                            NSURL *webURL =
+                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+
+                            if ([application canOpenURL:discordURL])
+                            {
+                                [application openURL:discordURL options:@{} completionHandler:nil];
+                            }
+                            else
+                            {
+                                [application openURL:webURL options:@{} completionHandler:nil];
+                            }
+                        }]
+        ]
+        timeout:timeout];
 }
 
 + (id)parseJSON:(NSData *)data
@@ -222,6 +343,15 @@ static UIView   *islandOverlayView = nil;
 
 + (NSString *)getDeviceModelIdentifier
 {
+    MobileGestalt *mg          = [MobileGestalt sharedInstance];
+    NSString      *productType = [mg getProductType];
+
+    if (productType)
+    {
+        return productType;
+    }
+
+    // Fallback to utsname if MobileGestalt fails
     struct utsname systemInfo;
     uname(&systemInfo);
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
@@ -496,6 +626,57 @@ static UIView   *islandOverlayView = nil;
     }
 
     return NO;
+}
+
++ (NSArray<NSString *> *)getAvailableAppExtensions
+{
+    NSString *plugInsPath =
+        [[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"PlugIns"];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+
+    if (![fileManager fileExistsAtPath:plugInsPath])
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"No PlugIns folder found"];
+        return @[];
+    }
+
+    NSError *error    = nil;
+    NSArray *contents = [fileManager contentsOfDirectoryAtPath:plugInsPath error:&error];
+
+    if (error)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Failed to read PlugIns directory: %@", error.localizedDescription];
+        return @[];
+    }
+
+    NSMutableArray *extensions = [NSMutableArray array];
+    for (NSString *item in contents)
+    {
+        if ([item hasSuffix:@".appex"])
+        {
+            NSString *extensionName = [item stringByDeletingPathExtension];
+            [extensions addObject:extensionName];
+        }
+    }
+
+    [Logger info:LOG_CATEGORY_UTILITIES
+          format:@"Found %lu app extensions: %@", (unsigned long) extensions.count, extensions];
+    return [extensions copy];
+}
+
++ (BOOL)hasAppExtension:(NSString *)extensionName
+{
+    NSString *plugInsPath =
+        [[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"PlugIns"];
+    NSString *extensionPath = [plugInsPath
+        stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.appex", extensionName]];
+
+    BOOL exists = [[NSFileManager defaultManager] fileExistsAtPath:extensionPath];
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"App extension '%@' %@", extensionName, exists ? @"found" : @"not found"];
+
+    return exists;
 }
 
 // TODO: remove before initial release

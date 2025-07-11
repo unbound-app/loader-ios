@@ -44,12 +44,18 @@ on:
       ipa_url:
         description: "Download URL for the ipa file artifact"
         value: ${{ jobs.build-ipa.outputs.ipa_url }}
+      simulator_url:
+        description: "Download URL for the iOS Simulator zip artifact"
+        value: ${{ jobs.build-simulator.outputs.simulator_url }}
       deb_filename:
         description: "Filename of the deb package"
         value: ${{ jobs.build-tweak.outputs.deb_filename }}
       ipa_filename:
         description: "Filename of the ipa file"
         value: ${{ jobs.build-ipa.outputs.ipa_filename }}
+      simulator_filename:
+        description: "Filename of the iOS Simulator zip"
+        value: ${{ jobs.build-simulator.outputs.simulator_filename }}
 
 permissions:
   contents: write
@@ -274,10 +280,64 @@ jobs:
         id: set-ipa-filename
         run: echo "filename=${{ env.APP_NAME }}.ipa" >> $GITHUB_OUTPUT
 
+  build-simulator:
+    runs-on: macos-15
+    needs: build-ipa
+    outputs:
+      simulator_url: ${{ steps.upload-simulator.outputs.artifact-url }}
+      simulator_filename: ${{ steps.set-simulator-filename.outputs.filename }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download ipa artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ipa
+
+      - name: Extract app name
+        run: |
+          NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
+          echo "APP_NAME=$NAME" >> $GITHUB_ENV
+
+      - name: Extract IPA
+        run: |
+          unzip -q ${{ env.APP_NAME }}.ipa
+          ls -la Payload/
+
+      - name: Download simforge
+        run: |
+          curl -L -o simforge https://github.com/EthanArbuckle/simforge/releases/latest/download/simforge
+          sudo chmod +x simforge
+
+      - name: Convert for iOS Simulator
+        run: |
+          ./simforge convert Payload/Discord.app
+          codesign -f -s - Payload/Discord.app/Frameworks/* || true
+          codesign -f -s - Payload/Discord.app
+
+      - name: Create zip archive
+        run: |
+          cd Payload
+          zip -r ../unbound-ios-simulator.zip Discord.app
+          cd ..
+
+      - name: Upload iOS Simulator artifact
+        id: upload-simulator
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator
+          path: unbound-ios-simulator.zip
+
+      - name: Set simulator filename
+        id: set-simulator-filename
+        run: echo "filename=unbound-ios-simulator.zip" >> $GITHUB_OUTPUT
+
   release-app:
     if: inputs.caller_workflow != 'ci' && inputs.release == true
     runs-on: macos-15
-    needs: build-ipa
+    needs: [build-tweak, build-ipa, build-simulator]
 
     steps:
       - name: Checkout code
@@ -306,8 +366,9 @@ jobs:
         with:
           tag_name: v${{ env.DISCORD_VERSION }}
           files: |
-            *.deb
-            *.ipa
+            ${{ needs.build-tweak.outputs.deb_filename }}
+            ${{ needs.build-simulator.outputs.simulator_filename }}
+            ${{ needs.build-ipa.outputs.ipa_filename }}
           generate_release_notes: true
           prerelease: ${{ inputs.is_testflight }}
           fail_on_unmatched_files: true
