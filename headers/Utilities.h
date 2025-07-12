@@ -45,6 +45,7 @@
 + (BOOL)isAppStoreApp;
 + (BOOL)isTestFlightApp;
 + (BOOL)isTrollStoreApp;
++ (NSString *)getTrollStoreVariant;
 + (BOOL)isSystemApp;
 + (BOOL)isJailbroken;
 

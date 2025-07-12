@@ -759,52 +759,13 @@ BOOL isRecoveryModeEnabled(void)
     }
     else if ([Utilities isTrollStoreApp])
     {
-        // Check which TrollStore variant is installed
-        void *sbs_lib = dlopen(
-            "/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices",
-            RTLD_NOW);
-        if (sbs_lib)
-        {
-            void *sbs_addr =
-                dlsym(sbs_lib, "SBSLaunchApplicationWithIdentifierAndURLAndLaunchOptions");
-            if (sbs_addr)
-            {
-                typedef int (*sb_func_t)(NSString *, NSURL *, NSDictionary *, NSDictionary *, BOOL);
-                sb_func_t func = (sb_func_t) sbs_addr;
-
-                int trollStoreResult     = func(@"com.opa334.TrollStore", nil, nil, nil, true);
-                int trollStoreLiteResult = func(@"com.opa334.TrollStoreLite", nil, nil, nil, true);
-
-                if (trollStoreResult == 9)
-                {
-                    appSource = @"TrollStore";
-                }
-                else if (trollStoreLiteResult == 9)
-                {
-                    appSource = @"TrollStore Lite";
-                }
-                else
-                {
-                    appSource = @"Unknown";
-                }
-            }
-            else
-            {
-                appSource = @"TrollStore";
-            }
-            dlclose(sbs_lib);
-        }
-        else
-        {
-            appSource = @"TrollStore";
-        }
+        appSource = [Utilities getTrollStoreVariant];
     }
     else
     {
         appSource = @"Sideloaded";
     }
 
-    // Get app registration type
     NSString *appRegistrationType = [Utilities isSystemApp] ? @"System" : @"User";
 
     NSString *body =
@@ -827,7 +788,7 @@ BOOL isRecoveryModeEnabled(void)
                                    buildNumber, [Utilities getHermesBytecodeVersion], appSource,
                                    appRegistrationType, [Utilities isJailbroken] ? @"Yes" : @"No"];
 
-    NSString *encodedTitle = [@"bug(iOS): "
+    NSString *encodedTitle = [@"bug(iOS): replace this with a descriptive title"
         stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet
                                                                URLQueryAllowedCharacterSet]];
     NSString *encodedBody =
@@ -954,7 +915,7 @@ void showMenuSheet(void)
 
     // Store window reference so it stays alive
     objc_setAssociatedObject(navController, "recoveryTopWindow", topWindow,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     Method dismissMethod =
         class_getInstanceMethod([UnboundMenuViewController class], @selector(dismiss));

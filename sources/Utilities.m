@@ -353,54 +353,47 @@ static UIView   *islandOverlayView = nil;
         return NO;
     }
 
-    if (![self isSystemApp])
-    {
-        return NO;
-    }
+    NSString *bundlePath     = [[NSBundle mainBundle] bundlePath];
+    NSString *trollStorePath = [bundlePath stringByAppendingPathComponent:@"../_TrollStore"];
+    NSString *trollStoreLitePath =
+        [bundlePath stringByAppendingPathComponent:@"../_TrollStoreLite"];
 
-    void *sbs_lib = dlopen(
-        "/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices",
-        RTLD_NOW);
-    if (!sbs_lib)
-    {
-        [Logger debug:LOG_CATEGORY_UTILITIES
-               format:@"Failed to load SpringBoardServices framework"];
-        return NO;
-    }
+    // Check for TrollStore marker file
+    BOOL hasTrollStore = (access([trollStorePath UTF8String], F_OK) == 0);
 
-    void *sbs_addr = dlsym(sbs_lib, "SBSLaunchApplicationWithIdentifierAndURLAndLaunchOptions");
-    if (!sbs_addr)
-    {
-        [Logger
-             debug:LOG_CATEGORY_UTILITIES
-            format:
-                @"Failed to find SBSLaunchApplicationWithIdentifierAndURLAndLaunchOptions symbol"];
-        dlclose(sbs_lib);
-        return NO;
-    }
+    // Check for TrollStore Lite marker file
+    BOOL hasTrollStoreLite = (access([trollStoreLitePath UTF8String], F_OK) == 0);
 
-    typedef int (*sb_func_t)(NSString *, NSURL *, NSDictionary *, NSDictionary *, BOOL);
-    sb_func_t func = (sb_func_t) sbs_addr;
-
-    // Check for TrollStore
-    int trollStoreResult = func(@"com.opa334.TrollStore", nil, nil, nil, true);
-
-    // Check for TrollStore Lite
-    int trollStoreLiteResult = func(@"com.opa334.TrollStoreLite", nil, nil, nil, true);
-
-    dlclose(sbs_lib);
-
-    // Return code 9 means the app exists but couldn't be launched (expected for suspended launch)
-    BOOL hasTrollStore     = (trollStoreResult == 9);
-    BOOL hasTrollStoreLite = (trollStoreLiteResult == 9);
-    BOOL isTrollStore      = hasTrollStore || hasTrollStoreLite;
+    BOOL isTrollStore = hasTrollStore || hasTrollStoreLite;
 
     [Logger debug:LOG_CATEGORY_UTILITIES
-           format:@"TrollStore detection - Regular: %d (%@), Lite: %d (%@), isTrollStore: %@",
-                  trollStoreResult, hasTrollStore ? @"YES" : @"NO", trollStoreLiteResult,
-                  hasTrollStoreLite ? @"YES" : @"NO", isTrollStore ? @"YES" : @"NO"];
+           format:@"TrollStore detection - Regular: %@, Lite: %@, isTrollStore: %@",
+                  hasTrollStore ? @"YES" : @"NO", hasTrollStoreLite ? @"YES" : @"NO",
+                  isTrollStore ? @"YES" : @"NO"];
 
     return isTrollStore;
+}
+
++ (NSString *)getTrollStoreVariant
+{
+    NSString *bundlePath     = [[NSBundle mainBundle] bundlePath];
+    NSString *trollStorePath = [bundlePath stringByAppendingPathComponent:@"../_TrollStore"];
+    NSString *trollStoreLitePath =
+        [bundlePath stringByAppendingPathComponent:@"../_TrollStoreLite"];
+
+    BOOL hasTrollStore     = (access([trollStorePath UTF8String], F_OK) == 0);
+    BOOL hasTrollStoreLite = (access([trollStoreLitePath UTF8String], F_OK) == 0);
+
+    if (hasTrollStore)
+    {
+        return @"TrollStore";
+    }
+    else if (hasTrollStoreLite)
+    {
+        return @"TrollStore Lite";
+    }
+
+    return @"Unknown";
 }
 
 + (BOOL)isSystemApp
