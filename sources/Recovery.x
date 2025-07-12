@@ -757,10 +757,55 @@ BOOL isRecoveryModeEnabled(void)
     {
         appSource = @"TestFlight";
     }
+    else if ([Utilities isTrollStoreApp])
+    {
+        // Check which TrollStore variant is installed
+        void *sbs_lib = dlopen(
+            "/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices",
+            RTLD_NOW);
+        if (sbs_lib)
+        {
+            void *sbs_addr =
+                dlsym(sbs_lib, "SBSLaunchApplicationWithIdentifierAndURLAndLaunchOptions");
+            if (sbs_addr)
+            {
+                typedef int (*sb_func_t)(NSString *, NSURL *, NSDictionary *, NSDictionary *, BOOL);
+                sb_func_t func = (sb_func_t) sbs_addr;
+
+                int trollStoreResult     = func(@"com.opa334.TrollStore", nil, nil, nil, true);
+                int trollStoreLiteResult = func(@"com.opa334.TrollStoreLite", nil, nil, nil, true);
+
+                if (trollStoreResult == 9)
+                {
+                    appSource = @"TrollStore";
+                }
+                else if (trollStoreLiteResult == 9)
+                {
+                    appSource = @"TrollStore Lite";
+                }
+                else
+                {
+                    appSource = @"Unknown";
+                }
+            }
+            else
+            {
+                appSource = @"TrollStore";
+            }
+            dlclose(sbs_lib);
+        }
+        else
+        {
+            appSource = @"TrollStore";
+        }
+    }
     else
     {
         appSource = @"Sideloaded";
     }
+
+    // Get app registration type
+    NSString *appRegistrationType = [Utilities isSystemApp] ? @"System" : @"User";
 
     NSString *body =
         [NSString stringWithFormat:@"### Device Information\n"
@@ -770,6 +815,7 @@ BOOL isRecoveryModeEnabled(void)
                                     "- App Version: `%@ (%@)`\n"
                                     "- HBC Version: `%u`\n"
                                     "- App Source: `%@`\n"
+                                    "- App Registration: `%@`\n"
                                     "- Jailbroken: `%@`\n\n"
                                     "### Issue Description\n"
                                     "<!-- Describe your issue here -->\n\n"
@@ -779,7 +825,7 @@ BOOL isRecoveryModeEnabled(void)
                                     "### Actual Behavior\n",
                                    deviceModel, iosVersionString, PACKAGE_VERSION, appVersion,
                                    buildNumber, [Utilities getHermesBytecodeVersion], appSource,
-                                   [Utilities isJailbroken] ? @"Yes" : @"No"];
+                                   appRegistrationType, [Utilities isJailbroken] ? @"Yes" : @"No"];
 
     NSString *encodedTitle = [@"bug(iOS): "
         stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet

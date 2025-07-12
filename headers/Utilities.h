@@ -44,6 +44,8 @@
 + (void *)getHermesSymbol:(const char *)symbol error:(NSString **)error;
 + (BOOL)isAppStoreApp;
 + (BOOL)isTestFlightApp;
++ (BOOL)isTrollStoreApp;
++ (BOOL)isSystemApp;
 + (BOOL)isJailbroken;
 
 + (NSString *)getDeviceModel;

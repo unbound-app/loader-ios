@@ -346,6 +346,127 @@ static UIView   *islandOverlayView = nil;
     return [appStoreReceiptURL.lastPathComponent isEqualToString:@"sandboxReceipt"];
 }
 
++ (BOOL)isTrollStoreApp
+{
+    if ([self isAppStoreApp] || [self isTestFlightApp])
+    {
+        return NO;
+    }
+
+    if (![self isSystemApp])
+    {
+        return NO;
+    }
+
+    void *sbs_lib = dlopen(
+        "/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices",
+        RTLD_NOW);
+    if (!sbs_lib)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"Failed to load SpringBoardServices framework"];
+        return NO;
+    }
+
+    void *sbs_addr = dlsym(sbs_lib, "SBSLaunchApplicationWithIdentifierAndURLAndLaunchOptions");
+    if (!sbs_addr)
+    {
+        [Logger
+             debug:LOG_CATEGORY_UTILITIES
+            format:
+                @"Failed to find SBSLaunchApplicationWithIdentifierAndURLAndLaunchOptions symbol"];
+        dlclose(sbs_lib);
+        return NO;
+    }
+
+    typedef int (*sb_func_t)(NSString *, NSURL *, NSDictionary *, NSDictionary *, BOOL);
+    sb_func_t func = (sb_func_t) sbs_addr;
+
+    // Check for TrollStore
+    int trollStoreResult = func(@"com.opa334.TrollStore", nil, nil, nil, true);
+
+    // Check for TrollStore Lite
+    int trollStoreLiteResult = func(@"com.opa334.TrollStoreLite", nil, nil, nil, true);
+
+    dlclose(sbs_lib);
+
+    // Return code 9 means the app exists but couldn't be launched (expected for suspended launch)
+    BOOL hasTrollStore     = (trollStoreResult == 9);
+    BOOL hasTrollStoreLite = (trollStoreLiteResult == 9);
+    BOOL isTrollStore      = hasTrollStore || hasTrollStoreLite;
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"TrollStore detection - Regular: %d (%@), Lite: %d (%@), isTrollStore: %@",
+                  trollStoreResult, hasTrollStore ? @"YES" : @"NO", trollStoreLiteResult,
+                  hasTrollStoreLite ? @"YES" : @"NO", isTrollStore ? @"YES" : @"NO"];
+
+    return isTrollStore;
+}
+
++ (BOOL)isSystemApp
+{
+    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+    if (!bundleID)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"No bundle identifier found"];
+        return NO;
+    }
+
+    Class LSApplicationProxyClass = NSClassFromString(@"LSApplicationProxy");
+    if (!LSApplicationProxyClass)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"LSApplicationProxy class not found"];
+        return NO;
+    }
+
+    SEL applicationProxySelector = @selector(applicationProxyForIdentifier:);
+    if (![LSApplicationProxyClass respondsToSelector:applicationProxySelector])
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"LSApplicationProxy doesn't respond to applicationProxyForIdentifier:"];
+        return NO;
+    }
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    id proxy = [LSApplicationProxyClass performSelector:applicationProxySelector
+                                             withObject:bundleID];
+#pragma clang diagnostic pop
+
+    if (!proxy)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"Failed to get application proxy for %@", bundleID];
+        return NO;
+    }
+
+    SEL applicationTypeSelector = @selector(applicationType);
+    if (![proxy respondsToSelector:applicationTypeSelector])
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"Application proxy doesn't respond to applicationType"];
+        return NO;
+    }
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    NSString *appType = [proxy performSelector:applicationTypeSelector];
+#pragma clang diagnostic pop
+
+    if (!appType)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"Failed to get application type"];
+        return NO;
+    }
+
+    BOOL isSystem = [appType isEqualToString:@"System"];
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"Application type: %@, isSystemApp: %@", appType, isSystem ? @"YES" : @"NO"];
+
+    return isSystem;
+}
+
 + (BOOL)isJailbroken
 {
     return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];

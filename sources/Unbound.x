@@ -156,7 +156,8 @@ id gBridge = nil;
 
     dispatch_after(
         dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp])
+            if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp] &&
+                ![Utilities isTrollStoreApp])
             {
                 [Logger info:LOG_CATEGORY_DEFAULT
                       format:@"App is sideloaded, checking for critical extensions"];
@@ -190,7 +191,23 @@ id gBridge = nil;
             }
             else
             {
-                NSString *appType = [Utilities isAppStoreApp] ? @"App Store" : @"TestFlight";
+                NSString *appType;
+                if ([Utilities isAppStoreApp])
+                {
+                    appType = @"App Store";
+                }
+                else if ([Utilities isTestFlightApp])
+                {
+                    appType = @"TestFlight";
+                }
+                else if ([Utilities isTrollStoreApp])
+                {
+                    appType = @"TrollStore";
+                }
+                else
+                {
+                    appType = @"Unknown";
+                }
                 [Logger info:LOG_CATEGORY_DEFAULT
                       format:@"%@ app detected, skipping extension checks", appType];
             }

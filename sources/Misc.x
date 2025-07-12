@@ -270,7 +270,7 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
     %init(Debug);
 #endif
 
-    if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp])
+    if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp] && ![Utilities isTrollStoreApp])
     {
         %init(Sideloading);
     }
