@@ -205,7 +205,7 @@ id gBridge = nil;
                 }
                 else if ([Utilities isTrollStoreApp])
                 {
-                    appType = @"TrollStore";
+                    appType = [Utilities getTrollStoreVariant];
                 }
                 else
                 {
