@@ -6,6 +6,10 @@
 #import "FileSystem.h"
 #import "Unbound.h"
 
+extern NSString * const TROLL_STORE_PATH;
+extern NSString * const TROLL_STORE_LITE_PATH;
+extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
+
 @interface Utilities : NSObject
 {
     NSString *bundle;
@@ -64,7 +68,6 @@
 + (NSDictionary *)getApplicationSignatureInfo;
 + (void)logApplicationSignatureInfo;
 
-// Private methods for signature parsing
 + (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements;
 
 // TODO: remove before initial release

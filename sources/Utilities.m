@@ -3,6 +3,11 @@
 
 #import "Utilities.h"
 
+NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
+NSString *const TROLL_STORE_LITE_PATH = @"../_TrollStoreLite";
+
+const CGFloat DYNAMIC_ISLAND_TOP_INSET = 59.0;
+
 @implementation Utilities
 static NSString *bundle            = nil;
 static UIView   *islandOverlayView = nil;
@@ -349,6 +354,18 @@ static UIView   *islandOverlayView = nil;
     return [appStoreReceiptURL.lastPathComponent isEqualToString:@"sandboxReceipt"];
 }
 
++ (NSDictionary *)checkTrollStorePaths:(NSString *)bundlePath
+{
+    NSString *trollStorePath = [bundlePath stringByAppendingPathComponent:TROLL_STORE_PATH];
+    NSString *trollStoreLitePath =
+        [bundlePath stringByAppendingPathComponent:TROLL_STORE_LITE_PATH];
+
+    BOOL hasTrollStore     = (access([trollStorePath UTF8String], F_OK) == 0);
+    BOOL hasTrollStoreLite = (access([trollStoreLitePath UTF8String], F_OK) == 0);
+
+    return @{@"hasTrollStore" : @(hasTrollStore), @"hasTrollStoreLite" : @(hasTrollStoreLite)};
+}
+
 + (BOOL)isTrollStoreApp
 {
     if ([self isAppStoreApp] || [self isTestFlightApp])
@@ -356,18 +373,12 @@ static UIView   *islandOverlayView = nil;
         return NO;
     }
 
-    NSString *bundlePath     = [[NSBundle mainBundle] bundlePath];
-    NSString *trollStorePath = [bundlePath stringByAppendingPathComponent:@"../_TrollStore"];
-    NSString *trollStoreLitePath =
-        [bundlePath stringByAppendingPathComponent:@"../_TrollStoreLite"];
+    NSString     *bundlePath      = [[NSBundle mainBundle] bundlePath];
+    NSDictionary *trollStorePaths = [self checkTrollStorePaths:bundlePath];
 
-    // Check for TrollStore marker file
-    BOOL hasTrollStore = (access([trollStorePath UTF8String], F_OK) == 0);
-
-    // Check for TrollStore Lite marker file
-    BOOL hasTrollStoreLite = (access([trollStoreLitePath UTF8String], F_OK) == 0);
-
-    BOOL isTrollStore = hasTrollStore || hasTrollStoreLite;
+    BOOL hasTrollStore     = [trollStorePaths[@"hasTrollStore"] boolValue];
+    BOOL hasTrollStoreLite = [trollStorePaths[@"hasTrollStoreLite"] boolValue];
+    BOOL isTrollStore      = hasTrollStore || hasTrollStoreLite;
 
     [Logger debug:LOG_CATEGORY_UTILITIES
            format:@"TrollStore detection - Regular: %@, Lite: %@, isTrollStore: %@",
@@ -379,19 +390,14 @@ static UIView   *islandOverlayView = nil;
 
 + (NSString *)getTrollStoreVariant
 {
-    NSString *bundlePath     = [[NSBundle mainBundle] bundlePath];
-    NSString *trollStorePath = [bundlePath stringByAppendingPathComponent:@"../_TrollStore"];
-    NSString *trollStoreLitePath =
-        [bundlePath stringByAppendingPathComponent:@"../_TrollStoreLite"];
+    NSString     *bundlePath      = [[NSBundle mainBundle] bundlePath];
+    NSDictionary *trollStorePaths = [self checkTrollStorePaths:bundlePath];
 
-    BOOL hasTrollStore     = (access([trollStorePath UTF8String], F_OK) == 0);
-    BOOL hasTrollStoreLite = (access([trollStoreLitePath UTF8String], F_OK) == 0);
-
-    if (hasTrollStore)
+    if ([trollStorePaths[@"hasTrollStore"] boolValue])
     {
         return @"TrollStore";
     }
-    else if (hasTrollStoreLite)
+    else if ([trollStorePaths[@"hasTrollStoreLite"] boolValue])
     {
         return @"TrollStore Lite";
     }
@@ -519,7 +525,7 @@ static UIView   *islandOverlayView = nil;
     }
 
     CGFloat topInset         = keyWindow.safeAreaInsets.top;
-    BOOL    hasDynamicIsland = topInset == 59.0;
+    BOOL    hasDynamicIsland = topInset == DYNAMIC_ISLAND_TOP_INSET;
 
     [Logger debug:LOG_CATEGORY_UTILITIES
            format:@"Key window top safe area inset: %.1f, Dynamic Island: %@", topInset,
