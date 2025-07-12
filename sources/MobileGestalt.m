@@ -109,79 +109,14 @@
     return nil;
 }
 
-- (nullable NSString *)getProductName
-{
-    return [self getValueForKey:@"ProductName"];
-}
-
-- (nullable NSString *)getProductType
-{
-    return [self getValueForKey:@"ProductType"];
-}
-
-- (nullable NSString *)getProductVersion
-{
-    return [self getValueForKey:@"ProductVersion"];
-}
-
 - (nullable NSString *)getBuildVersion
 {
     return [self getValueForKey:@"BuildVersion"];
 }
 
-- (nullable NSString *)getDeviceClass
-{
-    return [self getValueForKey:@"DeviceClass"];
-}
-
 - (nullable NSString *)getPhysicalHardwareNameString
 {
     return [self getValueForKey:@"PhysicalHardwareNameString"];
-}
-
-- (nullable NSString *)getBoardId
-{
-    return [self getValueForKey:@"BoardId"];
-}
-
-- (nullable NSString *)getDeviceColor
-{
-    return [self getValueForKey:@"DeviceColor"];
-}
-
-- (nullable NSString *)getRegionInfo
-{
-    return [self getValueForKey:@"RegionInfo"];
-}
-
-- (nullable NSString *)getCPUArchitecture
-{
-    return [self getValueForKey:@"CPUArchitecture"];
-}
-
-- (nullable NSString *)getFirmwareVersion
-{
-    return [self getValueForKey:@"FirmwareVersion"];
-}
-
-- (nullable NSString *)getHWModelStr
-{
-    return [self getValueForKey:@"HWModelStr"];
-}
-
-- (nullable NSString *)getIsVirtualDevice
-{
-    return [self getValueForKey:@"IsVirtualDevice"];
-}
-
-- (nullable NSString *)getSoftwareBehavior
-{
-    return [self getValueForKey:@"SoftwareBehavior"];
-}
-
-- (nullable NSString *)getPartitionType
-{
-    return [self getValueForKey:@"PartitionType"];
 }
 
 @end
