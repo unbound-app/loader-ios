@@ -336,6 +336,16 @@ static UIView   *islandOverlayView = nil;
         fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
 }
 
++ (BOOL)isTestFlightApp
+{
+    NSURL *appStoreReceiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
+    if (!appStoreReceiptURL)
+    {
+        return NO;
+    }
+    return [appStoreReceiptURL.lastPathComponent isEqualToString:@"sandboxReceipt"];
+}
+
 + (BOOL)isJailbroken
 {
     return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];

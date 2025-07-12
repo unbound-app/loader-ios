@@ -161,8 +161,8 @@ BOOL isRecoveryModeEnabled(void)
                                          },
                                          nil];
 
-    // Only add app icon toggle if the app is sideloaded
-    if (![Utilities isAppStoreApp])
+    // Only add app icon toggle if the app is sideloaded (not App Store or TestFlight)
+    if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp])
     {
         [settingsItems addObject:@{
             @"title" : @"Use Unbound Icon",
@@ -748,6 +748,20 @@ BOOL isRecoveryModeEnabled(void)
                  ? [NSString stringWithFormat:@"%@ (%@)", device.systemVersion, iosBuildVersion]
                  : device.systemVersion;
 
+    NSString *appSource;
+    if ([Utilities isAppStoreApp])
+    {
+        appSource = @"App Store";
+    }
+    else if ([Utilities isTestFlightApp])
+    {
+        appSource = @"TestFlight";
+    }
+    else
+    {
+        appSource = @"Sideloaded";
+    }
+
     NSString *body =
         [NSString stringWithFormat:@"### Device Information\n"
                                     "- Device: `%@`\n"
@@ -755,7 +769,7 @@ BOOL isRecoveryModeEnabled(void)
                                     "- Tweak Version: `%@`\n"
                                     "- App Version: `%@ (%@)`\n"
                                     "- HBC Version: `%u`\n"
-                                    "- Sideloaded: `%@`\n"
+                                    "- App Source: `%@`\n"
                                     "- Jailbroken: `%@`\n\n"
                                     "### Issue Description\n"
                                     "<!-- Describe your issue here -->\n\n"
@@ -764,8 +778,7 @@ BOOL isRecoveryModeEnabled(void)
                                     "### Expected Behavior\n\n"
                                     "### Actual Behavior\n",
                                    deviceModel, iosVersionString, PACKAGE_VERSION, appVersion,
-                                   buildNumber, [Utilities getHermesBytecodeVersion],
-                                   [Utilities isAppStoreApp] ? @"No" : @"Yes",
+                                   buildNumber, [Utilities getHermesBytecodeVersion], appSource,
                                    [Utilities isJailbroken] ? @"Yes" : @"No"];
 
     NSString *encodedTitle = [@"bug(iOS): "

@@ -43,6 +43,7 @@
 + (BOOL)isHermesBytecode:(NSData *)data;
 + (void *)getHermesSymbol:(const char *)symbol error:(NSString **)error;
 + (BOOL)isAppStoreApp;
++ (BOOL)isTestFlightApp;
 + (BOOL)isJailbroken;
 
 + (NSString *)getDeviceModel;
