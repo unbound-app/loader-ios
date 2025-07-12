@@ -368,13 +368,47 @@ static UIView   *islandOverlayView = nil;
 
 + (BOOL)deviceHasDynamicIsland
 {
-    NSString *identifier           = [self getDeviceModel];
-    NSArray  *dynamicIslandDevices = @[
-        @"iPhone15,2", @"iPhone15,3", @"iPhone15,4", @"iPhone15,5", @"iPhone16,1", @"iPhone16,2",
-        @"iPhone17,1", @"iPhone17,2", @"iPhone17,3", @"iPhone17,4"
-    ];
+    if ([[UIDevice currentDevice] userInterfaceIdiom] != UIUserInterfaceIdiomPhone)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"Not an iPhone, no Dynamic Island"];
+        return NO;
+    }
 
-    return [dynamicIslandDevices containsObject:identifier];
+    UIWindow *keyWindow = nil;
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
+    {
+        if (scene.activationState == UISceneActivationStateForegroundActive &&
+            [scene isKindOfClass:[UIWindowScene class]])
+        {
+            UIWindowScene *windowScene = (UIWindowScene *) scene;
+            for (UIWindow *window in windowScene.windows)
+            {
+                if (window.isKeyWindow)
+                {
+                    keyWindow = window;
+                    break;
+                }
+            }
+            if (keyWindow)
+                break;
+        }
+    }
+
+    if (!keyWindow)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"No key window found, cannot determine Dynamic Island"];
+        return NO;
+    }
+
+    CGFloat topInset         = keyWindow.safeAreaInsets.top;
+    BOOL    hasDynamicIsland = topInset == 59.0;
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"Key window top safe area inset: %.1f, Dynamic Island: %@", topInset,
+                  hasDynamicIsland ? @"YES" : @"NO"];
+
+    return hasDynamicIsland;
 }
 
 + (UIImage *)createLogoImage
