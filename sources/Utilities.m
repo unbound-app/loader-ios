@@ -341,17 +341,16 @@ static UIView   *islandOverlayView = nil;
     return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];
 }
 
-+ (NSString *)getDeviceModelIdentifier
++ (NSString *)getDeviceModel
 {
-    MobileGestalt *mg          = [MobileGestalt sharedInstance];
-    NSString      *productType = [mg getProductType];
+    MobileGestalt *mg                         = [MobileGestalt sharedInstance];
+    NSString      *physicalHardwareNameString = [mg getPhysicalHardwareNameString];
 
-    if (productType)
+    if (physicalHardwareNameString)
     {
-        return productType;
+        return physicalHardwareNameString;
     }
 
-    // Fallback to utsname if MobileGestalt fails
     struct utsname systemInfo;
     uname(&systemInfo);
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
@@ -359,7 +358,7 @@ static UIView   *islandOverlayView = nil;
 
 + (BOOL)deviceHasDynamicIsland
 {
-    NSString *identifier           = [self getDeviceModelIdentifier];
+    NSString *identifier           = [self getDeviceModel];
     NSArray  *dynamicIslandDevices = @[
         @"iPhone15,2", @"iPhone15,3", @"iPhone15,4", @"iPhone15,5", @"iPhone16,1", @"iPhone16,2",
         @"iPhone17,1", @"iPhone17,2", @"iPhone17,3", @"iPhone17,4"
