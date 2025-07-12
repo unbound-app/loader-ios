@@ -133,6 +133,9 @@ id gBridge = nil;
 
 %ctor
 {
+    // Log application signature and entitlements information
+    [Utilities logApplicationSignatureInfo];
+
     // TODO: remove before initial release
 #ifndef DEBUG
     dispatch_after(

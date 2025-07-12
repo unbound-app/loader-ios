@@ -1,3 +1,6 @@
+#import <mach-o/fat.h>
+#import <mach-o/loader.h>
+
 #import "Utilities.h"
 
 @implementation Utilities
@@ -834,6 +837,544 @@ static UIView   *islandOverlayView = nil;
            format:@"App extension '%@' %@", extensionName, exists ? @"found" : @"not found"];
 
     return exists;
+}
+
++ (NSDictionary *)getApplicationEntitlements
+{
+    NSDictionary *signatureInfo = [self getApplicationSignatureInfo];
+    return signatureInfo[@"entitlements"] ?: @{};
+}
+
++ (NSDictionary *)getApplicationSignatureInfo
+{
+    NSBundle *bundle         = [NSBundle mainBundle];
+    NSString *executableName = bundle.infoDictionary[@"CFBundleExecutable"];
+    if (!executableName)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"No executable name found in bundle"];
+        return @{};
+    }
+
+    NSString *executablePath = [bundle pathForResource:executableName ofType:nil];
+    if (!executablePath)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Executable path not found for %@", executableName];
+        return @{};
+    }
+
+    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Reading signature info from: %@", executablePath];
+
+    FILE *file = fopen([executablePath UTF8String], "rb");
+    if (!file)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to open executable file"];
+        return @{};
+    }
+
+    // Read Mach-O header
+    uint32_t magic;
+    if (fread(&magic, sizeof(magic), 1, file) != 1)
+    {
+        fclose(file);
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to read magic number"];
+        return @{};
+    }
+
+    // Rewind and determine architecture
+    fseek(file, 0, SEEK_SET);
+
+    NSDictionary *result = nil;
+    if (magic == MH_MAGIC_64 || magic == MH_CIGAM_64)
+    {
+        result = [self readSignatureInfoFrom64BitBinary:file];
+    }
+    else if (magic == MH_MAGIC || magic == MH_CIGAM)
+    {
+        result = [self readSignatureInfoFrom32BitBinary:file];
+    }
+    else if (magic == FAT_MAGIC || magic == FAT_CIGAM)
+    {
+        [Logger info:LOG_CATEGORY_UTILITIES format:@"Fat binary detected, using first slice"];
+        // For simplicity, we'll skip fat binary parsing and return empty
+        result = @{};
+    }
+    else
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"Unknown binary format: 0x%x", magic];
+        result = @{};
+    }
+
+    fclose(file);
+    return result ?: @{};
+}
+
++ (NSDictionary *)readSignatureInfoFrom64BitBinary:(FILE *)file
+{
+    struct mach_header_64 header;
+    if (fread(&header, sizeof(header), 1, file) != 1)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to read 64-bit Mach-O header"];
+        return nil;
+    }
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"64-bit binary with %u load commands", header.ncmds];
+
+    // Look for LC_CODE_SIGNATURE load command
+    for (uint32_t i = 0; i < header.ncmds; i++)
+    {
+        struct load_command cmd;
+        long                cmdPos = ftell(file);
+
+        if (fread(&cmd, sizeof(cmd), 1, file) != 1)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to read load command %u", i];
+            return nil;
+        }
+
+        if (cmd.cmd == LC_CODE_SIGNATURE)
+        {
+            struct linkedit_data_command sigCmd;
+            fseek(file, cmdPos, SEEK_SET);
+            if (fread(&sigCmd, sizeof(sigCmd), 1, file) != 1)
+            {
+                [Logger error:LOG_CATEGORY_UTILITIES
+                       format:@"Failed to read code signature command"];
+                return nil;
+            }
+
+            [Logger debug:LOG_CATEGORY_UTILITIES
+                   format:@"Found code signature at offset 0x%x, size %u", sigCmd.dataoff,
+                          sigCmd.datasize];
+
+            return [self readCompleteSignatureInfo:file offset:sigCmd.dataoff size:sigCmd.datasize];
+        }
+
+        // Skip to next command
+        fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
+    }
+
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"No code signature found in 64-bit binary"];
+    return nil;
+}
+
++ (NSDictionary *)readSignatureInfoFrom32BitBinary:(FILE *)file
+{
+    struct mach_header header;
+    if (fread(&header, sizeof(header), 1, file) != 1)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to read 32-bit Mach-O header"];
+        return nil;
+    }
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"32-bit binary with %u load commands", header.ncmds];
+
+    // Look for LC_CODE_SIGNATURE load command
+    for (uint32_t i = 0; i < header.ncmds; i++)
+    {
+        struct load_command cmd;
+        long                cmdPos = ftell(file);
+
+        if (fread(&cmd, sizeof(cmd), 1, file) != 1)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to read load command %u", i];
+            return nil;
+        }
+
+        if (cmd.cmd == LC_CODE_SIGNATURE)
+        {
+            struct linkedit_data_command sigCmd;
+            fseek(file, cmdPos, SEEK_SET);
+            if (fread(&sigCmd, sizeof(sigCmd), 1, file) != 1)
+            {
+                [Logger error:LOG_CATEGORY_UTILITIES
+                       format:@"Failed to read code signature command"];
+                return nil;
+            }
+
+            [Logger debug:LOG_CATEGORY_UTILITIES
+                   format:@"Found code signature at offset 0x%x, size %u", sigCmd.dataoff,
+                          sigCmd.datasize];
+
+            return [self readCompleteSignatureInfo:file offset:sigCmd.dataoff size:sigCmd.datasize];
+        }
+
+        // Skip to next command
+        fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
+    }
+
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"No code signature found in 32-bit binary"];
+    return nil;
+}
+
++ (NSDictionary *)readCompleteSignatureInfo:(FILE *)file offset:(uint32_t)offset size:(uint32_t)size
+{
+    if (fseek(file, offset, SEEK_SET) != 0)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Failed to seek to signature offset 0x%x", offset];
+        return nil;
+    }
+
+    // Read CS_SuperBlob header
+    struct {
+        uint32_t magic;
+        uint32_t length;
+        uint32_t count;
+    } superBlob;
+
+    if (fread(&superBlob, sizeof(superBlob), 1, file) != 1)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to read superblob header"];
+        return nil;
+    }
+
+    // Convert from big-endian if needed
+    superBlob.magic  = CFSwapInt32BigToHost(superBlob.magic);
+    superBlob.length = CFSwapInt32BigToHost(superBlob.length);
+    superBlob.count  = CFSwapInt32BigToHost(superBlob.count);
+
+    if (superBlob.magic != 0xfade0cc0)
+    { // CSMAGIC_EMBEDDED_SIGNATURE
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Invalid superblob magic: 0x%x", superBlob.magic];
+        return nil;
+    }
+
+    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Superblob contains %u blobs", superBlob.count];
+
+    NSMutableDictionary *signatureInfo = [NSMutableDictionary dictionary];
+    signatureInfo[@"signatureSize"]    = @(size);
+    signatureInfo[@"blobCount"]        = @(superBlob.count);
+
+    // Read blob index table
+    NSMutableArray *blobTypes = [NSMutableArray array];
+    for (uint32_t i = 0; i < superBlob.count; i++)
+    {
+        struct {
+            uint32_t type;
+            uint32_t offset;
+        } blobIndex;
+
+        if (fread(&blobIndex, sizeof(blobIndex), 1, file) != 1)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to read blob index %u", i];
+            continue;
+        }
+
+        blobIndex.type   = CFSwapInt32BigToHost(blobIndex.type);
+        blobIndex.offset = CFSwapInt32BigToHost(blobIndex.offset);
+
+        long currentPos = ftell(file);
+
+        // Process specific blob types
+        switch (blobIndex.type)
+        {
+            case 0: // CSSLOT_CODEDIRECTORY
+                [blobTypes addObject:@"CodeDirectory"];
+                [self readCodeDirectory:file offset:offset + blobIndex.offset info:signatureInfo];
+                break;
+
+            case 1: // CSSLOT_INFOSLOT
+                [blobTypes addObject:@"InfoSlot"];
+                break;
+
+            case 2: // CSSLOT_REQUIREMENTS
+                [blobTypes addObject:@"Requirements"];
+                break;
+
+            case 3: // CSSLOT_RESOURCEDIR
+                [blobTypes addObject:@"ResourceDirectory"];
+                break;
+
+            case 4: // CSSLOT_APPLICATION
+                [blobTypes addObject:@"Application"];
+                break;
+
+            case 5: // CSSLOT_ENTITLEMENTS
+                [blobTypes addObject:@"Entitlements"];
+                [self readEntitlements:file offset:offset + blobIndex.offset info:signatureInfo];
+                break;
+
+            case 0x1000: // CSSLOT_SIGNATURESLOT
+                [blobTypes addObject:@"CMS Signature"];
+                [self readCMSSignature:file offset:offset + blobIndex.offset info:signatureInfo];
+                break;
+
+            default:
+                [blobTypes addObject:[NSString stringWithFormat:@"Unknown(0x%x)", blobIndex.type]];
+                [Logger debug:LOG_CATEGORY_UTILITIES
+                       format:@"Unknown blob type: 0x%x at offset 0x%x", blobIndex.type,
+                              blobIndex.offset];
+                break;
+        }
+
+        fseek(file, currentPos, SEEK_SET);
+    }
+
+    signatureInfo[@"blobTypes"] = [blobTypes copy];
+    return [signatureInfo copy];
+}
+
++ (void)readCodeDirectory:(FILE *)file offset:(uint32_t)offset info:(NSMutableDictionary *)info
+{
+    if (fseek(file, offset, SEEK_SET) != 0)
+        return;
+
+    struct {
+        uint32_t magic;
+        uint32_t length;
+        uint32_t version;
+        uint32_t flags;
+        uint32_t hashOffset;
+        uint32_t identOffset;
+        uint32_t nSpecialSlots;
+        uint32_t nCodeSlots;
+        uint32_t codeLimit;
+        uint8_t  hashSize;
+        uint8_t  hashType;
+        uint8_t  platform;
+        uint8_t  pageSize;
+        uint32_t spare2;
+    } codeDir;
+
+    if (fread(&codeDir, sizeof(codeDir), 1, file) != 1)
+        return;
+
+    // Convert from big-endian
+    codeDir.magic       = CFSwapInt32BigToHost(codeDir.magic);
+    codeDir.length      = CFSwapInt32BigToHost(codeDir.length);
+    codeDir.version     = CFSwapInt32BigToHost(codeDir.version);
+    codeDir.flags       = CFSwapInt32BigToHost(codeDir.flags);
+    codeDir.identOffset = CFSwapInt32BigToHost(codeDir.identOffset);
+
+    if (codeDir.magic != 0xfade0c02)
+        return; // CSMAGIC_CODEDIRECTORY
+
+    info[@"codeDirectoryVersion"] = @(codeDir.version);
+    info[@"codeDirectoryFlags"]   = @(codeDir.flags);
+    info[@"hashType"]             = @(codeDir.hashType);
+    info[@"platform"]             = @(codeDir.platform);
+
+    // Read application identifier from CodeDirectory
+    if (codeDir.identOffset > 0 && codeDir.identOffset < codeDir.length)
+    {
+        if (fseek(file, offset + codeDir.identOffset, SEEK_SET) == 0)
+        {
+            // Read up to 256 characters or until null terminator
+            char   identifier[257] = {0}; // Extra space for safety
+            size_t maxRead         = MIN(256, codeDir.length - codeDir.identOffset);
+            size_t bytesRead       = fread(identifier, 1, maxRead, file);
+
+            if (bytesRead > 0)
+            {
+                // Ensure null termination
+                identifier[bytesRead] = '\0';
+
+                // Find actual string length (stop at first null)
+                size_t strLen = strnlen(identifier, bytesRead);
+                if (strLen > 0)
+                {
+                    NSString *applicationIdentifier = [NSString stringWithUTF8String:identifier];
+                    if (applicationIdentifier && applicationIdentifier.length > 0)
+                    {
+                        info[@"applicationIdentifier"] = applicationIdentifier;
+                        [Logger debug:LOG_CATEGORY_UTILITIES
+                               format:@"Read application identifier: %@", applicationIdentifier];
+                    }
+                }
+            }
+        }
+    }
+}
+
++ (void)readEntitlements:(FILE *)file offset:(uint32_t)offset info:(NSMutableDictionary *)info
+{
+    if (fseek(file, offset, SEEK_SET) != 0)
+        return;
+
+    struct {
+        uint32_t magic;
+        uint32_t length;
+    } blobHeader;
+
+    if (fread(&blobHeader, sizeof(blobHeader), 1, file) != 1)
+        return;
+
+    blobHeader.magic  = CFSwapInt32BigToHost(blobHeader.magic);
+    blobHeader.length = CFSwapInt32BigToHost(blobHeader.length);
+
+    if (blobHeader.magic != 0xfade7171)
+        return; // CSMAGIC_EMBEDDED_ENTITLEMENTS
+
+    uint32_t       entitlementsLength = blobHeader.length - 8;
+    NSMutableData *entitlementsData   = [NSMutableData dataWithLength:entitlementsLength];
+
+    if (fread([entitlementsData mutableBytes], entitlementsLength, 1, file) != 1)
+        return;
+
+    NSError      *error        = nil;
+    NSDictionary *entitlements = [NSPropertyListSerialization propertyListWithData:entitlementsData
+                                                                           options:0
+                                                                            format:nil
+                                                                             error:&error];
+
+    if (!error && entitlements)
+    {
+        info[@"entitlements"]     = entitlements;
+        info[@"entitlementsSize"] = @(entitlementsLength);
+    }
+}
+
++ (void)readCMSSignature:(FILE *)file offset:(uint32_t)offset info:(NSMutableDictionary *)info
+{
+    if (fseek(file, offset, SEEK_SET) != 0)
+        return;
+
+    struct {
+        uint32_t magic;
+        uint32_t length;
+    } blobHeader;
+
+    if (fread(&blobHeader, sizeof(blobHeader), 1, file) != 1)
+        return;
+
+    blobHeader.magic  = CFSwapInt32BigToHost(blobHeader.magic);
+    blobHeader.length = CFSwapInt32BigToHost(blobHeader.length);
+
+    if (blobHeader.magic != 0xfade0b01)
+        return; // CSMAGIC_BLOBWRAPPER
+
+    info[@"cmsSignatureSize"] = @(blobHeader.length - 8);
+    info[@"hasCMSSignature"]  = @YES;
+
+    // Try to extract some basic info from the CMS signature
+    uint32_t cmsLength = blobHeader.length - 8;
+    if (cmsLength > 0 && cmsLength < 1024 * 1024) // Reasonable size limit
+    {
+        NSMutableData *cmsData = [NSMutableData dataWithLength:cmsLength];
+        if (fread([cmsData mutableBytes], cmsLength, 1, file) == 1)
+        {
+            // Look for Apple-specific OIDs or common certificate info
+            if (cmsLength > 20)
+            {
+                // Simple heuristic: look for "Apple" string in the signature
+                NSString *cmsString = [[NSString alloc] initWithData:cmsData
+                                                            encoding:NSASCIIStringEncoding];
+                if ([cmsString containsString:@"Apple"])
+                {
+                    info[@"signerInfo"] = @"Apple";
+                }
+                else if ([cmsString containsString:@"Developer"])
+                {
+                    info[@"signerInfo"] = @"Developer";
+                }
+                else
+                {
+                    info[@"signerInfo"] = @"Unknown";
+                }
+            }
+        }
+    }
+}
+
++ (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements
+{
+    if (!entitlements || entitlements.count == 0)
+    {
+        return nil;
+    }
+
+    NSError *error = nil;
+    NSData  *plistData =
+        [NSPropertyListSerialization dataWithPropertyList:entitlements
+                                                   format:NSPropertyListXMLFormat_v1_0
+                                                  options:0
+                                                    error:&error];
+
+    if (error || !plistData)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Failed to serialize entitlements: %@", error.localizedDescription];
+        return nil;
+    }
+
+    NSString *plistString = [[NSString alloc] initWithData:plistData encoding:NSUTF8StringEncoding];
+    return plistString;
+}
+
++ (void)logApplicationSignatureInfo
+{
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"=== Application Signature Information ==="];
+
+    NSBundle *bundle         = [NSBundle mainBundle];
+    NSString *bundleId       = bundle.bundleIdentifier;
+    NSString *executableName = bundle.infoDictionary[@"CFBundleExecutable"];
+
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Bundle ID: %@", bundleId ?: @"Unknown"];
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Executable: %@", executableName ?: @"Unknown"];
+
+    // Get app source information
+    NSString *appSource;
+    if ([self isAppStoreApp])
+    {
+        appSource = @"App Store";
+    }
+    else if ([self isTestFlightApp])
+    {
+        appSource = @"TestFlight";
+    }
+    else if ([self isTrollStoreApp])
+    {
+        appSource = [self getTrollStoreVariant];
+    }
+    else
+    {
+        appSource = @"Sideloaded";
+    }
+
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"App Source: %@", appSource];
+    [Logger info:LOG_CATEGORY_UTILITIES
+          format:@"System App: %@", [self isSystemApp] ? @"YES" : @"NO"];
+
+    // Read and log signature information
+    NSDictionary *signatureInfo = [self getApplicationSignatureInfo];
+
+    if (signatureInfo.count > 0)
+    {
+        // Log signature metadata
+        if (signatureInfo[@"applicationIdentifier"])
+        {
+            [Logger info:LOG_CATEGORY_UTILITIES
+                  format:@"Application Identifier: %@", signatureInfo[@"applicationIdentifier"]];
+        }
+
+        if (signatureInfo[@"blobTypes"])
+        {
+            NSArray *types = signatureInfo[@"blobTypes"];
+            [Logger info:LOG_CATEGORY_UTILITIES
+                  format:@"Signature Blobs: %@", [types componentsJoinedByString:@", "]];
+        }
+
+        if (signatureInfo[@"signerInfo"])
+        {
+            [Logger info:LOG_CATEGORY_UTILITIES format:@"Signer: %@", signatureInfo[@"signerInfo"]];
+        }
+
+        if (signatureInfo[@"signatureSize"])
+        {
+            [Logger info:LOG_CATEGORY_UTILITIES
+                  format:@"Signature Size: %@ bytes", signatureInfo[@"signatureSize"]];
+        }
+    }
+    else
+    {
+        [Logger info:LOG_CATEGORY_UTILITIES format:@"No signature information found"];
+    }
+
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"=== End Signature Information ==="];
 }
 
 // TODO: remove before initial release

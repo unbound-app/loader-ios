@@ -60,6 +60,13 @@
 + (NSArray<NSString *> *)getAvailableAppExtensions;
 + (BOOL)hasAppExtension:(NSString *)extensionName;
 
++ (NSDictionary *)getApplicationEntitlements;
++ (NSDictionary *)getApplicationSignatureInfo;
++ (void)logApplicationSignatureInfo;
+
+// Private methods for signature parsing
++ (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements;
+
 // TODO: remove before initial release
 + (void)showDevelopmentBuildBanner;
 
