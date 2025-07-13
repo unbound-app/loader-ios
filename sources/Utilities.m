@@ -525,7 +525,7 @@ static UIView   *islandOverlayView = nil;
     }
 
     CGFloat topInset         = keyWindow.safeAreaInsets.top;
-    BOOL    hasDynamicIsland = topInset == DYNAMIC_ISLAND_TOP_INSET;
+    BOOL    hasDynamicIsland = fabs(topInset - DYNAMIC_ISLAND_TOP_INSET) < 0.1;
 
     [Logger debug:LOG_CATEGORY_UTILITIES
            format:@"Key window top safe area inset: %.1f, Dynamic Island: %@", topInset,
