@@ -66,7 +66,6 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 + (NSDictionary *)getApplicationEntitlements;
 + (NSDictionary *)getApplicationSignatureInfo;
-+ (void)logApplicationSignatureInfo;
 
 + (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements;
 
