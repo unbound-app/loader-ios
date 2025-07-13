@@ -584,7 +584,8 @@ BOOL isRecoveryModeEnabled(void)
                                                                                    @"ent.com/"
                                                                                    @"unbound-app/"
                                                                                    @"builds/%@/"
-                                                                                   @"unbound.js",
+                                                                                   @"unbound."
+                                                                                   @"bundle",
                                                                                    sha];
                                                                        [Settings set:@"unbound"
                                                                                  key:@"loader."
