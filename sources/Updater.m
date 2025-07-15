@@ -41,7 +41,7 @@ static NSString *etag = nil;
     NSString *url = [Settings getString:@"unbound"
                                     key:@"loader.update.url"
                                     def:@"https://raw.githubusercontent.com/unbound-app/builds/"
-                                        @"refs/heads/main/unbound.js"];
+                                        @"refs/heads/main/unbound.bundle"];
 
     return [NSURL URLWithString:url];
 }

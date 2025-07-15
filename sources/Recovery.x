@@ -1,3 +1,4 @@
+#import "MobileGestalt.h"
 #import "Recovery.h"
 
 #pragma mark - Gesture Handling
@@ -160,8 +161,8 @@ BOOL isRecoveryModeEnabled(void)
                                          },
                                          nil];
 
-    // Only add app icon toggle if the app is sideloaded
-    if (![Utilities isAppStoreApp])
+    // Only add app icon toggle if the app is sideloaded (not App Store or TestFlight)
+    if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp])
     {
         [settingsItems addObject:@{
             @"title" : @"Use Unbound Icon",
@@ -583,7 +584,8 @@ BOOL isRecoveryModeEnabled(void)
                                                                                    @"ent.com/"
                                                                                    @"unbound-app/"
                                                                                    @"builds/%@/"
-                                                                                   @"unbound.js",
+                                                                                   @"unbound."
+                                                                                   @"bundle",
                                                                                    sha];
                                                                        [Settings set:@"unbound"
                                                                                  key:@"loader."
@@ -733,36 +735,75 @@ BOOL isRecoveryModeEnabled(void)
 
 - (void)openGitHubIssue
 {
-    UIDevice      *device = [UIDevice currentDevice];
-    MobileGestalt *mg     = [MobileGestalt sharedInstance];
+    UIDevice *device = [UIDevice currentDevice];
 
-    NSString *deviceId    = [mg getProductType] ?: getDeviceIdentifier();
-    NSString *deviceModel = [mg getPhysicalHardwareNameString] ?: deviceId;
+    NSString *deviceModel = [Utilities getDeviceModel];
     NSString *appVersion =
         [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     NSString *buildNumber = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
 
-    NSString *body =
-        [NSString stringWithFormat:@"### Device Information\n"
-                                    "- Device: `%@` (`%@`)\n"
-                                    "- iOS Version: `%@`\n"
-                                    "- Tweak Version: `%@`\n"
-                                    "- App Version: `%@` (`%@`)\n"
-                                    "- HBC Version: `%u`\n"
-                                    "- Sideloaded: `%@`\n"
-                                    "- Jailbroken: `%@`\n\n"
-                                    "### Issue Description\n"
-                                    "<!-- Describe your issue here -->\n\n"
-                                    "### Steps to Reproduce\n"
-                                    "1. \n2. \n3. \n\n"
-                                    "### Expected Behavior\n\n"
-                                    "### Actual Behavior\n",
-                                   deviceModel, deviceId, device.systemVersion, PACKAGE_VERSION,
-                                   appVersion, buildNumber, [Utilities getHermesBytecodeVersion],
-                                   [Utilities isAppStoreApp] ? @"No" : @"Yes",
-                                   [Utilities isJailbroken] ? @"Yes" : @"No"];
+    MobileGestalt *mg              = [MobileGestalt sharedInstance];
+    NSString      *iosBuildVersion = [mg getBuildVersion];
+    NSString      *iosVersionString =
+        iosBuildVersion
+                 ? [NSString stringWithFormat:@"%@ (%@)", device.systemVersion, iosBuildVersion]
+                 : device.systemVersion;
 
-    NSString *encodedTitle = [@"bug(iOS): "
+    NSString *appSource;
+    if ([Utilities isAppStoreApp])
+    {
+        appSource = @"App Store";
+    }
+    else if ([Utilities isTestFlightApp])
+    {
+        appSource = @"TestFlight";
+    }
+    else if ([Utilities isTrollStoreApp])
+    {
+        appSource = [Utilities getTrollStoreVariant];
+    }
+    else
+    {
+        appSource = @"Sideloaded";
+    }
+
+    NSString *appRegistrationType = [Utilities isSystemApp] ? @"System" : @"User";
+
+    NSMutableString *body = [NSMutableString
+        stringWithFormat:@"### Device Information\n"
+                          "- Device: `%@`\n"
+                          "- iOS Version: `%@`\n"
+                          "- Tweak Version: `%@`\n"
+                          "- App Version: `%@ (%@)`\n"
+                          "- HBC Version: `%u`\n"
+                          "- App Source: `%@`\n"
+                          "- App Registration: `%@`\n"
+                          "- Jailbroken: `%@`\n",
+                         deviceModel, iosVersionString, PACKAGE_VERSION, appVersion, buildNumber,
+                         [Utilities getHermesBytecodeVersion], appSource, appRegistrationType,
+                         [Utilities isJailbroken] ? @"Yes" : @"No"];
+
+    // Add entitlements if available
+    NSDictionary *entitlements = [Utilities getApplicationEntitlements];
+    if (entitlements && entitlements.count > 0)
+    {
+        NSString *entitlementsPlist = [Utilities formatEntitlementsAsPlist:entitlements];
+        if (entitlementsPlist)
+        {
+            [body appendString:@"\n<details>\n<summary>App Entitlements</summary>\n\n```xml\n"];
+            [body appendString:entitlementsPlist];
+            [body appendString:@"\n```\n\n</details>\n"];
+        }
+    }
+
+    [body appendString:@"\n### Issue Description\n"
+                        "<!-- Describe your issue here -->\n\n"
+                        "### Steps to Reproduce\n"
+                        "1. \n2. \n3. \n\n"
+                        "### Expected Behavior\n\n"
+                        "### Actual Behavior\n"];
+
+    NSString *encodedTitle = [@"bug(iOS): replace this with a descriptive title"
         stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet
                                                                URLQueryAllowedCharacterSet]];
     NSString *encodedBody =
@@ -905,22 +946,6 @@ void showMenuSheet(void)
 }
 
 @end
-
-NSString *getDeviceIdentifier(void)
-{
-    MobileGestalt *mg          = [MobileGestalt sharedInstance];
-    NSString      *productType = [mg getProductType];
-
-    if (productType)
-    {
-        return productType;
-    }
-
-    // Fallback to utsname if MobileGestalt fails
-    struct utsname systemInfo;
-    uname(&systemInfo);
-    return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
-}
 
 void reloadApp(UIViewController *viewController)
 {

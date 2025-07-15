@@ -11,7 +11,6 @@
 #import "Utilities.h"
 
 BOOL      isRecoveryModeEnabled(void);
-NSString *getDeviceIdentifier(void);
 void      showMenuSheet(void);
 void      reloadApp(UIViewController *viewController);
 

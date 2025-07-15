@@ -6,6 +6,10 @@
 #import "FileSystem.h"
 #import "Unbound.h"
 
+extern NSString * const TROLL_STORE_PATH;
+extern NSString * const TROLL_STORE_LITE_PATH;
+extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
+
 @interface Utilities : NSObject
 {
     NSString *bundle;
@@ -43,9 +47,13 @@
 + (BOOL)isHermesBytecode:(NSData *)data;
 + (void *)getHermesSymbol:(const char *)symbol error:(NSString **)error;
 + (BOOL)isAppStoreApp;
++ (BOOL)isTestFlightApp;
++ (BOOL)isTrollStoreApp;
++ (NSString *)getTrollStoreVariant;
++ (BOOL)isSystemApp;
 + (BOOL)isJailbroken;
 
-+ (NSString *)getDeviceModelIdentifier;
++ (NSString *)getDeviceModel;
 + (BOOL)deviceHasDynamicIsland;
 + (void)initializeDynamicIslandOverlay;
 + (void)showDynamicIslandOverlay;
@@ -55,6 +63,11 @@
 
 + (NSArray<NSString *> *)getAvailableAppExtensions;
 + (BOOL)hasAppExtension:(NSString *)extensionName;
+
++ (NSDictionary *)getApplicationEntitlements;
++ (NSDictionary *)getApplicationSignatureInfo;
+
++ (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements;
 
 // TODO: remove before initial release
 + (void)showDevelopmentBuildBanner;

@@ -1,4 +1,12 @@
+#import <mach-o/fat.h>
+#import <mach-o/loader.h>
+
 #import "Utilities.h"
+
+NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
+NSString *const TROLL_STORE_LITE_PATH = @"../_TrollStoreLite";
+
+const CGFloat DYNAMIC_ISLAND_TOP_INSET = 59.0;
 
 @implementation Utilities
 static NSString *bundle            = nil;
@@ -336,22 +344,146 @@ static UIView   *islandOverlayView = nil;
         fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
 }
 
++ (BOOL)isTestFlightApp
+{
+    NSURL *appStoreReceiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
+    if (!appStoreReceiptURL)
+    {
+        return NO;
+    }
+    return [appStoreReceiptURL.lastPathComponent isEqualToString:@"sandboxReceipt"];
+}
+
++ (NSDictionary *)checkTrollStorePaths:(NSString *)bundlePath
+{
+    NSString *trollStorePath = [bundlePath stringByAppendingPathComponent:TROLL_STORE_PATH];
+    NSString *trollStoreLitePath =
+        [bundlePath stringByAppendingPathComponent:TROLL_STORE_LITE_PATH];
+
+    BOOL hasTrollStore     = (access([trollStorePath UTF8String], F_OK) == 0);
+    BOOL hasTrollStoreLite = (access([trollStoreLitePath UTF8String], F_OK) == 0);
+
+    return @{@"hasTrollStore" : @(hasTrollStore), @"hasTrollStoreLite" : @(hasTrollStoreLite)};
+}
+
++ (BOOL)isTrollStoreApp
+{
+    if ([self isAppStoreApp] || [self isTestFlightApp])
+    {
+        return NO;
+    }
+
+    NSString     *bundlePath      = [[NSBundle mainBundle] bundlePath];
+    NSDictionary *trollStorePaths = [self checkTrollStorePaths:bundlePath];
+
+    BOOL hasTrollStore     = [trollStorePaths[@"hasTrollStore"] boolValue];
+    BOOL hasTrollStoreLite = [trollStorePaths[@"hasTrollStoreLite"] boolValue];
+    BOOL isTrollStore      = hasTrollStore || hasTrollStoreLite;
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"TrollStore detection - Regular: %@, Lite: %@, isTrollStore: %@",
+                  hasTrollStore ? @"YES" : @"NO", hasTrollStoreLite ? @"YES" : @"NO",
+                  isTrollStore ? @"YES" : @"NO"];
+
+    return isTrollStore;
+}
+
++ (NSString *)getTrollStoreVariant
+{
+    NSString     *bundlePath      = [[NSBundle mainBundle] bundlePath];
+    NSDictionary *trollStorePaths = [self checkTrollStorePaths:bundlePath];
+
+    if ([trollStorePaths[@"hasTrollStore"] boolValue])
+    {
+        return @"TrollStore";
+    }
+    else if ([trollStorePaths[@"hasTrollStoreLite"] boolValue])
+    {
+        return @"TrollStore Lite";
+    }
+
+    return @"Unknown";
+}
+
++ (BOOL)isSystemApp
+{
+    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+    if (!bundleID)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"No bundle identifier found"];
+        return NO;
+    }
+
+    Class LSApplicationProxyClass = NSClassFromString(@"LSApplicationProxy");
+    if (!LSApplicationProxyClass)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"LSApplicationProxy class not found"];
+        return NO;
+    }
+
+    SEL applicationProxySelector = @selector(applicationProxyForIdentifier:);
+    if (![LSApplicationProxyClass respondsToSelector:applicationProxySelector])
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"LSApplicationProxy doesn't respond to applicationProxyForIdentifier:"];
+        return NO;
+    }
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    id proxy = [LSApplicationProxyClass performSelector:applicationProxySelector
+                                             withObject:bundleID];
+#pragma clang diagnostic pop
+
+    if (!proxy)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"Failed to get application proxy for %@", bundleID];
+        return NO;
+    }
+
+    SEL applicationTypeSelector = @selector(applicationType);
+    if (![proxy respondsToSelector:applicationTypeSelector])
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"Application proxy doesn't respond to applicationType"];
+        return NO;
+    }
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    NSString *appType = [proxy performSelector:applicationTypeSelector];
+#pragma clang diagnostic pop
+
+    if (!appType)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"Failed to get application type"];
+        return NO;
+    }
+
+    BOOL isSystem = [appType isEqualToString:@"System"];
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"Application type: %@, isSystemApp: %@", appType, isSystem ? @"YES" : @"NO"];
+
+    return isSystem;
+}
+
 + (BOOL)isJailbroken
 {
     return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];
 }
 
-+ (NSString *)getDeviceModelIdentifier
++ (NSString *)getDeviceModel
 {
-    MobileGestalt *mg          = [MobileGestalt sharedInstance];
-    NSString      *productType = [mg getProductType];
+    MobileGestalt *mg                         = [MobileGestalt sharedInstance];
+    NSString      *physicalHardwareNameString = [mg getPhysicalHardwareNameString];
 
-    if (productType)
+    if (physicalHardwareNameString)
     {
-        return productType;
+        return physicalHardwareNameString;
     }
 
-    // Fallback to utsname if MobileGestalt fails
     struct utsname systemInfo;
     uname(&systemInfo);
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
@@ -359,13 +491,47 @@ static UIView   *islandOverlayView = nil;
 
 + (BOOL)deviceHasDynamicIsland
 {
-    NSString *identifier           = [self getDeviceModelIdentifier];
-    NSArray  *dynamicIslandDevices = @[
-        @"iPhone15,2", @"iPhone15,3", @"iPhone15,4", @"iPhone15,5", @"iPhone16,1", @"iPhone16,2",
-        @"iPhone17,1", @"iPhone17,2", @"iPhone17,3", @"iPhone17,4"
-    ];
+    if ([[UIDevice currentDevice] userInterfaceIdiom] != UIUserInterfaceIdiomPhone)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"Not an iPhone, no Dynamic Island"];
+        return NO;
+    }
 
-    return [dynamicIslandDevices containsObject:identifier];
+    UIWindow *keyWindow = nil;
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
+    {
+        if (scene.activationState == UISceneActivationStateForegroundActive &&
+            [scene isKindOfClass:[UIWindowScene class]])
+        {
+            UIWindowScene *windowScene = (UIWindowScene *) scene;
+            for (UIWindow *window in windowScene.windows)
+            {
+                if (window.isKeyWindow)
+                {
+                    keyWindow = window;
+                    break;
+                }
+            }
+            if (keyWindow)
+                break;
+        }
+    }
+
+    if (!keyWindow)
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES
+               format:@"No key window found, cannot determine Dynamic Island"];
+        return NO;
+    }
+
+    CGFloat topInset         = keyWindow.safeAreaInsets.top;
+    BOOL    hasDynamicIsland = fabs(topInset - DYNAMIC_ISLAND_TOP_INSET) < 0.1;
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"Key window top safe area inset: %.1f, Dynamic Island: %@", topInset,
+                  hasDynamicIsland ? @"YES" : @"NO"];
+
+    return hasDynamicIsland;
 }
 
 + (UIImage *)createLogoImage
@@ -677,6 +843,257 @@ static UIView   *islandOverlayView = nil;
            format:@"App extension '%@' %@", extensionName, exists ? @"found" : @"not found"];
 
     return exists;
+}
+
++ (NSDictionary *)getApplicationEntitlements
+{
+    NSDictionary *signatureInfo = [self getApplicationSignatureInfo];
+    return signatureInfo[@"entitlements"] ?: @{};
+}
+
++ (NSDictionary *)getApplicationSignatureInfo
+{
+    NSBundle *bundle         = [NSBundle mainBundle];
+    NSString *executableName = bundle.infoDictionary[@"CFBundleExecutable"];
+    if (!executableName)
+    {
+        return @{};
+    }
+
+    NSString *executablePath = [bundle pathForResource:executableName ofType:nil];
+    if (!executablePath)
+    {
+        return @{};
+    }
+
+    FILE *file = fopen([executablePath UTF8String], "rb");
+    if (!file)
+    {
+        return @{};
+    }
+
+    // Read Mach-O header
+    uint32_t magic;
+    if (fread(&magic, sizeof(magic), 1, file) != 1)
+    {
+        fclose(file);
+        return @{};
+    }
+
+    // Rewind and determine architecture
+    fseek(file, 0, SEEK_SET);
+
+    NSDictionary *result = nil;
+    if (magic == MH_MAGIC_64 || magic == MH_CIGAM_64)
+    {
+        result = [self readEntitlementsFrom64BitBinary:file];
+    }
+    else if (magic == MH_MAGIC || magic == MH_CIGAM)
+    {
+        result = [self readEntitlementsFrom32BitBinary:file];
+    }
+    else
+    {
+        result = @{};
+    }
+
+    fclose(file);
+    return result ?: @{};
+}
+
++ (NSDictionary *)readEntitlementsFrom64BitBinary:(FILE *)file
+{
+    struct mach_header_64 header;
+    if (fread(&header, sizeof(header), 1, file) != 1)
+    {
+        return nil;
+    }
+
+    // Look for LC_CODE_SIGNATURE load command
+    for (uint32_t i = 0; i < header.ncmds; i++)
+    {
+        struct load_command cmd;
+        long                cmdPos = ftell(file);
+
+        if (fread(&cmd, sizeof(cmd), 1, file) != 1)
+        {
+            return nil;
+        }
+
+        if (cmd.cmd == LC_CODE_SIGNATURE)
+        {
+            struct linkedit_data_command sigCmd;
+            fseek(file, cmdPos, SEEK_SET);
+            if (fread(&sigCmd, sizeof(sigCmd), 1, file) != 1)
+            {
+                return nil;
+            }
+
+            return [self extractEntitlements:file offset:sigCmd.dataoff];
+        }
+
+        // Skip to next command
+        fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
+    }
+
+    return nil;
+}
+
++ (NSDictionary *)readEntitlementsFrom32BitBinary:(FILE *)file
+{
+    struct mach_header header;
+    if (fread(&header, sizeof(header), 1, file) != 1)
+    {
+        return nil;
+    }
+
+    // Look for LC_CODE_SIGNATURE load command
+    for (uint32_t i = 0; i < header.ncmds; i++)
+    {
+        struct load_command cmd;
+        long                cmdPos = ftell(file);
+
+        if (fread(&cmd, sizeof(cmd), 1, file) != 1)
+        {
+            return nil;
+        }
+
+        if (cmd.cmd == LC_CODE_SIGNATURE)
+        {
+            struct linkedit_data_command sigCmd;
+            fseek(file, cmdPos, SEEK_SET);
+            if (fread(&sigCmd, sizeof(sigCmd), 1, file) != 1)
+            {
+                return nil;
+            }
+
+            return [self extractEntitlements:file offset:sigCmd.dataoff];
+        }
+
+        // Skip to next command
+        fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
+    }
+
+    return nil;
+}
+
++ (NSDictionary *)extractEntitlements:(FILE *)file offset:(uint32_t)offset
+{
+    if (fseek(file, offset, SEEK_SET) != 0)
+    {
+        return nil;
+    }
+
+    // Read CS_SuperBlob header
+    struct {
+        uint32_t magic;
+        uint32_t length;
+        uint32_t count;
+    } superBlob;
+
+    if (fread(&superBlob, sizeof(superBlob), 1, file) != 1)
+    {
+        return nil;
+    }
+
+    // Convert from big-endian if needed
+    superBlob.magic  = CFSwapInt32BigToHost(superBlob.magic);
+    superBlob.length = CFSwapInt32BigToHost(superBlob.length);
+    superBlob.count  = CFSwapInt32BigToHost(superBlob.count);
+
+    if (superBlob.magic != 0xfade0cc0)
+    { // CSMAGIC_EMBEDDED_SIGNATURE
+        return nil;
+    }
+
+    // Read blob index table to find entitlements
+    for (uint32_t i = 0; i < superBlob.count; i++)
+    {
+        struct {
+            uint32_t type;
+            uint32_t offset;
+        } blobIndex;
+
+        if (fread(&blobIndex, sizeof(blobIndex), 1, file) != 1)
+        {
+            continue;
+        }
+
+        blobIndex.type   = CFSwapInt32BigToHost(blobIndex.type);
+        blobIndex.offset = CFSwapInt32BigToHost(blobIndex.offset);
+
+        if (blobIndex.type == 5)
+        { // CSSLOT_ENTITLEMENTS
+            long          currentPos   = ftell(file);
+            NSDictionary *entitlements = [self readEntitlementsBlob:file
+                                                             offset:offset + blobIndex.offset];
+            fseek(file, currentPos, SEEK_SET);
+
+            if (entitlements)
+            {
+                return @{@"entitlements" : entitlements};
+            }
+        }
+    }
+
+    return @{};
+}
+
++ (NSDictionary *)readEntitlementsBlob:(FILE *)file offset:(uint32_t)offset
+{
+    if (fseek(file, offset, SEEK_SET) != 0)
+        return nil;
+
+    struct {
+        uint32_t magic;
+        uint32_t length;
+    } blobHeader;
+
+    if (fread(&blobHeader, sizeof(blobHeader), 1, file) != 1)
+        return nil;
+
+    blobHeader.magic  = CFSwapInt32BigToHost(blobHeader.magic);
+    blobHeader.length = CFSwapInt32BigToHost(blobHeader.length);
+
+    if (blobHeader.magic != 0xfade7171)
+        return nil; // CSMAGIC_EMBEDDED_ENTITLEMENTS
+
+    uint32_t       entitlementsLength = blobHeader.length - 8;
+    NSMutableData *entitlementsData   = [NSMutableData dataWithLength:entitlementsLength];
+
+    if (fread([entitlementsData mutableBytes], entitlementsLength, 1, file) != 1)
+        return nil;
+
+    NSError      *error        = nil;
+    NSDictionary *entitlements = [NSPropertyListSerialization propertyListWithData:entitlementsData
+                                                                           options:0
+                                                                            format:nil
+                                                                             error:&error];
+
+    return (error || !entitlements) ? nil : entitlements;
+}
+
++ (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements
+{
+    if (!entitlements || entitlements.count == 0)
+    {
+        return nil;
+    }
+
+    NSError *error = nil;
+    NSData  *plistData =
+        [NSPropertyListSerialization dataWithPropertyList:entitlements
+                                                   format:NSPropertyListXMLFormat_v1_0
+                                                  options:0
+                                                    error:&error];
+
+    if (error || !plistData)
+    {
+        return nil;
+    }
+
+    NSString *plistString = [[NSString alloc] initWithData:plistData encoding:NSUTF8StringEncoding];
+    return plistString;
 }
 
 // TODO: remove before initial release
