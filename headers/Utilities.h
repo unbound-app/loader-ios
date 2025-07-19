@@ -1,10 +1,12 @@
 #import <CommonCrypto/CommonCrypto.h>
+#import <Security/Security.h>
 #import <dlfcn.h>
 #import <rootless.h>
 #import <sys/utsname.h>
 
 #import "FileSystem.h"
 #import "Unbound.h"
+#import "PublicKey.h"
 
 extern NSString * const TROLL_STORE_PATH;
 extern NSString * const TROLL_STORE_LITE_PATH;
@@ -71,5 +73,7 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 // TODO: remove before initial release
 + (void)showDevelopmentBuildBanner;
+
++ (BOOL)verifyTweakSignature;
 
 @end

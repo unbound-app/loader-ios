@@ -15,4 +15,5 @@
 #import "PluginAPI.h"
 #import "ChatUI.h"
 #import "MobileGestalt.h"
+#import "PublicKey.h"
 #import "Discord/RCT.h"

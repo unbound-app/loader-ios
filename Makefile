@@ -4,13 +4,14 @@ INSTALL_TARGET_PROCESSES = Discord
 
 ARCHS := arm64 arm64e
 TARGET := iphone:clang:latest:15.0
+COMMIT_HASH := $(shell git rev-parse HEAD)
 
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Unbound
 $(TWEAK_NAME)_FILES = $(shell find sources -name "*.x*" -o -name "*.m*")
-$(TWEAK_NAME)_CFLAGS =  -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -I$(THEOS_PROJECT_DIR)/headers
-$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers UserNotifications
+$(TWEAK_NAME)_CFLAGS = -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -I$(THEOS_PROJECT_DIR)/headers
+$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers UserNotifications Security
 
 BUNDLE_NAME = UnboundResources
 $(BUNDLE_NAME)_INSTALL_PATH = "/Library/Application\ Support/"
@@ -21,15 +22,21 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 
 before-all::
 	@if [ ! -d "resources" ] || [ -z "$$(ls -A resources 2>/dev/null)" ]; then \
-		echo "Resources folder empty or missing, initializing submodule..."; \
 		git submodule update --init --recursive || exit 1; \
 	fi
 
 	$(ECHO_NOTHING)VERSION_NUM=$$(echo "$(THEOS_PACKAGE_BASE_VERSION)" | cut -d'.' -f1,2) && \
 		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.js > resources/preload.js$(ECHO_END)
 
+	@if [ -n "$$SIGNING_KEY" ]; then \
+		printf "%s\n" "$$SIGNING_KEY" > temp_signing_key.pem; \
+		COMMIT_HASH=$$(git rev-parse HEAD); \
+		echo -n "$$COMMIT_HASH" | openssl dgst -sha256 -sign temp_signing_key.pem -out resources/signature.bin; \
+		rm temp_signing_key.pem; \
+	fi
+
 after-stage::
-	$(ECHO_NOTHING)find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete$(ECHO_END)
+	find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete
 
 after-package::
-	$(ECHO_NOTHING)rm resources/preload.js$(ECHO_END)
+	rm -f resources/preload.js resources/signature.bin
