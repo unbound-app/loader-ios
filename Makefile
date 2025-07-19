@@ -28,11 +28,8 @@ before-all::
 	$(ECHO_NOTHING)VERSION_NUM=$$(echo "$(THEOS_PACKAGE_BASE_VERSION)" | cut -d'.' -f1,2) && \
 		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.js > resources/preload.js$(ECHO_END)
 
-	@if [ -n "$$SIGNING_KEY" ]; then \
-		printf "%s\n" "$$SIGNING_KEY" > temp_signing_key.pem; \
-		COMMIT_HASH=$$(git rev-parse HEAD); \
-		echo -n "$$COMMIT_HASH" | openssl dgst -sha256 -sign temp_signing_key.pem -out resources/signature.bin; \
-		rm temp_signing_key.pem; \
+	@if [ -f "private_key.pem" ]; then \
+		echo -n "$$(git rev-parse HEAD)" | openssl dgst -sha256 -sign private_key.pem -out resources/signature.bin; \
 	fi
 
 after-stage::

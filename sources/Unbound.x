@@ -142,7 +142,7 @@ id gBridge = nil;
                        title:@"⚠️ DEVELOPMENT BUILD"
                      timeout:5];
 
-            if (![Utilities verifyTweakSignature])
+            if (![Utilities isVerifiedBuild])
             {
                 [Logger error:LOG_CATEGORY_DEFAULT format:@"Tweak signature verification failed"];
                 [Utilities alert:@"The injected tweak is missing Unbound's embedded signature. "
