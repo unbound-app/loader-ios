@@ -29,7 +29,7 @@ before-all::
 		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.js > resources/preload.js$(ECHO_END)
 
 	@if [ -f "private_key.pem" ]; then \
-		echo -n "$$(git rev-parse HEAD)" | openssl dgst -sha256 -sign private_key.pem -out resources/signature.bin; \
+		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign private_key.pem -out resources/signature.bin; \
 	fi
 
 after-stage::
