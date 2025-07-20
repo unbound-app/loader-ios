@@ -1,10 +1,5 @@
 #import "Utilities.h"
 
-OSStatus SecCMSVerifyCopyDataAndAttributes(CFDataRef message, CFDataRef detached_contents,
-                                           CFTypeRef policy, SecTrustRef *trustref,
-                                           CFDataRef       *attached_contents,
-                                           CFDictionaryRef *signed_attributes);
-
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
 NSString *const TROLL_STORE_LITE_PATH = @"../_TrollStoreLite";
 
