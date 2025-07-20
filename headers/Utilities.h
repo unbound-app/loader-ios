@@ -1,7 +1,10 @@
 #import <CommonCrypto/CommonCrypto.h>
+#import <Security/Security.h>
 #import <dlfcn.h>
 #import <rootless.h>
 #import <sys/utsname.h>
+#import <mach-o/fat.h>
+#import <mach-o/loader.h>
 
 #import "FileSystem.h"
 #import "Unbound.h"
@@ -71,5 +74,7 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 // TODO: remove before initial release
 + (void)showDevelopmentBuildBanner;
+
++ (BOOL)isVerifiedBuild;
 
 @end

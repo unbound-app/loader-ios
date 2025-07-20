@@ -1,6 +1,3 @@
-#import <mach-o/fat.h>
-#import <mach-o/loader.h>
-
 #import "Utilities.h"
 
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
@@ -1141,6 +1138,93 @@ static UIView   *islandOverlayView = nil;
 
     [window addSubview:devBuildLabel];
     [window bringSubviewToFront:devBuildLabel];
+}
+
++ (BOOL)isVerifiedBuild
+{
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Starting tweak signature verification..."];
+
+    @try
+    {
+        NSData *signatureData = [Utilities getResource:@"signature" data:YES ext:@"bin"];
+        if (!signatureData)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES format:@"Signature file not found"];
+            return NO;
+        }
+
+        [Logger info:LOG_CATEGORY_UTILITIES
+              format:@"Signature file found, size: %lu bytes",
+                     (unsigned long) [signatureData length]];
+
+        NSData *publicKeyData = [Utilities getResource:@"public_key" data:YES ext:@"der"];
+        if (!publicKeyData)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES format:@"Public key file not found"];
+            return NO;
+        }
+
+        [Logger info:LOG_CATEGORY_UTILITIES
+              format:@"Public key data size: %lu bytes", (unsigned long) [publicKeyData length]];
+
+        CFErrorRef error = NULL;
+        SecKeyRef  publicKey =
+            SecKeyCreateWithData((__bridge CFDataRef) publicKeyData, (__bridge CFDictionaryRef) @{
+                (__bridge id) kSecAttrKeyType : (__bridge id) kSecAttrKeyTypeRSA,
+                (__bridge id) kSecAttrKeyClass : (__bridge id) kSecAttrKeyClassPublic,
+                (__bridge id) kSecAttrKeySizeInBits : @(2048),
+            },
+                                 &error);
+        if (!publicKey)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES
+                   format:@"Failed to create public key from DER data: %@",
+                          error ? CFBridgingRelease(error) : @"Unknown error"];
+            return NO;
+        }
+
+        [Logger info:LOG_CATEGORY_UTILITIES format:@"Public key created successfully"];
+
+        const char *commitHashString = [COMMIT_HASH UTF8String];
+
+        if (!commitHashString || strlen(commitHashString) == 0)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES format:@"Commit hash string is empty"];
+            CFRelease(publicKey);
+            return NO;
+        }
+
+        NSData *commitData = [NSData dataWithBytes:commitHashString
+                                            length:strlen(commitHashString)];
+        uint8_t digest[CC_SHA256_DIGEST_LENGTH];
+        CC_SHA256(commitData.bytes, (CC_LONG) commitData.length, digest);
+        NSData *commitHashData = [NSData dataWithBytes:digest length:sizeof(digest)];
+
+        BOOL verified = SecKeyVerifySignature(
+            publicKey, kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA256,
+            (__bridge CFDataRef) commitHashData, (__bridge CFDataRef) signatureData, &error);
+
+        CFRelease(publicKey);
+
+        if (verified)
+        {
+            [Logger info:LOG_CATEGORY_UTILITIES format:@"Tweak signature verification successful"];
+            return YES;
+        }
+        else
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES
+                   format:@"Signature verification failed: %@",
+                          error ? CFBridgingRelease(error) : @"Unknown error"];
+            return NO;
+        }
+    }
+    @catch (NSException *e)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Exception during signature verification: %@", e.reason];
+        return NO;
+    }
 }
 
 @end
