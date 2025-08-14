@@ -17,7 +17,6 @@ static UIView   *islandOverlayView = nil;
         return bundle;
     }
 
-    // Attempt to get the bundle from an exact path
     NSString *bundlePath = ROOT_PATH_NS(@"/Library/Application Support/UnboundResources.bundle");
 
     if ([FileSystem exists:bundlePath])
@@ -26,7 +25,6 @@ static UIView   *islandOverlayView = nil;
         return bundlePath;
     }
 
-    // Fall back to a relative path on jailed devices
     NSURL    *url      = [[NSBundle mainBundle] bundleURL];
     NSString *relative = [NSString stringWithFormat:@"%@/UnboundResources.bundle", [url path]];
     if ([FileSystem exists:relative])
@@ -245,6 +243,184 @@ static UIView   *islandOverlayView = nil;
                         }]
         ]
         timeout:timeout];
+}
+
++ (void)alertWarning:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
+{
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:title
+                                            message:message
+                                     preferredStyle:UIAlertControllerStyleAlert];
+
+    UIAlertAction *okayAction = [UIAlertAction actionWithTitle:@"Okay"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:nil];
+
+    UIAlertAction *joinServerAction = [UIAlertAction
+        actionWithTitle:@"Join Server"
+                  style:UIAlertActionStyleDefault
+                handler:^(UIAlertAction *action) {
+                    UIApplication *application = [UIApplication sharedApplication];
+                    NSURL         *discordURL =
+                        [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                    NSURL *webURL = [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+
+                    if ([application canOpenURL:discordURL])
+                    {
+                        [application openURL:discordURL options:@{} completionHandler:nil];
+                    }
+                    else
+                    {
+                        [application openURL:webURL options:@{} completionHandler:nil];
+                    }
+                }];
+
+    [alert addAction:okayAction];
+    [alert addAction:joinServerAction];
+
+    if (timeout > 0)
+    {
+        for (UIAlertAction *action in alert.actions)
+        {
+            action.enabled = NO;
+        }
+
+        NSString *originalTitle = title;
+        alert.title = [NSString stringWithFormat:@"%@ (%ld)", originalTitle, (long) timeout];
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIViewController *controller = nil;
+
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
+        {
+            if (scene.activationState == UISceneActivationStateForegroundActive)
+            {
+                UIWindowScene *windowScene = (UIWindowScene *) scene;
+                UIWindow      *keyWindow   = windowScene.windows.firstObject;
+                for (UIWindow *window in windowScene.windows)
+                {
+                    if (window.isKeyWindow)
+                    {
+                        keyWindow = window;
+                        break;
+                    }
+                }
+                controller = keyWindow.rootViewController;
+                break;
+            }
+        }
+
+        if (!controller)
+        {
+            controller = [[[[UIApplication sharedApplication] delegate] window] rootViewController];
+        }
+
+        while (controller.presentedViewController)
+        {
+            controller = controller.presentedViewController;
+        }
+
+        if (!controller)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES
+                   format:@"Failed to find view controller to present alert"];
+            return;
+        }
+
+        [controller
+            presentViewController:alert
+                         animated:YES
+                       completion:^{
+                           dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
+                                          dispatch_get_main_queue(),
+                                          ^{ [self applyRedPulsatingBorderToAlert:alert]; });
+
+                           if (timeout > 0)
+                           {
+                               __block NSInteger countdown = timeout;
+                               dispatch_source_t timer     = dispatch_source_create(
+                                   DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+
+                               dispatch_source_set_timer(
+                                   timer, dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC),
+                                   1.0 * NSEC_PER_SEC, 0.1 * NSEC_PER_SEC);
+
+                               dispatch_source_set_event_handler(timer, ^{
+                                   countdown--;
+
+                                   if (countdown > 0)
+                                   {
+                                       NSString *newTitle = [NSString
+                                           stringWithFormat:@"%@ (%ld)", title, (long) countdown];
+                                       alert.title        = newTitle;
+                                   }
+                                   else
+                                   {
+                                       alert.title = title;
+                                       for (UIAlertAction *action in alert.actions)
+                                       {
+                                           action.enabled = YES;
+                                       }
+                                       dispatch_source_cancel(timer);
+                                   }
+                               });
+
+                               dispatch_resume(timer);
+                           }
+                       }];
+    });
+}
+
++ (void)applyRedPulsatingBorderToAlert:(UIAlertController *)alert
+{
+    UIView *alertView = alert.view;
+
+    [alertView.layer removeAllAnimations];
+
+    alertView.layer.shadowColor   = [UIColor systemRedColor].CGColor;
+    alertView.layer.shadowRadius  = 15.0;
+    alertView.layer.shadowOpacity = 0.8;
+    alertView.layer.shadowOffset  = CGSizeZero;
+    alertView.layer.cornerRadius  = 14.0;
+
+    alertView.layer.borderColor = [UIColor systemRedColor].CGColor;
+    alertView.layer.borderWidth = 1.5;
+
+    CABasicAnimation *glowAnimation = [CABasicAnimation animationWithKeyPath:@"shadowRadius"];
+    glowAnimation.fromValue         = @(8.0);
+    glowAnimation.toValue           = @(25.0);
+    glowAnimation.duration          = 1.5;
+    glowAnimation.autoreverses      = YES;
+    glowAnimation.repeatCount       = HUGE_VALF;
+    glowAnimation.timingFunction =
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+
+    CABasicAnimation *opacityAnimation = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
+    opacityAnimation.fromValue         = @(0.4);
+    opacityAnimation.toValue           = @(1.0);
+    opacityAnimation.duration          = 1.5;
+    opacityAnimation.autoreverses      = YES;
+    opacityAnimation.repeatCount       = HUGE_VALF;
+    opacityAnimation.timingFunction =
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+
+    CABasicAnimation *borderAnimation = [CABasicAnimation animationWithKeyPath:@"borderWidth"];
+    borderAnimation.fromValue         = @(1.0);
+    borderAnimation.toValue           = @(2.5);
+    borderAnimation.duration          = 1.5;
+    borderAnimation.autoreverses      = YES;
+    borderAnimation.repeatCount       = HUGE_VALF;
+    borderAnimation.timingFunction =
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+
+    CAAnimationGroup *animationGroup = [CAAnimationGroup animation];
+    animationGroup.animations        = @[ glowAnimation, opacityAnimation, borderAnimation ];
+    animationGroup.duration          = 1.5;
+    animationGroup.autoreverses      = YES;
+    animationGroup.repeatCount       = HUGE_VALF;
+
+    [alertView.layer addAnimation:animationGroup forKey:@"redLightsaberGlow"];
 }
 
 + (id)parseJSON:(NSData *)data
@@ -869,7 +1045,6 @@ static UIView   *islandOverlayView = nil;
         return @{};
     }
 
-    // Read Mach-O header
     uint32_t magic;
     if (fread(&magic, sizeof(magic), 1, file) != 1)
     {
@@ -877,7 +1052,6 @@ static UIView   *islandOverlayView = nil;
         return @{};
     }
 
-    // Rewind and determine architecture
     fseek(file, 0, SEEK_SET);
 
     NSDictionary *result = nil;
@@ -906,7 +1080,6 @@ static UIView   *islandOverlayView = nil;
         return nil;
     }
 
-    // Look for LC_CODE_SIGNATURE load command
     for (uint32_t i = 0; i < header.ncmds; i++)
     {
         struct load_command cmd;
@@ -929,7 +1102,6 @@ static UIView   *islandOverlayView = nil;
             return [self extractEntitlements:file offset:sigCmd.dataoff];
         }
 
-        // Skip to next command
         fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
     }
 
@@ -944,7 +1116,6 @@ static UIView   *islandOverlayView = nil;
         return nil;
     }
 
-    // Look for LC_CODE_SIGNATURE load command
     for (uint32_t i = 0; i < header.ncmds; i++)
     {
         struct load_command cmd;
@@ -967,7 +1138,6 @@ static UIView   *islandOverlayView = nil;
             return [self extractEntitlements:file offset:sigCmd.dataoff];
         }
 
-        // Skip to next command
         fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
     }
 
@@ -981,7 +1151,6 @@ static UIView   *islandOverlayView = nil;
         return nil;
     }
 
-    // Read CS_SuperBlob header
     struct {
         uint32_t magic;
         uint32_t length;
@@ -993,7 +1162,6 @@ static UIView   *islandOverlayView = nil;
         return nil;
     }
 
-    // Convert from big-endian if needed
     superBlob.magic  = CFSwapInt32BigToHost(superBlob.magic);
     superBlob.length = CFSwapInt32BigToHost(superBlob.length);
     superBlob.count  = CFSwapInt32BigToHost(superBlob.count);
@@ -1003,7 +1171,6 @@ static UIView   *islandOverlayView = nil;
         return nil;
     }
 
-    // Read blob index table to find entitlements
     for (uint32_t i = 0; i < superBlob.count; i++)
     {
         struct {
@@ -1093,7 +1260,6 @@ static UIView   *islandOverlayView = nil;
     return plistString;
 }
 
-// TODO: remove before initial release
 + (void)showDevelopmentBuildBanner
 {
     static UILabel *devBuildLabel = nil;

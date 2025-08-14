@@ -40,6 +40,10 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
         title:(NSString *)title
       timeout:(NSInteger)timeout;
 
++ (void)alertWarning:(NSString *)message
+               title:(NSString *)title
+             timeout:(NSInteger)timeout;
+
 + (id)parseJSON:(NSData *)data;
 
 + (dispatch_source_t)createDebounceTimer:(double)delay

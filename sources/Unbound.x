@@ -137,7 +137,8 @@ id gBridge = nil;
     dispatch_after(
         dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             // TODO: remove before initial release
-            [Utilities alert:@"This is a development build that is not designed for end users. "
+            [Utilities
+                alertWarning:@"This is a development build that is not designed for end users. "
                              @"Please do not use it and refrain from reporting any issues."
                        title:@"⚠️ DEVELOPMENT BUILD"
                      timeout:10];
@@ -145,7 +146,8 @@ id gBridge = nil;
             if (![Utilities isVerifiedBuild])
             {
                 [Logger error:LOG_CATEGORY_DEFAULT format:@"Tweak signature verification failed"];
-                [Utilities alert:@"The injected tweak is missing Unbound's embedded signature. "
+                [Utilities
+                    alertWarning:@"The injected tweak is missing Unbound's embedded signature. "
                                  @"You cannot be sure that this is free of malware. "
                                  @"If this app was obtained via 'cypwn' or similar sources "
                                  @"we heavily recommend you uninstall it immediately."
