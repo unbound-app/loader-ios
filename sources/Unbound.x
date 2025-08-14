@@ -140,7 +140,7 @@ id gBridge = nil;
             [Utilities alert:@"This is a development build that is not designed for end users. "
                              @"Please do not use it and refrain from reporting any issues."
                        title:@"⚠️ DEVELOPMENT BUILD"
-                     timeout:5];
+                     timeout:10];
 
             if (![Utilities isVerifiedBuild])
             {
@@ -150,7 +150,7 @@ id gBridge = nil;
                                  @"If this app was obtained via 'cypwn' or similar sources "
                                  @"we heavily recommend you uninstall it immediately."
                            title:@"⚠️ SECURITY WARNING"
-                         timeout:10];
+                         timeout:15];
             }
         });
 #endif
