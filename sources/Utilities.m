@@ -70,44 +70,81 @@ static UIView   *islandOverlayView = nil;
 
 + (void)alert:(NSString *)message
 {
-    return [Utilities alert:message title:@"Unbound"];
+    [self
+        presentAlert:message
+               title:@"Unbound"
+             buttons:@[
+                 [UIAlertAction actionWithTitle:@"Okay"
+                                          style:UIAlertActionStyleDefault
+                                        handler:nil],
+                 [UIAlertAction
+                     actionWithTitle:@"Join Server"
+                               style:UIAlertActionStyleDefault
+                             handler:^(UIAlertAction *action) {
+                                 UIApplication *application = [UIApplication sharedApplication];
+                                 NSURL         *discordURL  = [NSURL
+                                     URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                                 NSURL         *webURL =
+                                     [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+
+                                 if ([application canOpenURL:discordURL])
+                                 {
+                                     [application openURL:discordURL
+                                                   options:@{}
+                                         completionHandler:nil];
+                                 }
+                                 else
+                                 {
+                                     [application openURL:webURL options:@{} completionHandler:nil];
+                                 }
+                             }]
+             ]
+             timeout:0
+             warning:NO
+                 tts:NO];
 }
 
 + (void)alert:(NSString *)message title:(NSString *)title
 {
-    return [Utilities
-          alert:message
-          title:title
-        buttons:@[
-            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
+    [self
+        presentAlert:message
+               title:title
+             buttons:@[
+                 [UIAlertAction actionWithTitle:@"Okay"
+                                          style:UIAlertActionStyleDefault
+                                        handler:nil],
+                 [UIAlertAction
+                     actionWithTitle:@"Join Server"
+                               style:UIAlertActionStyleDefault
+                             handler:^(UIAlertAction *action) {
+                                 UIApplication *application = [UIApplication sharedApplication];
+                                 NSURL         *discordURL  = [NSURL
+                                     URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                                 NSURL         *webURL =
+                                     [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
 
-            [UIAlertAction
-                actionWithTitle:@"Join Server"
-                          style:UIAlertActionStyleDefault
-                        handler:^(UIAlertAction *action) {
-                            UIApplication *application = [UIApplication sharedApplication];
-                            NSURL         *discordURL =
-                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
-                            NSURL *webURL =
-                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
-
-                            if ([application canOpenURL:discordURL])
-                            {
-                                [application openURL:discordURL options:@{} completionHandler:nil];
-                            }
-                            else
-                            {
-                                [application openURL:webURL options:@{} completionHandler:nil];
-                            }
-                        }]
-        ]];
+                                 if ([application canOpenURL:discordURL])
+                                 {
+                                     [application openURL:discordURL
+                                                   options:@{}
+                                         completionHandler:nil];
+                                 }
+                                 else
+                                 {
+                                     [application openURL:webURL options:@{} completionHandler:nil];
+                                 }
+                             }]
+             ]
+             timeout:0
+             warning:NO
+                 tts:NO];
 }
 
 + (void)alert:(NSString *)message
         title:(NSString *)title
       buttons:(NSArray<UIAlertAction *> *)buttons
 {
-    [self alert:message title:title buttons:buttons timeout:0 warning:NO tts:NO];
+    [self presentAlert:message title:title buttons:buttons timeout:0 warning:NO tts:NO];
 }
 
 + (void)alert:(NSString *)message
@@ -115,38 +152,43 @@ static UIView   *islandOverlayView = nil;
       buttons:(NSArray<UIAlertAction *> *)buttons
       timeout:(NSInteger)timeout
 {
-    [self alert:message title:title buttons:buttons timeout:timeout warning:NO tts:NO];
+    [self presentAlert:message title:title buttons:buttons timeout:timeout warning:NO tts:NO];
 }
 
 + (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
 {
-    [self alert:message
-          title:title
-        buttons:@[
-            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
-            [UIAlertAction
-                actionWithTitle:@"Join Server"
-                          style:UIAlertActionStyleDefault
-                        handler:^(UIAlertAction *action) {
-                            UIApplication *application = [UIApplication sharedApplication];
-                            NSURL         *discordURL =
-                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
-                            NSURL *webURL =
-                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+    [self
+        presentAlert:message
+               title:title
+             buttons:@[
+                 [UIAlertAction actionWithTitle:@"Okay"
+                                          style:UIAlertActionStyleDefault
+                                        handler:nil],
+                 [UIAlertAction
+                     actionWithTitle:@"Join Server"
+                               style:UIAlertActionStyleDefault
+                             handler:^(UIAlertAction *action) {
+                                 UIApplication *application = [UIApplication sharedApplication];
+                                 NSURL         *discordURL  = [NSURL
+                                     URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                                 NSURL         *webURL =
+                                     [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
 
-                            if ([application canOpenURL:discordURL])
-                            {
-                                [application openURL:discordURL options:@{} completionHandler:nil];
-                            }
-                            else
-                            {
-                                [application openURL:webURL options:@{} completionHandler:nil];
-                            }
-                        }]
-        ]
-        timeout:timeout
-        warning:NO
-            tts:NO];
+                                 if ([application canOpenURL:discordURL])
+                                 {
+                                     [application openURL:discordURL
+                                                   options:@{}
+                                         completionHandler:nil];
+                                 }
+                                 else
+                                 {
+                                     [application openURL:webURL options:@{} completionHandler:nil];
+                                 }
+                             }]
+             ]
+             timeout:timeout
+             warning:NO
+                 tts:NO];
 }
 
 + (void)alert:(NSString *)message
@@ -155,7 +197,7 @@ static UIView   *islandOverlayView = nil;
       timeout:(NSInteger)timeout
       warning:(BOOL)warning
 {
-    [self alert:message title:title buttons:buttons timeout:timeout warning:warning tts:NO];
+    [self presentAlert:message title:title buttons:buttons timeout:timeout warning:warning tts:NO];
 }
 
 + (void)alert:(NSString *)message
@@ -163,7 +205,38 @@ static UIView   *islandOverlayView = nil;
       timeout:(NSInteger)timeout
       warning:(BOOL)warning
 {
-    [self alert:message title:title timeout:timeout warning:warning tts:NO];
+    [self
+        presentAlert:message
+               title:title
+             buttons:@[
+                 [UIAlertAction actionWithTitle:@"Okay"
+                                          style:UIAlertActionStyleDefault
+                                        handler:nil],
+                 [UIAlertAction
+                     actionWithTitle:@"Join Server"
+                               style:UIAlertActionStyleDefault
+                             handler:^(UIAlertAction *action) {
+                                 UIApplication *application = [UIApplication sharedApplication];
+                                 NSURL         *discordURL  = [NSURL
+                                     URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                                 NSURL         *webURL =
+                                     [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+
+                                 if ([application canOpenURL:discordURL])
+                                 {
+                                     [application openURL:discordURL
+                                                   options:@{}
+                                         completionHandler:nil];
+                                 }
+                                 else
+                                 {
+                                     [application openURL:webURL options:@{} completionHandler:nil];
+                                 }
+                             }]
+             ]
+             timeout:timeout
+             warning:warning
+                 tts:NO];
 }
 
 + (void)alert:(NSString *)message
@@ -172,38 +245,43 @@ static UIView   *islandOverlayView = nil;
       warning:(BOOL)warning
           tts:(BOOL)tts
 {
-    [self alert:message
-          title:title
-        buttons:@[
-            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
-            [UIAlertAction
-                actionWithTitle:@"Join Server"
-                          style:UIAlertActionStyleDefault
-                        handler:^(UIAlertAction *action) {
-                            UIApplication *application = [UIApplication sharedApplication];
-                            NSURL         *discordURL =
-                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
-                            NSURL *webURL =
-                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+    [self
+        presentAlert:message
+               title:title
+             buttons:@[
+                 [UIAlertAction actionWithTitle:@"Okay"
+                                          style:UIAlertActionStyleDefault
+                                        handler:nil],
+                 [UIAlertAction
+                     actionWithTitle:@"Join Server"
+                               style:UIAlertActionStyleDefault
+                             handler:^(UIAlertAction *action) {
+                                 UIApplication *application = [UIApplication sharedApplication];
+                                 NSURL         *discordURL  = [NSURL
+                                     URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                                 NSURL         *webURL =
+                                     [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
 
-                            if ([application canOpenURL:discordURL])
-                            {
-                                [application openURL:discordURL options:@{} completionHandler:nil];
-                            }
-                            else
-                            {
-                                [application openURL:webURL options:@{} completionHandler:nil];
-                            }
-                        }]
-        ]
-        timeout:timeout
-        warning:warning
-            tts:tts];
+                                 if ([application canOpenURL:discordURL])
+                                 {
+                                     [application openURL:discordURL
+                                                   options:@{}
+                                         completionHandler:nil];
+                                 }
+                                 else
+                                 {
+                                     [application openURL:webURL options:@{} completionHandler:nil];
+                                 }
+                             }]
+             ]
+             timeout:timeout
+             warning:warning
+                 tts:tts];
 }
 
 + (void)alert:(NSString *)message title:(NSString *)title warning:(BOOL)warning
 {
-    [self alert:message title:title timeout:0 warning:warning tts:NO];
+    [self presentAlert:message title:title buttons:nil timeout:0 warning:warning tts:NO];
 }
 
 + (void)alert:(NSString *)message
@@ -211,12 +289,12 @@ static UIView   *islandOverlayView = nil;
       buttons:(NSArray<UIAlertAction *> *)buttons
       warning:(BOOL)warning
 {
-    [self alert:message title:title buttons:buttons timeout:0 warning:warning tts:NO];
+    [self presentAlert:message title:title buttons:buttons timeout:0 warning:warning tts:NO];
 }
 
 + (void)alert:(NSString *)message title:(NSString *)title tts:(BOOL)tts
 {
-    [self alert:message title:title timeout:0 warning:NO tts:tts];
+    [self presentAlert:message title:title buttons:nil timeout:0 warning:NO tts:tts];
 }
 
 + (void)alert:(NSString *)message
@@ -224,12 +302,12 @@ static UIView   *islandOverlayView = nil;
       buttons:(NSArray<UIAlertAction *> *)buttons
           tts:(BOOL)tts
 {
-    [self alert:message title:title buttons:buttons timeout:0 warning:NO tts:tts];
+    [self presentAlert:message title:title buttons:buttons timeout:0 warning:NO tts:tts];
 }
 
 + (void)alert:(NSString *)message title:(NSString *)title warning:(BOOL)warning tts:(BOOL)tts
 {
-    [self alert:message title:title timeout:0 warning:warning tts:tts];
+    [self presentAlert:message title:title buttons:nil timeout:0 warning:warning tts:tts];
 }
 
 + (void)alert:(NSString *)message
@@ -238,12 +316,12 @@ static UIView   *islandOverlayView = nil;
       warning:(BOOL)warning
           tts:(BOOL)tts
 {
-    [self alert:message title:title buttons:buttons timeout:0 warning:warning tts:tts];
+    [self presentAlert:message title:title buttons:buttons timeout:0 warning:warning tts:tts];
 }
 
 + (void)alertWarning:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
 {
-    [self alert:message title:title timeout:timeout warning:YES tts:YES];
+    [self presentAlert:message title:title buttons:nil timeout:timeout warning:YES tts:YES];
 }
 
 + (void)alert:(NSString *)message
@@ -253,12 +331,50 @@ static UIView   *islandOverlayView = nil;
       warning:(BOOL)warning
           tts:(BOOL)tts
 {
+    [self presentAlert:message title:title buttons:buttons timeout:timeout warning:warning tts:tts];
+}
+
++ (void)presentAlert:(NSString *)message
+               title:(NSString *)title
+             buttons:(NSArray<UIAlertAction *> *)buttons
+             timeout:(NSInteger)timeout
+             warning:(BOOL)warning
+                 tts:(BOOL)tts
+{
+    // Use default buttons if none provided
+    NSArray<UIAlertAction *> *alertButtons = buttons;
+    if (!alertButtons || alertButtons.count == 0)
+    {
+        alertButtons = @[
+            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
+            [UIAlertAction
+                actionWithTitle:@"Join Server"
+                          style:UIAlertActionStyleDefault
+                        handler:^(UIAlertAction *action) {
+                            UIApplication *application = [UIApplication sharedApplication];
+                            NSURL         *discordURL =
+                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                            NSURL *webURL =
+                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+
+                            if ([application canOpenURL:discordURL])
+                            {
+                                [application openURL:discordURL options:@{} completionHandler:nil];
+                            }
+                            else
+                            {
+                                [application openURL:webURL options:@{} completionHandler:nil];
+                            }
+                        }]
+        ];
+    }
+
     UIAlertController *alert =
         [UIAlertController alertControllerWithTitle:title
                                             message:message
                                      preferredStyle:UIAlertControllerStyleAlert];
 
-    for (UIAlertAction *button in buttons)
+    for (UIAlertAction *button in alertButtons)
     {
         [alert addAction:button];
     }

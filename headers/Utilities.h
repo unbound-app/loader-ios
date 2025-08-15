@@ -101,6 +101,13 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 + (void)speakAlertContent:(NSString *)title message:(NSString *)message;
 
++ (void)presentAlert:(NSString *)message
+               title:(NSString *)title
+             buttons:(NSArray<UIAlertAction *> *)buttons
+             timeout:(NSInteger)timeout
+             warning:(BOOL)warning
+                 tts:(BOOL)tts;
+
 + (id)parseJSON:(NSData *)data;
 
 + (dispatch_source_t)createDebounceTimer:(double)delay
