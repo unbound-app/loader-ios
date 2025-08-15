@@ -147,7 +147,7 @@ id gBridge = nil;
             if (![Utilities isVerifiedBuild])
             {
                 [Logger error:LOG_CATEGORY_DEFAULT format:@"Tweak signature verification failed"];
-                [Utilities alert:@"The injected tweak is missing Unbound's embedded signature. "
+                [Utilities alert:@"The injected tweak is missing Unbound's detached signature. "
                                  @"You cannot be sure that this is free of malware. "
                                  @"If this app was obtained via 'cypwn' or similar sources "
                                  @"we heavily recommend you uninstall it immediately."
