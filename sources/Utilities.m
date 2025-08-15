@@ -107,13 +107,151 @@ static UIView   *islandOverlayView = nil;
         title:(NSString *)title
       buttons:(NSArray<UIAlertAction *> *)buttons
 {
-    [self alert:message title:title buttons:buttons timeout:0];
+    [self alert:message title:title buttons:buttons timeout:0 warning:NO tts:NO];
 }
 
 + (void)alert:(NSString *)message
         title:(NSString *)title
       buttons:(NSArray<UIAlertAction *> *)buttons
       timeout:(NSInteger)timeout
+{
+    [self alert:message title:title buttons:buttons timeout:timeout warning:NO tts:NO];
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
+{
+    [self alert:message
+          title:title
+        buttons:@[
+            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
+            [UIAlertAction
+                actionWithTitle:@"Join Server"
+                          style:UIAlertActionStyleDefault
+                        handler:^(UIAlertAction *action) {
+                            UIApplication *application = [UIApplication sharedApplication];
+                            NSURL         *discordURL =
+                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                            NSURL *webURL =
+                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+
+                            if ([application canOpenURL:discordURL])
+                            {
+                                [application openURL:discordURL options:@{} completionHandler:nil];
+                            }
+                            else
+                            {
+                                [application openURL:webURL options:@{} completionHandler:nil];
+                            }
+                        }]
+        ]
+        timeout:timeout
+        warning:NO
+            tts:NO];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+{
+    [self alert:message title:title buttons:buttons timeout:timeout warning:warning tts:NO];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+{
+    [self alert:message title:title timeout:timeout warning:warning tts:NO];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+          tts:(BOOL)tts
+{
+    [self alert:message
+          title:title
+        buttons:@[
+            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
+            [UIAlertAction
+                actionWithTitle:@"Join Server"
+                          style:UIAlertActionStyleDefault
+                        handler:^(UIAlertAction *action) {
+                            UIApplication *application = [UIApplication sharedApplication];
+                            NSURL         *discordURL =
+                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                            NSURL *webURL =
+                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+
+                            if ([application canOpenURL:discordURL])
+                            {
+                                [application openURL:discordURL options:@{} completionHandler:nil];
+                            }
+                            else
+                            {
+                                [application openURL:webURL options:@{} completionHandler:nil];
+                            }
+                        }]
+        ]
+        timeout:timeout
+        warning:warning
+            tts:tts];
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title warning:(BOOL)warning
+{
+    [self alert:message title:title timeout:0 warning:warning tts:NO];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      warning:(BOOL)warning
+{
+    [self alert:message title:title buttons:buttons timeout:0 warning:warning tts:NO];
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title tts:(BOOL)tts
+{
+    [self alert:message title:title timeout:0 warning:NO tts:tts];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+          tts:(BOOL)tts
+{
+    [self alert:message title:title buttons:buttons timeout:0 warning:NO tts:tts];
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title warning:(BOOL)warning tts:(BOOL)tts
+{
+    [self alert:message title:title timeout:0 warning:warning tts:tts];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      warning:(BOOL)warning
+          tts:(BOOL)tts
+{
+    [self alert:message title:title buttons:buttons timeout:0 warning:warning tts:tts];
+}
+
++ (void)alertWarning:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
+{
+    [self alert:message title:title timeout:timeout warning:YES tts:YES];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+          tts:(BOOL)tts
 {
     UIAlertController *alert =
         [UIAlertController alertControllerWithTitle:title
@@ -179,6 +317,20 @@ static UIView   *islandOverlayView = nil;
             presentViewController:alert
                          animated:YES
                        completion:^{
+                           if (warning)
+                           {
+                               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
+                                              dispatch_get_main_queue(),
+                                              ^{ [self applyRedPulsatingBorderToAlert:alert]; });
+                           }
+
+                           if (tts)
+                           {
+                               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC),
+                                              dispatch_get_main_queue(),
+                                              ^{ [self speakAlertContent:title message:message]; });
+                           }
+
                            if (timeout > 0)
                            {
                                __block NSInteger countdown = timeout;
@@ -214,162 +366,42 @@ static UIView   *islandOverlayView = nil;
     });
 }
 
-+ (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
++ (void)speakAlertContent:(NSString *)title message:(NSString *)message
 {
-    [Utilities
-          alert:message
-          title:title
-        buttons:@[
-            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
-
-            [UIAlertAction
-                actionWithTitle:@"Join Server"
-                          style:UIAlertActionStyleDefault
-                        handler:^(UIAlertAction *action) {
-                            UIApplication *application = [UIApplication sharedApplication];
-                            NSURL         *discordURL =
-                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
-                            NSURL *webURL =
-                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
-
-                            if ([application canOpenURL:discordURL])
-                            {
-                                [application openURL:discordURL options:@{} completionHandler:nil];
-                            }
-                            else
-                            {
-                                [application openURL:webURL options:@{} completionHandler:nil];
-                            }
-                        }]
-        ]
-        timeout:timeout];
-}
-
-+ (void)alertWarning:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
-{
-    UIAlertController *alert =
-        [UIAlertController alertControllerWithTitle:title
-                                            message:message
-                                     preferredStyle:UIAlertControllerStyleAlert];
-
-    UIAlertAction *okayAction = [UIAlertAction actionWithTitle:@"Okay"
-                                                         style:UIAlertActionStyleDefault
-                                                       handler:nil];
-
-    UIAlertAction *joinServerAction = [UIAlertAction
-        actionWithTitle:@"Join Server"
-                  style:UIAlertActionStyleDefault
-                handler:^(UIAlertAction *action) {
-                    UIApplication *application = [UIApplication sharedApplication];
-                    NSURL         *discordURL =
-                        [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
-                    NSURL *webURL = [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
-
-                    if ([application canOpenURL:discordURL])
-                    {
-                        [application openURL:discordURL options:@{} completionHandler:nil];
-                    }
-                    else
-                    {
-                        [application openURL:webURL options:@{} completionHandler:nil];
-                    }
-                }];
-
-    [alert addAction:okayAction];
-    [alert addAction:joinServerAction];
-
-    if (timeout > 0)
+    if (UIAccessibilityIsVoiceOverRunning())
     {
-        for (UIAlertAction *action in alert.actions)
-        {
-            action.enabled = NO;
-        }
-
-        NSString *originalTitle = title;
-        alert.title = [NSString stringWithFormat:@"%@ (%ld)", originalTitle, (long) timeout];
+        NSString *announcement = [NSString stringWithFormat:@"%@. %@", title, message];
+        UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, announcement);
+        return;
     }
 
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIViewController *controller = nil;
+    static AVSpeechSynthesizer *synthesizer = nil;
+    if (!synthesizer)
+    {
+        synthesizer = [[AVSpeechSynthesizer alloc] init];
+    }
 
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
-        {
-            if (scene.activationState == UISceneActivationStateForegroundActive)
-            {
-                UIWindowScene *windowScene = (UIWindowScene *) scene;
-                UIWindow      *keyWindow   = windowScene.windows.firstObject;
-                for (UIWindow *window in windowScene.windows)
-                {
-                    if (window.isKeyWindow)
-                    {
-                        keyWindow = window;
-                        break;
-                    }
-                }
-                controller = keyWindow.rootViewController;
-                break;
-            }
-        }
+    if ([synthesizer isSpeaking])
+    {
+        [synthesizer stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+    }
 
-        if (!controller)
-        {
-            controller = [[[[UIApplication sharedApplication] delegate] window] rootViewController];
-        }
+    NSString *cleanTitle = [title stringByReplacingOccurrencesOfString:@"⚠️" withString:@"Warning:"];
 
-        while (controller.presentedViewController)
-        {
-            controller = controller.presentedViewController;
-        }
+    NSString *speechText = [NSString stringWithFormat:@"%@. %@", cleanTitle, message];
 
-        if (!controller)
-        {
-            [Logger error:LOG_CATEGORY_UTILITIES
-                   format:@"Failed to find view controller to present alert"];
-            return;
-        }
+    AVSpeechUtterance *utterance = [AVSpeechUtterance speechUtteranceWithString:speechText];
+    utterance.rate               = AVSpeechUtteranceDefaultSpeechRate;
+    utterance.volume             = 1.0;
 
-        [controller
-            presentViewController:alert
-                         animated:YES
-                       completion:^{
-                           dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
-                                          dispatch_get_main_queue(),
-                                          ^{ [self applyRedPulsatingBorderToAlert:alert]; });
+    AVSpeechSynthesisVoice *voice = [AVSpeechSynthesisVoice voiceWithLanguage:@"en-GB"];
+    if (voice)
+    {
+        utterance.voice = voice;
+    }
 
-                           if (timeout > 0)
-                           {
-                               __block NSInteger countdown = timeout;
-                               dispatch_source_t timer     = dispatch_source_create(
-                                   DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-
-                               dispatch_source_set_timer(
-                                   timer, dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC),
-                                   1.0 * NSEC_PER_SEC, 0.1 * NSEC_PER_SEC);
-
-                               dispatch_source_set_event_handler(timer, ^{
-                                   countdown--;
-
-                                   if (countdown > 0)
-                                   {
-                                       NSString *newTitle = [NSString
-                                           stringWithFormat:@"%@ (%ld)", title, (long) countdown];
-                                       alert.title        = newTitle;
-                                   }
-                                   else
-                                   {
-                                       alert.title = title;
-                                       for (UIAlertAction *action in alert.actions)
-                                       {
-                                           action.enabled = YES;
-                                       }
-                                       dispatch_source_cancel(timer);
-                                   }
-                               });
-
-                               dispatch_resume(timer);
-                           }
-                       }];
-    });
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Speaking alert content via TTS"];
+    [synthesizer speakUtterance:utterance];
 }
 
 + (void)applyRedPulsatingBorderToAlert:(UIAlertController *)alert

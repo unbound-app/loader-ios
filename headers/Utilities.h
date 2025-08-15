@@ -1,5 +1,6 @@
 #import <CommonCrypto/CommonCrypto.h>
 #import <Security/Security.h>
+#import <AVFoundation/AVFoundation.h>
 #import <dlfcn.h>
 #import <rootless.h>
 #import <sys/utsname.h>
@@ -36,13 +37,69 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
         title:(NSString *)title
       buttons:(NSArray<UIAlertAction *> *)buttons
       timeout:(NSInteger)timeout;
+
 + (void)alert:(NSString *)message
         title:(NSString *)title
       timeout:(NSInteger)timeout;
 
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      warning:(BOOL)warning;
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      warning:(BOOL)warning;
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+          tts:(BOOL)tts;
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+          tts:(BOOL)tts;
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      warning:(BOOL)warning
+          tts:(BOOL)tts;
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      warning:(BOOL)warning
+          tts:(BOOL)tts;
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning;
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning;
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+          tts:(BOOL)tts;
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+          tts:(BOOL)tts;
+
 + (void)alertWarning:(NSString *)message
                title:(NSString *)title
              timeout:(NSInteger)timeout;
+
++ (void)speakAlertContent:(NSString *)title message:(NSString *)message;
 
 + (id)parseJSON:(NSData *)data;
 
