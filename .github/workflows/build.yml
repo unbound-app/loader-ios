@@ -65,7 +65,7 @@ env:
 
 jobs:
   build-tweak:
-    runs-on: macos-15
+    runs-on: macos-14
     outputs:
       deb_url: ${{ steps.upload-deb.outputs.artifact-url }}
       deb_filename: ${{ steps.set-deb-filename.outputs.filename }}
@@ -150,7 +150,7 @@ jobs:
           echo "filename=$DEB_FILENAME" >> $GITHUB_OUTPUT
 
   build-ipa:
-    runs-on: macos-15
+    runs-on: macos-14
     needs: build-tweak
     outputs:
       ipa_url: ${{ steps.upload-ipa.outputs.artifact-url }}
@@ -281,7 +281,7 @@ jobs:
         run: echo "filename=${{ env.APP_NAME }}.ipa" >> $GITHUB_OUTPUT
 
   build-simulator:
-    runs-on: macos-15
+    runs-on: macos-14
     needs: build-ipa
     outputs:
       simulator_url: ${{ steps.upload-simulator.outputs.artifact-url }}
@@ -336,7 +336,7 @@ jobs:
 
   release-app:
     if: inputs.caller_workflow != 'ci' && inputs.release == true
-    runs-on: macos-15
+    runs-on: macos-14
     needs: [build-tweak, build-ipa, build-simulator]
 
     steps:
@@ -379,7 +379,7 @@ jobs:
   app-repo:
     if: inputs.caller_workflow != 'ci' && inputs.release == true
     continue-on-error: true
-    runs-on: macos-15
+    runs-on: macos-14
     needs: release-app
     steps:
       - name: Checkout code
