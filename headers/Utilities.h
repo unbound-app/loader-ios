@@ -101,6 +101,8 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 + (void)speakAlertContent:(NSString *)title message:(NSString *)message;
 
++ (UIAlertAction *)createDiscordInviteButton;
+
 + (void)presentAlert:(NSString *)message
                title:(NSString *)title
              buttons:(NSArray<UIAlertAction *> *)buttons
