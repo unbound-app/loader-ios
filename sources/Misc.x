@@ -27,7 +27,6 @@
 }
 %end
 
-// Fix issues with sideloading
 %group Sideloading
 %hook  NSFileManager
 - (NSURL *)containerURLForSecurityApplicationGroupIdentifier:(NSString *)identifier
@@ -115,7 +114,6 @@
 
 %end
 
-// show icon change error alert
 %hook UIApplication
 - (void)setAlternateIconName:(NSString *)iconName completionHandler:(void (^)(NSError *))completion
 {
@@ -137,7 +135,6 @@
 }
 %end
 
-// show passkey error alert
 %hook ASAuthorizationController
 
 - (void)performRequests
