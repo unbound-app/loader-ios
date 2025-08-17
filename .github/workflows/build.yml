@@ -69,9 +69,9 @@ jobs:
     outputs:
       deb_url: ${{ steps.upload-deb.outputs.artifact-url }}
       deb_filename: ${{ steps.set-deb-filename.outputs.filename }}
-
     env:
       DEB_DOWNLOADED: false
+      UNBOUND_PK: ${{ secrets.UNBOUND_PK }}
 
     steps:
       - name: Checkout code

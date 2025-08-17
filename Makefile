@@ -20,15 +20,23 @@ $(BUNDLE_NAME)_RESOURCE_DIRS = "resources"
 include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
 
+SHELL := /bin/bash
+
 before-all::
 	@if [ ! -d "resources" ] || [ -z "$$(ls -A resources 2>/dev/null)" ]; then \
 		git submodule update --init --recursive || exit 1; \
 	fi
 
-	$(ECHO_NOTHING)VERSION_NUM=$$(echo "$(THEOS_PACKAGE_BASE_VERSION)" | cut -d'.' -f1,2) && \
-		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.js > resources/preload.js$(ECHO_END)
-
-	@if [ -f "private_key.pem" ]; then \
+	VERSION_NUM=$$(echo "$(THEOS_PACKAGE_BASE_VERSION)" | cut -d'.' -f1,2) && \
+		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.js > resources/preload.js
+	
+	@if [ -n "$$UNBOUND_PK" ]; then \
+		if ! echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign <(printf "%s" "$$UNBOUND_PK") -out resources/signature.bin 2>/dev/null; then \
+			tmp=$$(mktemp); printf "%s" "$$UNBOUND_PK" > $$tmp; \
+			echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign $$tmp -out resources/signature.bin; \
+			rm -f $$tmp; \
+		fi; \
+	elif [ -f "private_key.pem" ]; then \
 		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign private_key.pem -out resources/signature.bin; \
 	fi
 
