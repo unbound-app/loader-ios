@@ -31,13 +31,9 @@ before-all::
 		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.js > resources/preload.js
 	
 	@if [ -n "$$UNBOUND_PK" ]; then \
-		if echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign <(printf '%b' "$$UNBOUND_PK" | tr -d '\r') -out resources/signature.bin 2>/dev/null; then \
-			:; \
-		else \
-			echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign <(printf '%s' "$$UNBOUND_PK" | tr -d '\r') -out resources/signature.bin 2>/dev/null || rm -f resources/signature.bin; \
-		fi; \
+		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign <(printf '%s' "$$UNBOUND_PK" | tr -d '\r') -out resources/signature.bin 2>/dev/null; \
 	elif [ -f "private_key.pem" ]; then \
-		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign private_key.pem -out resources/signature.bin 2>/dev/null || rm -f resources/signature.bin; \
+		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign private_key.pem -out resources/signature.bin 2>/dev/null; \
 	fi
 
 after-stage::
