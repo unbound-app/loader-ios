@@ -1358,6 +1358,25 @@ static UIView   *islandOverlayView = nil;
         [Logger info:LOG_CATEGORY_UTILITIES
               format:@"Public key data size: %lu bytes", (unsigned long) [publicKeyData length]];
 
+        // Convert PEM to DER if needed
+        NSString *publicKeyString = [[NSString alloc] initWithData:publicKeyData
+                                                          encoding:NSUTF8StringEncoding];
+        if ([publicKeyString containsString:@"BEGIN PUBLIC KEY"])
+        {
+            // Remove PEM headers and decode base64
+            NSString *base64String = [publicKeyString 
+                stringByReplacingOccurrencesOfString:@"-----BEGIN PUBLIC KEY-----" withString:@""]
+                stringByReplacingOccurrencesOfString:@"-----END PUBLIC KEY-----" withString:@""]
+                stringByReplacingOccurrencesOfString:@"\n" withString:@""]
+                stringByReplacingOccurrencesOfString:@"\r" withString:@""];
+
+            publicKeyData = [[NSData alloc] initWithBase64EncodedString:base64String options:0];
+
+            [Logger info:LOG_CATEGORY_UTILITIES
+                  format:@"Converted PEM to DER, new size: %lu bytes",
+                         (unsigned long) [publicKeyData length]];
+        }
+
         CFErrorRef error = NULL;
         SecKeyRef  publicKey =
             SecKeyCreateWithData((__bridge CFDataRef) publicKeyData, (__bridge CFDictionaryRef) @{
