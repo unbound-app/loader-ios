@@ -735,19 +735,12 @@ BOOL isRecoveryModeEnabled(void)
 
 - (void)openGitHubIssue
 {
-    UIDevice *device = [UIDevice currentDevice];
-
     NSString *deviceModel = [Utilities getDeviceModel];
     NSString *appVersion =
         [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     NSString *buildNumber = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
 
-    MobileGestalt *mg              = [MobileGestalt sharedInstance];
-    NSString      *iosBuildVersion = [mg getBuildVersion];
-    NSString      *iosVersionString =
-        iosBuildVersion
-                 ? [NSString stringWithFormat:@"%@ (%@)", device.systemVersion, iosBuildVersion]
-                 : device.systemVersion;
+    NSString *iosVersionString = [Utilities getIOSVersionString];
 
     NSString *appSource;
     if ([Utilities isAppStoreApp])

@@ -127,6 +127,7 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (BOOL)isJailbroken;
 
 + (NSString *)getDeviceModel;
++ (NSString *)getIOSVersionString;
 + (BOOL)deviceHasDynamicIsland;
 + (void)initializeDynamicIslandOverlay;
 + (void)showDynamicIslandOverlay;

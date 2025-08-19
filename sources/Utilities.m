@@ -687,6 +687,18 @@ static UIView   *islandOverlayView = nil;
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
 }
 
++ (NSString *)getIOSVersionString
+{
+    UIDevice *device = [UIDevice currentDevice];
+
+    MobileGestalt *mg              = [MobileGestalt sharedInstance];
+    NSString      *iosBuildVersion = [mg getBuildVersion];
+
+    return iosBuildVersion
+               ? [NSString stringWithFormat:@"%@ (%@)", device.systemVersion, iosBuildVersion]
+               : device.systemVersion;
+}
+
 + (BOOL)deviceHasDynamicIsland
 {
     if ([[UIDevice currentDevice] userInterfaceIdiom] != UIUserInterfaceIdiomPhone)
