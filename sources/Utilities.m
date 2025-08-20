@@ -687,7 +687,7 @@ static UIView   *islandOverlayView = nil;
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
 }
 
-+ (NSString *)getIOSVersionString
++ (NSString *)getiOSVersionString
 {
     UIDevice *device = [UIDevice currentDevice];
 

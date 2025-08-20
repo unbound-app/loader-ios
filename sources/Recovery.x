@@ -740,7 +740,7 @@ BOOL isRecoveryModeEnabled(void)
         [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     NSString *buildNumber = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
 
-    NSString *iosVersionString = [Utilities getIOSVersionString];
+    NSString *iosVersionString = [Utilities getiOSVersionString];
 
     NSString *appSource;
     if ([Utilities isAppStoreApp])
