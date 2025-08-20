@@ -5,7 +5,6 @@ this.UNBOUND_FONTS = %@;
 this.UNBOUND_AVAILABLE_FONTS = %@;
 
 this.UNBOUND_LOADER = {
-        platform: 'iOS',
         origin: 'Dynamic Library',
         version: VERSION_PLACEHOLDER
 };
