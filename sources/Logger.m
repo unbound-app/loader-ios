@@ -41,20 +41,16 @@ static os_log_t getLoggerForCategory(const char *category)
 
 + (void)log:(LogLevel)level category:(const char *)category format:(NSString *)format, ...
 {
-    // Ensure logger is initialized
     [self initialize];
 
-    // Create a copy of the arguments to use in the async block
     va_list args;
     va_start(args, format);
     NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
     va_end(args);
 
-    // Get category info
     NSString *categoryStr       = [NSString stringWithUTF8String:category];
     BOOL      isDefaultCategory = [categoryStr isEqualToString:@"default"];
 
-    // Format the final message
     if (isDefaultCategory)
     {
         message = [NSString stringWithFormat:@"[Unbound] %@", message];
@@ -71,10 +67,8 @@ static os_log_t getLoggerForCategory(const char *category)
         message = [NSString stringWithFormat:@"[Unbound] [%@] %@", categoryStr, message];
     }
 
-    // Get the logger for this category
     os_log_t logger = getLoggerForCategory(category);
 
-    // Log on the background thread to avoid UI freezes
     dispatch_async(_logQueue, ^{
         switch (level)
         {
@@ -89,15 +83,9 @@ static os_log_t getLoggerForCategory(const char *category)
                 break;
             case LogLevelError:
                 os_log_error(logger, "%{public}@", message);
-#ifndef DEBUG
-                NSLog(@"ERROR: %@", message); // Fallback in release mode
-#endif
                 break;
             case LogLevelFault:
                 os_log_fault(logger, "%{public}@", message);
-#ifndef DEBUG
-                NSLog(@"FAULT: %@", message); // Fallback in release mode
-#endif
                 break;
         }
     });
