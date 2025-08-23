@@ -1096,10 +1096,6 @@ static UIView   *islandOverlayView = nil;
     {
         result = [self readEntitlementsFrom64BitBinary:file];
     }
-    else if (magic == MH_MAGIC || magic == MH_CIGAM)
-    {
-        result = [self readEntitlementsFrom32BitBinary:file];
-    }
     else
     {
         result = @{};
@@ -1112,42 +1108,6 @@ static UIView   *islandOverlayView = nil;
 + (NSDictionary *)readEntitlementsFrom64BitBinary:(FILE *)file
 {
     struct mach_header_64 header;
-    if (fread(&header, sizeof(header), 1, file) != 1)
-    {
-        return nil;
-    }
-
-    for (uint32_t i = 0; i < header.ncmds; i++)
-    {
-        struct load_command cmd;
-        long                cmdPos = ftell(file);
-
-        if (fread(&cmd, sizeof(cmd), 1, file) != 1)
-        {
-            return nil;
-        }
-
-        if (cmd.cmd == LC_CODE_SIGNATURE)
-        {
-            struct linkedit_data_command sigCmd;
-            fseek(file, cmdPos, SEEK_SET);
-            if (fread(&sigCmd, sizeof(sigCmd), 1, file) != 1)
-            {
-                return nil;
-            }
-
-            return [self extractEntitlements:file offset:sigCmd.dataoff];
-        }
-
-        fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
-    }
-
-    return nil;
-}
-
-+ (NSDictionary *)readEntitlementsFrom32BitBinary:(FILE *)file
-{
-    struct mach_header header;
     if (fread(&header, sizeof(header), 1, file) != 1)
     {
         return nil;

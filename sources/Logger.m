@@ -7,9 +7,8 @@ static dispatch_queue_t _logQueue;
 + (void)initialize
 {
     static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        _logQueue = dispatch_queue_create("app.unbound", DISPATCH_QUEUE_SERIAL);
-    });
+    dispatch_once(&onceToken,
+                  ^{ _logQueue = dispatch_queue_create("app.unbound", DISPATCH_QUEUE_SERIAL); });
 }
 
 static os_log_t getLoggerForCategory(const char *category)

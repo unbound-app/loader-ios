@@ -132,6 +132,7 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (void)initializeDynamicIslandOverlay;
 + (void)showDynamicIslandOverlay;
 + (void)hideDynamicIslandOverlay;
++ (void)showDevelopmentBuildBanner;
 
 + (BOOL)isLoadedWithElleKit;
 
@@ -142,10 +143,6 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (NSDictionary *)getApplicationSignatureInfo;
 
 + (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements;
-
-// TODO: remove before initial release
-+ (void)showDevelopmentBuildBanner;
-
 + (BOOL)isVerifiedBuild;
 
 @end

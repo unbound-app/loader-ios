@@ -66,3 +66,6 @@ IncludeCategories:
   # Local/Project headers
   - Regex: '^"'
     Priority: 3
+
+# File formatting
+InsertNewlineAtEOF: true
