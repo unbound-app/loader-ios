@@ -762,17 +762,6 @@ BOOL isRecoveryModeEnabled(void)
 
     NSString *appRegistrationType = [Utilities isSystemApp] ? @"System" : @"User";
 
-    BOOL      isVerified = [Utilities isVerifiedBuild];
-    NSString *verificationStatus;
-    if (isVerified)
-    {
-        verificationStatus = @"☑️ Verified Unbound build signature";
-    }
-    else
-    {
-        verificationStatus = @"❌ Not a verified Unbound build";
-    }
-
     NSMutableString *body = [NSMutableString
         stringWithFormat:@"### Information\n"
                           "- Device: `%@`\n"
@@ -782,12 +771,13 @@ BOOL isRecoveryModeEnabled(void)
                           "- HBC Version: `%u`\n"
                           "- App Source: `%@`\n"
                           "- App Registration: `%@`\n"
-                          "- Jailbroken: `%@`\n"
-                          "- Build Verification: %@\n"
+                          "- State: `%@`\n"
+                          "- Verification: %@\n"
                           "- Build Commit: `%@`\n",
                          deviceModel, iosVersionString, PACKAGE_VERSION, appVersion, buildNumber,
                          [Utilities getHermesBytecodeVersion], appSource, appRegistrationType,
-                         [Utilities isJailbroken] ? @"Yes" : @"No", verificationStatus,
+                         [Utilities isJailbroken] ? @"Jailbroken" : @"Jailed",
+                         [Utilities isVerifiedBuild] ? @"Valid Signature" : @"Invalid Signature",
                          COMMIT_HASH];
 
     NSDictionary *entitlements = [Utilities getApplicationEntitlements];
