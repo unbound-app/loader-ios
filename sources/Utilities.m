@@ -1,6 +1,3 @@
-#import <mach-o/fat.h>
-#import <mach-o/loader.h>
-
 #import "Utilities.h"
 
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
@@ -20,7 +17,6 @@ static UIView   *islandOverlayView = nil;
         return bundle;
     }
 
-    // Attempt to get the bundle from an exact path
     NSString *bundlePath = ROOT_PATH_NS(@"/Library/Application Support/UnboundResources.bundle");
 
     if ([FileSystem exists:bundlePath])
@@ -29,7 +25,6 @@ static UIView   *islandOverlayView = nil;
         return bundlePath;
     }
 
-    // Fall back to a relative path on jailed devices
     NSURL    *url      = [[NSBundle mainBundle] bundleURL];
     NSString *relative = [NSString stringWithFormat:@"%@/UnboundResources.bundle", [url path]];
     if ([FileSystem exists:relative])
@@ -75,44 +70,39 @@ static UIView   *islandOverlayView = nil;
 
 + (void)alert:(NSString *)message
 {
-    return [Utilities alert:message title:@"Unbound"];
+    [self presentAlert:message
+                 title:@"Unbound"
+               buttons:@[
+                   [UIAlertAction actionWithTitle:@"Okay"
+                                            style:UIAlertActionStyleDefault
+                                          handler:nil],
+                   [self createDiscordInviteButton]
+               ]
+               timeout:0
+               warning:NO
+                   tts:NO];
 }
 
 + (void)alert:(NSString *)message title:(NSString *)title
 {
-    return [Utilities
-          alert:message
-          title:title
-        buttons:@[
-            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
-
-            [UIAlertAction
-                actionWithTitle:@"Join Server"
-                          style:UIAlertActionStyleDefault
-                        handler:^(UIAlertAction *action) {
-                            UIApplication *application = [UIApplication sharedApplication];
-                            NSURL         *discordURL =
-                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
-                            NSURL *webURL =
-                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
-
-                            if ([application canOpenURL:discordURL])
-                            {
-                                [application openURL:discordURL options:@{} completionHandler:nil];
-                            }
-                            else
-                            {
-                                [application openURL:webURL options:@{} completionHandler:nil];
-                            }
-                        }]
-        ]];
+    [self presentAlert:message
+                 title:title
+               buttons:@[
+                   [UIAlertAction actionWithTitle:@"Okay"
+                                            style:UIAlertActionStyleDefault
+                                          handler:nil],
+                   [self createDiscordInviteButton]
+               ]
+               timeout:0
+               warning:NO
+                   tts:NO];
 }
 
 + (void)alert:(NSString *)message
         title:(NSString *)title
       buttons:(NSArray<UIAlertAction *> *)buttons
 {
-    [self alert:message title:title buttons:buttons timeout:0];
+    [self presentAlert:message title:title buttons:buttons timeout:0 warning:NO tts:NO];
 }
 
 + (void)alert:(NSString *)message
@@ -120,12 +110,148 @@ static UIView   *islandOverlayView = nil;
       buttons:(NSArray<UIAlertAction *> *)buttons
       timeout:(NSInteger)timeout
 {
+    [self presentAlert:message title:title buttons:buttons timeout:timeout warning:NO tts:NO];
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
+{
+    [self presentAlert:message
+                 title:title
+               buttons:@[
+                   [UIAlertAction actionWithTitle:@"Okay"
+                                            style:UIAlertActionStyleDefault
+                                          handler:nil],
+                   [self createDiscordInviteButton]
+               ]
+               timeout:timeout
+               warning:NO
+                   tts:NO];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+{
+    [self presentAlert:message title:title buttons:buttons timeout:timeout warning:warning tts:NO];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+{
+    [self presentAlert:message
+                 title:title
+               buttons:@[
+                   [UIAlertAction actionWithTitle:@"Okay"
+                                            style:UIAlertActionStyleDefault
+                                          handler:nil],
+                   [self createDiscordInviteButton]
+               ]
+               timeout:timeout
+               warning:warning
+                   tts:NO];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+          tts:(BOOL)tts
+{
+    [self presentAlert:message
+                 title:title
+               buttons:@[
+                   [UIAlertAction actionWithTitle:@"Okay"
+                                            style:UIAlertActionStyleDefault
+                                          handler:nil],
+                   [self createDiscordInviteButton]
+               ]
+               timeout:timeout
+               warning:warning
+                   tts:tts];
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title warning:(BOOL)warning
+{
+    [self presentAlert:message title:title buttons:nil timeout:0 warning:warning tts:NO];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      warning:(BOOL)warning
+{
+    [self presentAlert:message title:title buttons:buttons timeout:0 warning:warning tts:NO];
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title tts:(BOOL)tts
+{
+    [self presentAlert:message title:title buttons:nil timeout:0 warning:NO tts:tts];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+          tts:(BOOL)tts
+{
+    [self presentAlert:message title:title buttons:buttons timeout:0 warning:NO tts:tts];
+}
+
++ (void)alert:(NSString *)message title:(NSString *)title warning:(BOOL)warning tts:(BOOL)tts
+{
+    [self presentAlert:message title:title buttons:nil timeout:0 warning:warning tts:tts];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      warning:(BOOL)warning
+          tts:(BOOL)tts
+{
+    [self presentAlert:message title:title buttons:buttons timeout:0 warning:warning tts:tts];
+}
+
++ (void)alertWarning:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
+{
+    [self presentAlert:message title:title buttons:nil timeout:timeout warning:YES tts:YES];
+}
+
++ (void)alert:(NSString *)message
+        title:(NSString *)title
+      buttons:(NSArray<UIAlertAction *> *)buttons
+      timeout:(NSInteger)timeout
+      warning:(BOOL)warning
+          tts:(BOOL)tts
+{
+    [self presentAlert:message title:title buttons:buttons timeout:timeout warning:warning tts:tts];
+}
+
++ (void)presentAlert:(NSString *)message
+               title:(NSString *)title
+             buttons:(NSArray<UIAlertAction *> *)buttons
+             timeout:(NSInteger)timeout
+             warning:(BOOL)warning
+                 tts:(BOOL)tts
+{
+    // Use default buttons if none provided
+    NSArray<UIAlertAction *> *alertButtons = buttons;
+    if (!alertButtons || alertButtons.count == 0)
+    {
+        alertButtons = @[
+            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
+            [self createDiscordInviteButton]
+        ];
+    }
+
     UIAlertController *alert =
         [UIAlertController alertControllerWithTitle:title
                                             message:message
                                      preferredStyle:UIAlertControllerStyleAlert];
 
-    for (UIAlertAction *button in buttons)
+    for (UIAlertAction *button in alertButtons)
     {
         [alert addAction:button];
     }
@@ -184,6 +310,20 @@ static UIView   *islandOverlayView = nil;
             presentViewController:alert
                          animated:YES
                        completion:^{
+                           if (warning)
+                           {
+                               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
+                                              dispatch_get_main_queue(),
+                                              ^{ [self applyRedPulsatingBorderToAlert:alert]; });
+                           }
+
+                           if (tts)
+                           {
+                               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC),
+                                              dispatch_get_main_queue(),
+                                              ^{ [self speakAlertContent:title message:message]; });
+                           }
+
                            if (timeout > 0)
                            {
                                __block NSInteger countdown = timeout;
@@ -219,35 +359,93 @@ static UIView   *islandOverlayView = nil;
     });
 }
 
-+ (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
++ (void)speakAlertContent:(NSString *)title message:(NSString *)message
 {
-    [Utilities
-          alert:message
-          title:title
-        buttons:@[
-            [UIAlertAction actionWithTitle:@"Okay" style:UIAlertActionStyleDefault handler:nil],
+    if (UIAccessibilityIsVoiceOverRunning())
+    {
+        NSString *announcement = [NSString stringWithFormat:@"%@. %@", title, message];
+        UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, announcement);
+        return;
+    }
 
-            [UIAlertAction
-                actionWithTitle:@"Join Server"
-                          style:UIAlertActionStyleDefault
-                        handler:^(UIAlertAction *action) {
-                            UIApplication *application = [UIApplication sharedApplication];
-                            NSURL         *discordURL =
-                                [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
-                            NSURL *webURL =
-                                [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+    static AVSpeechSynthesizer *synthesizer = nil;
+    if (!synthesizer)
+    {
+        synthesizer = [[AVSpeechSynthesizer alloc] init];
+    }
 
-                            if ([application canOpenURL:discordURL])
-                            {
-                                [application openURL:discordURL options:@{} completionHandler:nil];
-                            }
-                            else
-                            {
-                                [application openURL:webURL options:@{} completionHandler:nil];
-                            }
-                        }]
-        ]
-        timeout:timeout];
+    if ([synthesizer isSpeaking])
+    {
+        [synthesizer stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+    }
+
+    NSString *cleanTitle = [title stringByReplacingOccurrencesOfString:@"⚠️" withString:@"Warning:"];
+
+    NSString *speechText = [NSString stringWithFormat:@"%@. %@", cleanTitle, message];
+
+    AVSpeechUtterance *utterance = [AVSpeechUtterance speechUtteranceWithString:speechText];
+    utterance.rate               = AVSpeechUtteranceDefaultSpeechRate;
+    utterance.volume             = 1.0;
+
+    AVSpeechSynthesisVoice *voice = [AVSpeechSynthesisVoice voiceWithLanguage:@"en-GB"];
+    if (voice)
+    {
+        utterance.voice = voice;
+    }
+
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Speaking alert content via TTS"];
+    [synthesizer speakUtterance:utterance];
+}
+
++ (void)applyRedPulsatingBorderToAlert:(UIAlertController *)alert
+{
+    UIView *alertView = alert.view;
+
+    [alertView.layer removeAllAnimations];
+
+    alertView.layer.shadowColor   = [UIColor systemRedColor].CGColor;
+    alertView.layer.shadowRadius  = 15.0;
+    alertView.layer.shadowOpacity = 0.8;
+    alertView.layer.shadowOffset  = CGSizeZero;
+    alertView.layer.cornerRadius  = 14.0;
+
+    alertView.layer.borderColor = [UIColor systemRedColor].CGColor;
+    alertView.layer.borderWidth = 1.5;
+
+    CABasicAnimation *glowAnimation = [CABasicAnimation animationWithKeyPath:@"shadowRadius"];
+    glowAnimation.fromValue         = @(8.0);
+    glowAnimation.toValue           = @(25.0);
+    glowAnimation.duration          = 1.5;
+    glowAnimation.autoreverses      = YES;
+    glowAnimation.repeatCount       = HUGE_VALF;
+    glowAnimation.timingFunction =
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+
+    CABasicAnimation *opacityAnimation = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
+    opacityAnimation.fromValue         = @(0.4);
+    opacityAnimation.toValue           = @(1.0);
+    opacityAnimation.duration          = 1.5;
+    opacityAnimation.autoreverses      = YES;
+    opacityAnimation.repeatCount       = HUGE_VALF;
+    opacityAnimation.timingFunction =
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+
+    CABasicAnimation *borderAnimation = [CABasicAnimation animationWithKeyPath:@"borderWidth"];
+    borderAnimation.fromValue         = @(1.0);
+    borderAnimation.toValue           = @(2.5);
+    borderAnimation.duration          = 1.5;
+    borderAnimation.autoreverses      = YES;
+    borderAnimation.repeatCount       = HUGE_VALF;
+    borderAnimation.timingFunction =
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+
+    CAAnimationGroup *animationGroup = [CAAnimationGroup animation];
+    animationGroup.animations        = @[ glowAnimation, opacityAnimation, borderAnimation ];
+    animationGroup.duration          = 1.5;
+    animationGroup.autoreverses      = YES;
+    animationGroup.repeatCount       = HUGE_VALF;
+
+    [alertView.layer addAnimation:animationGroup forKey:@"redLightsaberGlow"];
 }
 
 + (id)parseJSON:(NSData *)data
@@ -487,6 +685,18 @@ static UIView   *islandOverlayView = nil;
     struct utsname systemInfo;
     uname(&systemInfo);
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
+}
+
++ (NSString *)getiOSVersionString
+{
+    UIDevice *device = [UIDevice currentDevice];
+
+    MobileGestalt *mg              = [MobileGestalt sharedInstance];
+    NSString      *iosBuildVersion = [mg getBuildVersion];
+
+    return iosBuildVersion
+               ? [NSString stringWithFormat:@"%@ (%@)", device.systemVersion, iosBuildVersion]
+               : device.systemVersion;
 }
 
 + (BOOL)deviceHasDynamicIsland
@@ -872,7 +1082,6 @@ static UIView   *islandOverlayView = nil;
         return @{};
     }
 
-    // Read Mach-O header
     uint32_t magic;
     if (fread(&magic, sizeof(magic), 1, file) != 1)
     {
@@ -880,17 +1089,12 @@ static UIView   *islandOverlayView = nil;
         return @{};
     }
 
-    // Rewind and determine architecture
     fseek(file, 0, SEEK_SET);
 
     NSDictionary *result = nil;
     if (magic == MH_MAGIC_64 || magic == MH_CIGAM_64)
     {
         result = [self readEntitlementsFrom64BitBinary:file];
-    }
-    else if (magic == MH_MAGIC || magic == MH_CIGAM)
-    {
-        result = [self readEntitlementsFrom32BitBinary:file];
     }
     else
     {
@@ -909,7 +1113,6 @@ static UIView   *islandOverlayView = nil;
         return nil;
     }
 
-    // Look for LC_CODE_SIGNATURE load command
     for (uint32_t i = 0; i < header.ncmds; i++)
     {
         struct load_command cmd;
@@ -932,45 +1135,6 @@ static UIView   *islandOverlayView = nil;
             return [self extractEntitlements:file offset:sigCmd.dataoff];
         }
 
-        // Skip to next command
-        fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
-    }
-
-    return nil;
-}
-
-+ (NSDictionary *)readEntitlementsFrom32BitBinary:(FILE *)file
-{
-    struct mach_header header;
-    if (fread(&header, sizeof(header), 1, file) != 1)
-    {
-        return nil;
-    }
-
-    // Look for LC_CODE_SIGNATURE load command
-    for (uint32_t i = 0; i < header.ncmds; i++)
-    {
-        struct load_command cmd;
-        long                cmdPos = ftell(file);
-
-        if (fread(&cmd, sizeof(cmd), 1, file) != 1)
-        {
-            return nil;
-        }
-
-        if (cmd.cmd == LC_CODE_SIGNATURE)
-        {
-            struct linkedit_data_command sigCmd;
-            fseek(file, cmdPos, SEEK_SET);
-            if (fread(&sigCmd, sizeof(sigCmd), 1, file) != 1)
-            {
-                return nil;
-            }
-
-            return [self extractEntitlements:file offset:sigCmd.dataoff];
-        }
-
-        // Skip to next command
         fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
     }
 
@@ -984,7 +1148,6 @@ static UIView   *islandOverlayView = nil;
         return nil;
     }
 
-    // Read CS_SuperBlob header
     struct {
         uint32_t magic;
         uint32_t length;
@@ -996,7 +1159,6 @@ static UIView   *islandOverlayView = nil;
         return nil;
     }
 
-    // Convert from big-endian if needed
     superBlob.magic  = CFSwapInt32BigToHost(superBlob.magic);
     superBlob.length = CFSwapInt32BigToHost(superBlob.length);
     superBlob.count  = CFSwapInt32BigToHost(superBlob.count);
@@ -1006,7 +1168,6 @@ static UIView   *islandOverlayView = nil;
         return nil;
     }
 
-    // Read blob index table to find entitlements
     for (uint32_t i = 0; i < superBlob.count; i++)
     {
         struct {
@@ -1096,7 +1257,6 @@ static UIView   *islandOverlayView = nil;
     return plistString;
 }
 
-// TODO: remove before initial release
 + (void)showDevelopmentBuildBanner
 {
     static UILabel *devBuildLabel = nil;
@@ -1141,6 +1301,115 @@ static UIView   *islandOverlayView = nil;
 
     [window addSubview:devBuildLabel];
     [window bringSubviewToFront:devBuildLabel];
+}
+
++ (BOOL)isVerifiedBuild
+{
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Starting tweak signature verification..."];
+
+    @try
+    {
+        NSData *signatureData = [Utilities getResource:@"signature" data:YES ext:@"bin"];
+        if (!signatureData)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES format:@"Signature file not found"];
+            return NO;
+        }
+
+        [Logger info:LOG_CATEGORY_UTILITIES
+              format:@"Signature file found, size: %lu bytes",
+                     (unsigned long) [signatureData length]];
+
+        NSData *publicKeyData = [Utilities getResource:@"public_key" data:YES ext:@"der"];
+        if (!publicKeyData)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES format:@"Public key file not found"];
+            return NO;
+        }
+
+        [Logger info:LOG_CATEGORY_UTILITIES
+              format:@"Public key data size: %lu bytes", (unsigned long) [publicKeyData length]];
+
+        CFErrorRef error = NULL;
+        SecKeyRef  publicKey =
+            SecKeyCreateWithData((__bridge CFDataRef) publicKeyData, (__bridge CFDictionaryRef) @{
+                (__bridge id) kSecAttrKeyType : (__bridge id) kSecAttrKeyTypeRSA,
+                (__bridge id) kSecAttrKeyClass : (__bridge id) kSecAttrKeyClassPublic,
+                (__bridge id) kSecAttrKeySizeInBits : @(2048),
+            },
+                                 &error);
+        if (!publicKey)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES
+                   format:@"Failed to create public key from DER data: %@",
+                          error ? CFBridgingRelease(error) : @"Unknown error"];
+            return NO;
+        }
+
+        [Logger info:LOG_CATEGORY_UTILITIES format:@"Public key created successfully"];
+
+        const char *commitHashString = [COMMIT_HASH UTF8String];
+
+        if (!commitHashString || strlen(commitHashString) == 0)
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES format:@"Commit hash string is empty"];
+            CFRelease(publicKey);
+            return NO;
+        }
+
+        NSData *commitData = [NSData dataWithBytes:commitHashString
+                                            length:strlen(commitHashString)];
+        uint8_t digest[CC_SHA256_DIGEST_LENGTH];
+        CC_SHA256(commitData.bytes, (CC_LONG) commitData.length, digest);
+        NSData *commitHashData = [NSData dataWithBytes:digest length:sizeof(digest)];
+
+        BOOL verified = SecKeyVerifySignature(
+            publicKey, kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA256,
+            (__bridge CFDataRef) commitHashData, (__bridge CFDataRef) signatureData, &error);
+
+        CFRelease(publicKey);
+
+        if (verified)
+        {
+            [Logger info:LOG_CATEGORY_UTILITIES format:@"Tweak signature verification successful"];
+            return YES;
+        }
+        else
+        {
+            [Logger error:LOG_CATEGORY_UTILITIES
+                   format:@"Signature verification failed: %@",
+                          error ? CFBridgingRelease(error) : @"Unknown error"];
+            return NO;
+        }
+    }
+    @catch (NSException *e)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Exception during signature verification: %@", e.reason];
+        return NO;
+    }
+}
+
++ (UIAlertAction *)createDiscordInviteButton
+{
+    return [UIAlertAction
+        actionWithTitle:@"Join Server"
+                  style:UIAlertActionStyleDefault
+                handler:^(UIAlertAction *action) {
+                    UIApplication *application = [UIApplication sharedApplication];
+                    NSURL         *discordURL =
+                        [NSURL URLWithString:@"discord://discord.com/invite/rMdzhWUaGT"];
+                    NSURL *webURL = [NSURL URLWithString:@"https://discord.com/invite/rMdzhWUaGT"];
+
+                    if ([application canOpenURL:discordURL])
+                    {
+                        [application openURL:discordURL options:@{} completionHandler:nil];
+                    }
+                    else
+                    {
+                        [application openURL:webURL options:@{} completionHandler:nil];
+                    }
+                }];
 }
 
 @end

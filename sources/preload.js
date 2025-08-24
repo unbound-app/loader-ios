@@ -5,7 +5,6 @@ this.UNBOUND_FONTS = %@;
 this.UNBOUND_AVAILABLE_FONTS = %@;
 
 this.UNBOUND_LOADER = {
-        platform: 'iOS',
-        origin: 'ElleKit',
-        version: VERSION_PLACEHOLDER
+	origin: 'Dynamic Library',
+	version: VERSION_PLACEHOLDER
 };

@@ -15,4 +15,4 @@
 #import "PluginAPI.h"
 #import "ChatUI.h"
 #import "MobileGestalt.h"
-#import "Discord/RCT.h"
+#import "RCT.h"

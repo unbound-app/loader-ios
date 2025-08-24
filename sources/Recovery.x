@@ -735,19 +735,12 @@ BOOL isRecoveryModeEnabled(void)
 
 - (void)openGitHubIssue
 {
-    UIDevice *device = [UIDevice currentDevice];
-
     NSString *deviceModel = [Utilities getDeviceModel];
     NSString *appVersion =
         [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     NSString *buildNumber = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
 
-    MobileGestalt *mg              = [MobileGestalt sharedInstance];
-    NSString      *iosBuildVersion = [mg getBuildVersion];
-    NSString      *iosVersionString =
-        iosBuildVersion
-                 ? [NSString stringWithFormat:@"%@ (%@)", device.systemVersion, iosBuildVersion]
-                 : device.systemVersion;
+    NSString *iosVersionString = [Utilities getiOSVersionString];
 
     NSString *appSource;
     if ([Utilities isAppStoreApp])
@@ -770,7 +763,7 @@ BOOL isRecoveryModeEnabled(void)
     NSString *appRegistrationType = [Utilities isSystemApp] ? @"System" : @"User";
 
     NSMutableString *body = [NSMutableString
-        stringWithFormat:@"### Device Information\n"
+        stringWithFormat:@"### Information\n"
                           "- Device: `%@`\n"
                           "- iOS Version: `%@`\n"
                           "- Tweak Version: `%@`\n"
@@ -778,12 +771,15 @@ BOOL isRecoveryModeEnabled(void)
                           "- HBC Version: `%u`\n"
                           "- App Source: `%@`\n"
                           "- App Registration: `%@`\n"
-                          "- Jailbroken: `%@`\n",
+                          "- State: `%@`\n"
+                          "- Verification: %@\n"
+                          "- Build Commit: `%@`\n",
                          deviceModel, iosVersionString, PACKAGE_VERSION, appVersion, buildNumber,
                          [Utilities getHermesBytecodeVersion], appSource, appRegistrationType,
-                         [Utilities isJailbroken] ? @"Yes" : @"No"];
+                         [Utilities isJailbroken] ? @"Jailbroken" : @"Jailed",
+                         [Utilities isVerifiedBuild] ? @"Valid Signature" : @"Invalid Signature",
+                         COMMIT_HASH];
 
-    // Add entitlements if available
     NSDictionary *entitlements = [Utilities getApplicationEntitlements];
     if (entitlements && entitlements.count > 0)
     {

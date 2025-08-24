@@ -16,116 +16,125 @@
                      userInfo:nil];
     }
 
-    NSMutableArray *possibleSelectors = [NSMutableArray array];
-
-    [possibleSelectors addObject:methodName];
-    if (arguments.count >= 1)
+    // Build selector string based on arguments
+    NSString *selectorString = methodName;
+    if (arguments && arguments.count > 0)
     {
-        [possibleSelectors addObject:[NSString stringWithFormat:@"%@:", methodName]];
-    }
-
-    if (arguments.count > 0)
-    {
-        NSMutableString *selectorWithColons = [NSMutableString stringWithString:methodName];
+        // Add colons for each argument
         for (NSUInteger i = 0; i < arguments.count; i++)
         {
-            [selectorWithColons appendString:@":"];
+            selectorString = [selectorString stringByAppendingString:@":"];
         }
-        [possibleSelectors addObject:selectorWithColons];
     }
 
-    SEL selectedSelector = NULL;
-    for (NSString *selectorStr in possibleSelectors)
+    SEL selector = NSSelectorFromString(selectorString);
+
+    // If selector with colons doesn't exist, try without colons
+    if (![moduleClass respondsToSelector:selector])
     {
-        SEL selector = NSSelectorFromString(selectorStr);
-        if ([moduleClass respondsToSelector:selector])
-        {
-            selectedSelector = selector;
-            [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
-                   format:@"Found matching selector: %@", selectorStr];
-            break;
-        }
+        selector = NSSelectorFromString(methodName);
     }
 
-    if (!selectedSelector && arguments.count > 0)
-    {
-        unsigned int methodCount;
-        Method      *methodList = class_copyMethodList(object_getClass(moduleClass), &methodCount);
-
-        for (unsigned int i = 0; i < methodCount; i++)
-        {
-            Method    method         = methodList[i];
-            SEL       methodSelector = method_getName(method);
-            NSString *selectorName   = NSStringFromSelector(methodSelector);
-
-            if ([selectorName hasPrefix:methodName] &&
-                [selectorName length] > [methodName length] &&
-                [selectorName characterAtIndex:[methodName length]] == ':')
-            {
-
-                NSUInteger colonCount = 0;
-                for (NSUInteger j = 0; j < [selectorName length]; j++)
-                {
-                    if ([selectorName characterAtIndex:j] == ':')
-                    {
-                        colonCount++;
-                    }
-                }
-
-                if (colonCount == arguments.count)
-                {
-                    selectedSelector = methodSelector;
-                    [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
-                           format:@"Found compatible selector: %@", selectorName];
-                    break;
-                }
-            }
-        }
-
-        free(methodList);
-    }
-
-    if (!selectedSelector)
+    if (![moduleClass respondsToSelector:selector])
     {
         [Logger error:LOG_CATEGORY_NATIVEBRIDGE
-               format:@"No matching method found for %@ on %@ with %lu arguments", methodName,
-                      moduleName, (unsigned long) arguments.count];
-
+               format:@"Method %@ not found on %@", selectorString, moduleName];
         @throw
             [NSException exceptionWithName:@"MethodNotFound"
                                     reason:[NSString stringWithFormat:@"Method %@ not found on %@",
-                                                                      methodName, moduleName]
+                                                                      selectorString, moduleName]
                                   userInfo:nil];
     }
 
     [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
-           format:@"Executing native method: [%@ %@] with %lu arguments", moduleName,
-                  NSStringFromSelector(selectedSelector), (unsigned long) arguments.count];
+           format:@"Calling [%@ %@] with %lu arguments", moduleName, NSStringFromSelector(selector),
+                  (unsigned long) (arguments ? arguments.count : 0)];
 
-    NSMethodSignature *signature  = [moduleClass methodSignatureForSelector:selectedSelector];
-    NSInvocation      *invocation = [NSInvocation invocationWithMethodSignature:signature];
-    [invocation setSelector:selectedSelector];
-    [invocation setTarget:moduleClass];
-
-    // Set arguments
-    NSUInteger numberOfArguments = signature.numberOfArguments;
-    for (NSUInteger i = 0; i < arguments.count && (i + 2) < numberOfArguments; i++)
+    // Use NSInvocation for all method calls to ensure proper memory management
+    NSMethodSignature *signature = [moduleClass methodSignatureForSelector:selector];
+    if (!signature)
     {
-        id arg = arguments[i];
-        [invocation setArgument:&arg atIndex:i + 2]; // start at index 2 (self, _cmd)
+        @throw [NSException
+            exceptionWithName:@"NoMethodSignature"
+                       reason:[NSString stringWithFormat:@"No method signature for %@",
+                                                         NSStringFromSelector(selector)]
+                     userInfo:nil];
     }
 
-    [invocation invoke];
+    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
+    [invocation setTarget:moduleClass];
+    [invocation setSelector:selector];
 
-    // Get return value if it exists
+    // Set arguments (starting at index 2, after self and _cmd)
+    if (arguments && arguments.count > 0)
+    {
+        NSUInteger maxArgs = MIN(arguments.count, signature.numberOfArguments - 2);
+        for (NSUInteger i = 0; i < maxArgs; i++)
+        {
+            id arg = arguments[i];
+            [invocation setArgument:&arg atIndex:i + 2];
+        }
+    }
+
+    @try
+    {
+        [invocation invoke];
+    }
+    @catch (NSException *exception)
+    {
+        [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+               format:@"Exception during method invocation: %@", exception.reason];
+        @throw exception;
+    }
+
+    // Get return value if method returns something
+    id result = nil;
     if (signature.methodReturnLength > 0)
     {
-        __unsafe_unretained id result = nil;
-        [invocation getReturnValue:&result];
-        return result;
+        const char *returnType = signature.methodReturnType;
+        if (strcmp(returnType, "@") == 0)
+        { // Object return type
+            void *returnValue = NULL;
+            [invocation getReturnValue:&returnValue];
+            result = (__bridge id) returnValue;
+        }
+        else if (strcmp(returnType, "c") == 0 || strcmp(returnType, "B") == 0)
+        { // BOOL return type
+            BOOL returnValue;
+            [invocation getReturnValue:&returnValue];
+            result = @(returnValue);
+        }
+        else if (strcmp(returnType, "i") == 0)
+        { // int return type
+            int returnValue;
+            [invocation getReturnValue:&returnValue];
+            result = @(returnValue);
+        }
+        else if (strcmp(returnType, "l") == 0 || strcmp(returnType, "q") == 0)
+        { // long/long long return type
+            long long returnValue;
+            [invocation getReturnValue:&returnValue];
+            result = @(returnValue);
+        }
+        else if (strcmp(returnType, "f") == 0)
+        { // float return type
+            float returnValue;
+            [invocation getReturnValue:&returnValue];
+            result = @(returnValue);
+        }
+        else if (strcmp(returnType, "d") == 0)
+        { // double return type
+            double returnValue;
+            [invocation getReturnValue:&returnValue];
+            result = @(returnValue);
+        }
+        else if (strcmp(returnType, "v") == 0)
+        { // void return type
+            result = nil;
+        }
     }
 
-    return nil;
+    return result;
 }
 
 @end
@@ -144,37 +153,40 @@
         if (!moduleName || !methodName)
         {
             [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Missing module or method name"];
-
             if (reject)
+            {
                 reject(@"INVALID_PARAMS", @"Missing module or method name", nil);
+            }
             return;
         }
 
         [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
-               format:@"Executing [%@ %@]", moduleName, methodName];
+               format:@"Native bridge call: [%@ %@] with %lu args", moduleName, methodName,
+                      (unsigned long) (args ? args.count : 0)];
 
         @try
         {
-            // Execute the native method
-            id result = [NativeBridge callNativeMethod:moduleName
-                                                method:methodName
-                                             arguments:(args ?: @[])];
+            id result = [NativeBridge callNativeMethod:moduleName method:methodName arguments:args];
 
-            // Return the result
             if (resolve)
+            {
                 resolve(result ?: [NSNull null]);
+            }
         }
         @catch (NSException *exception)
         {
             [Logger error:LOG_CATEGORY_NATIVEBRIDGE
-                   format:@"Error executing [%@ %@]: %@", moduleName, methodName,
-                          exception.reason ?: @"Unknown error"];
+                   format:@"Native bridge error: %@", exception.reason ?: @"Unknown error"];
 
             if (reject)
-                reject(exception.name ?: @"ERROR", exception.reason ?: @"Unknown error", nil);
+            {
+                reject(exception.name ?: @"NATIVE_ERROR", exception.reason ?: @"Unknown error",
+                       nil);
+            }
         }
         return;
     }
+
     %orig;
 }
 %end

@@ -4,13 +4,14 @@ INSTALL_TARGET_PROCESSES = Discord
 
 ARCHS := arm64 arm64e
 TARGET := iphone:clang:latest:15.0
+COMMIT_HASH := $(shell git rev-parse HEAD)
 
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Unbound
 $(TWEAK_NAME)_FILES = $(shell find sources -name "*.x*" -o -name "*.m*")
-$(TWEAK_NAME)_CFLAGS =  -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -I$(THEOS_PROJECT_DIR)/headers
-$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers UserNotifications
+$(TWEAK_NAME)_CFLAGS = -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -I$(THEOS_PROJECT_DIR)/headers
+$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers UserNotifications Security
 
 BUNDLE_NAME = UnboundResources
 $(BUNDLE_NAME)_INSTALL_PATH = "/Library/Application\ Support/"
@@ -19,17 +20,23 @@ $(BUNDLE_NAME)_RESOURCE_DIRS = "resources"
 include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
 
+SHELL := /bin/bash
+
 before-all::
 	@if [ ! -d "resources" ] || [ -z "$$(ls -A resources 2>/dev/null)" ]; then \
-		echo "Resources folder empty or missing, initializing submodule..."; \
 		git submodule update --init --recursive || exit 1; \
 	fi
 
-	$(ECHO_NOTHING)VERSION_NUM=$$(echo "$(THEOS_PACKAGE_BASE_VERSION)" | cut -d'.' -f1,2) && \
-		sed "s/VERSION_PLACEHOLDER/$$VERSION_NUM/" sources/preload.js > resources/preload.js$(ECHO_END)
+	sed "s/VERSION_PLACEHOLDER/'$(THEOS_PACKAGE_BASE_VERSION)'/" sources/preload.js > resources/preload.js
+	
+	@if [ -n "$$UNBOUND_PK" ]; then \
+		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign <(printf '%s' "$$UNBOUND_PK" | tr -d '\r') -out resources/signature.bin 2>/dev/null; \
+	elif [ -f "private_key.pem" ]; then \
+		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign private_key.pem -out resources/signature.bin 2>/dev/null; \
+	fi
 
 after-stage::
-	$(ECHO_NOTHING)find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete$(ECHO_END)
+	find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete
 
 after-package::
-	$(ECHO_NOTHING)rm resources/preload.js$(ECHO_END)
+	rm -f resources/preload.js resources/signature.bin
