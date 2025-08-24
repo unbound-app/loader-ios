@@ -125,6 +125,13 @@
       "category": "social",
       "versions": [
         {
+          "version": "295.0_83525",
+          "date": "2025-08-24",
+          "size": 92939766,
+          "downloadURL": "https://github.com/unbound-app/loader-ios/releases/download/v295.0_83525/Unbound.ipa",
+          "localizedDescription": "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
+        },
+        {
           "version": "294.0_83108",
           "date": "2025-08-24",
           "size": 93218357,
