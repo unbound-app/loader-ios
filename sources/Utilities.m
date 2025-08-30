@@ -1055,6 +1055,22 @@ static UIView   *islandOverlayView = nil;
     return exists;
 }
 
++ (NSString *)getCurrentDylibName
+{
+    Dl_info info;
+    memset(&info, 0, sizeof(info));
+
+    IMP implementation = [self methodForSelector:@selector(getCurrentDylibName)];
+
+    if (dladdr((const void *) implementation, &info) && info.dli_fname)
+    {
+        NSString *fullPath = [NSString stringWithUTF8String:info.dli_fname];
+        return [fullPath lastPathComponent];
+    }
+
+    return nil;
+}
+
 + (NSDictionary *)getApplicationEntitlements
 {
     NSDictionary *signatureInfo = [self getApplicationSignatureInfo];
@@ -1410,6 +1426,14 @@ static UIView   *islandOverlayView = nil;
                         [application openURL:webURL options:@{} completionHandler:nil];
                     }
                 }];
+}
+
++ (NSString *)JSONString:(NSString *)str
+{
+    if (!str)
+        return @"null";
+    NSString *escaped = [str stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+    return [NSString stringWithFormat:@"\"%@\"", escaped];
 }
 
 @end

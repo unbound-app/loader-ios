@@ -27,8 +27,6 @@ before-all::
 		git submodule update --init --recursive || exit 1; \
 	fi
 
-	cp sources/preload.js resources/preload.js
-
 	@if [ -n "$$UNBOUND_PK" ]; then \
 		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign <(printf '%s' "$$UNBOUND_PK" | tr -d '\r') -out resources/signature.bin 2>/dev/null; \
 	elif [ -f "private_key.pem" ]; then \
@@ -39,4 +37,4 @@ after-stage::
 	find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete
 
 after-package::
-	rm -f resources/preload.js resources/signature.bin
+	rm -f resources/signature.bin

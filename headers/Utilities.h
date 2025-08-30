@@ -2,6 +2,7 @@
 #import <Security/Security.h>
 #import <AVFoundation/AVFoundation.h>
 #import <dlfcn.h>
+#import <mach-o/dyld.h>
 #import <rootless.h>
 #import <sys/utsname.h>
 #import <mach-o/fat.h>
@@ -139,10 +140,14 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (NSArray<NSString *> *)getAvailableAppExtensions;
 + (BOOL)hasAppExtension:(NSString *)extensionName;
 
++ (NSString *)getCurrentDylibName;
+
 + (NSDictionary *)getApplicationEntitlements;
 + (NSDictionary *)getApplicationSignatureInfo;
 
 + (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements;
 + (BOOL)isVerifiedBuild;
+
++ (NSString *)JSONString:(NSString *)str;
 
 @end
