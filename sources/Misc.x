@@ -139,7 +139,8 @@
 
 - (void)performRequests
 {
-    [Utilities alert:@"Passkeys are not supported when sideloading Discord. Please use a different "
+    [Utilities alert:@"Missing associated domain with the webcredentials service type "
+                     @"(com.apple.developer.associated-domains). Please use a different "
                      @"login method."
                title:@"Cannot Use Passkey"];
 }
