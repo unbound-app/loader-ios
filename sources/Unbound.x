@@ -60,17 +60,17 @@ id gBridge = nil;
     // Preload Unbound's settings, plugins, themes and fonts
     @try
     {
-        NSString *bundle   = [Utilities getResource:@"preload"];
-        NSString *settings = [Settings getSettings];
-        NSString *plugins  = [Plugins makeJSON];
-        NSString *themes   = [Themes makeJSON];
-
+        NSString *bundle         = [Utilities getResource:@"preload"];
+        NSString *settings       = [Settings getSettings];
+        NSString *plugins        = [Plugins makeJSON];
+        NSString *themes         = [Themes makeJSON];
         NSString *availableFonts = [Fonts makeAvailableJSON];
         NSString *fonts          = [Fonts makeJSON];
 
-        NSString *json =
-            [NSString stringWithFormat:bundle, settings, plugins, themes, fonts, availableFonts];
-        NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+        NSString *version = PACKAGE_VERSION;
+
+        NSString *json = [NSString
+            stringWithFormat:bundle, settings, plugins, themes, fonts, availableFonts, version];
 
         [Logger info:LOG_CATEGORY_DEFAULT
               format:@"Pre-loading settings, plugins, fonts and themes..."];

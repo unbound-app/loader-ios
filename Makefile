@@ -27,8 +27,8 @@ before-all::
 		git submodule update --init --recursive || exit 1; \
 	fi
 
-	sed "s/VERSION_PLACEHOLDER/'$(THEOS_PACKAGE_BASE_VERSION)'/" sources/preload.js > resources/preload.js
-	
+	cp sources/preload.js resources/preload.js
+
 	@if [ -n "$$UNBOUND_PK" ]; then \
 		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign <(printf '%s' "$$UNBOUND_PK" | tr -d '\r') -out resources/signature.bin 2>/dev/null; \
 	elif [ -f "private_key.pem" ]; then \
