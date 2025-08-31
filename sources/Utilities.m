@@ -576,14 +576,14 @@ static UIView   *islandOverlayView = nil;
 
     BOOL isTrollStore     = [trollStorePaths[@"isTrollStore"] boolValue];
     BOOL isTrollStoreLite = [trollStorePaths[@"isTrollStoreLite"] boolValue];
-    BOOL isTrollStore     = isTrollStore || isTrollStoreLite;
+    BOOL isTrollStoreApp     = isTrollStore || isTrollStoreLite;
 
     [Logger debug:LOG_CATEGORY_UTILITIES
            format:@"TrollStore detection - Regular: %@, Lite: %@, isTrollStore: %@",
                   isTrollStore ? @"YES" : @"NO", isTrollStoreLite ? @"YES" : @"NO",
                   isTrollStore ? @"YES" : @"NO"];
 
-    return isTrollStore;
+    return isTrollStoreApp;
 }
 
 + (NSString *)getTrollStoreVariant
@@ -1424,6 +1424,44 @@ static UIView   *islandOverlayView = nil;
                   teamIdentifier ?: @"(none)", hasProductionEntitlements ? @"YES" : @"NO"];
 
     return hasProductionEntitlements;
+}
+
+// Adapted from https://github.com/LiveContainer/LiveContainer/blob/cd534bde4856dd998e48cd76681b8b2cfaf49229/LiveContainer/LCBootstrap.m#L72-L98
++ (BOOL)isJITAvailable
+{
+#if TARGET_OS_MACCATALYST || TARGET_OS_SIMULATOR
+    [Logger debug:LOG_CATEGORY_UTILITIES format:@"JIT available: Catalyst/Simulator environment"];
+    return YES;
+#else
+
+    if ([self isJailbroken])
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"JIT available: Jailbroken device"];
+        return YES;
+    }
+
+    if (@available(iOS 26.0, *))
+    {
+        [Logger debug:LOG_CATEGORY_UTILITIES format:@"JIT not available: iOS 26.0+"];
+        return NO;
+    }
+
+    int flags;
+    int result = csops(getpid(), 0, &flags, sizeof(flags));
+    if (result != 0)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES format:@"Failed to get CS flags: %s", strerror(errno)];
+        return NO;
+    }
+
+    BOOL hasDebugFlag = (flags & CS_DEBUGGED) != 0;
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"CS flags: 0x%x, CS_DEBUGGED: %@, JIT available: %@", flags,
+                  hasDebugFlag ? @"YES" : @"NO", hasDebugFlag ? @"YES" : @"NO"];
+
+    return hasDebugFlag;
+#endif
 }
 
 + (UIAlertAction *)createDiscordInviteButton

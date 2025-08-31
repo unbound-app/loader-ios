@@ -11,6 +11,9 @@
 #import "FileSystem.h"
 #import "Unbound.h"
 
+#define CS_DEBUGGED 0x10000000
+int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
+
 extern NSString * const TROLL_STORE_PATH;
 extern NSString * const TROLL_STORE_LITE_PATH;
 extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
@@ -148,6 +151,7 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements;
 + (BOOL)isVerifiedBuild;
 + (BOOL)hasDiscordProductionEntitlements;
++ (BOOL)isJITAvailable;
 
 + (NSString *)JSONString:(NSString *)str;
 
