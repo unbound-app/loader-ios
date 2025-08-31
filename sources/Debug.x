@@ -1,0 +1,117 @@
+#import "Debug.h"
+
+#ifdef DEBUG
+
+static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *info)
+{
+    // Firebase Dynamic Links errors
+    if ([domain isEqualToString:@"com.firebase.dynamicLinks"] && code == 1)
+    {
+        return YES;
+    }
+
+    // AppSSO errors
+    if ([domain isEqualToString:@"com.apple.AppSSO.AuthorizationError"] && (code == -1000))
+    {
+        return YES;
+    }
+
+    // RCT JavaScript loader errors
+    if ([domain isEqualToString:@"RCTJavaScriptLoaderErrorDomain"] && code == 1000)
+    {
+        return YES;
+    }
+
+    // File not found errors
+    if ([domain isEqualToString:@"NSPOSIXErrorDomain"])
+    {
+        // Error code 2: No such file
+        if (code == 2)
+            return YES;
+
+        // Error code 17: File exists (harmless error when creating directories/files)
+        if (code == 17)
+            return YES;
+    }
+
+    // BS Action errors
+    if ([domain isEqualToString:@"BSActionErrorDomain"] && code == 1)
+    {
+        return YES;
+    }
+
+    // Filter NSOSStatusErrorDomain errors related to FSNode
+    if ([domain isEqualToString:@"NSOSStatusErrorDomain"])
+    {
+        // -10813: Common error related to FSNode getHFSType
+        if (code == -10813)
+            return YES;
+    }
+
+    // Related Cocoa errors
+    if ([domain isEqualToString:@"NSCocoaErrorDomain"])
+    {
+        // File not found related
+        if (code == 260)
+            return YES;
+
+        // File exists related error
+        if (code == 516)
+            return YES;
+
+        // NSKeyedUnarchiver null data
+        if (code == 4864)
+            return YES;
+
+        // Saved application state errors
+        if (code == 4)
+            return YES;
+    }
+
+    return NO;
+}
+
+%hook NSError
+- (id)initWithDomain:(id)domain code:(int)code userInfo:(id)userInfo
+{
+    if (!shouldIgnoreError(domain, code, userInfo))
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"Initialized with info: %@ %@ %d", userInfo, domain, code];
+    }
+    return %orig;
+}
+
++ (id)errorWithDomain:(id)domain code:(int)code userInfo:(id)userInfo
+{
+    if (!shouldIgnoreError(domain, code, userInfo))
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"Initialized with info: %@ %@ %d", userInfo, domain, code];
+    }
+    return %orig;
+}
+%end
+
+%hook NSException
+- (id)initWithName:(id)name reason:(id)reason userInfo:(id)userInfo
+{
+    [Logger error:LOG_CATEGORY_DEFAULT
+           format:@"Initialized with info: %@ %@ %@", userInfo, name, reason];
+    return %orig;
+}
+
++ (id)exceptionWithName:(id)name reason:(id)reason userInfo:(id)userInfo
+{
+    [Logger error:LOG_CATEGORY_DEFAULT
+           format:@"Initialized with info: %@ %@ %@", userInfo, name, reason];
+    return %orig;
+}
+%end
+
+%ctor
+{
+    %init();
+}
+
+#endif
