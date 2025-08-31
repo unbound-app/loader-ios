@@ -558,10 +558,10 @@ static UIView   *islandOverlayView = nil;
     NSString *trollStoreLitePath =
         [bundlePath stringByAppendingPathComponent:TROLL_STORE_LITE_PATH];
 
-    BOOL hasTrollStore     = (access([trollStorePath UTF8String], F_OK) == 0);
-    BOOL hasTrollStoreLite = (access([trollStoreLitePath UTF8String], F_OK) == 0);
+    BOOL isTrollStore     = (access([trollStorePath UTF8String], F_OK) == 0);
+    BOOL isTrollStoreLite = (access([trollStoreLitePath UTF8String], F_OK) == 0);
 
-    return @{@"hasTrollStore" : @(hasTrollStore), @"hasTrollStoreLite" : @(hasTrollStoreLite)};
+    return @{@"isTrollStore" : @(isTrollStore), @"isTrollStoreLite" : @(isTrollStoreLite)};
 }
 
 + (BOOL)isTrollStoreApp
@@ -574,13 +574,13 @@ static UIView   *islandOverlayView = nil;
     NSString     *bundlePath      = [[NSBundle mainBundle] bundlePath];
     NSDictionary *trollStorePaths = [self checkTrollStorePaths:bundlePath];
 
-    BOOL hasTrollStore     = [trollStorePaths[@"hasTrollStore"] boolValue];
-    BOOL hasTrollStoreLite = [trollStorePaths[@"hasTrollStoreLite"] boolValue];
-    BOOL isTrollStore      = hasTrollStore || hasTrollStoreLite;
+    BOOL isTrollStore     = [trollStorePaths[@"isTrollStore"] boolValue];
+    BOOL isTrollStoreLite = [trollStorePaths[@"isTrollStoreLite"] boolValue];
+    BOOL isTrollStore     = isTrollStore || isTrollStoreLite;
 
     [Logger debug:LOG_CATEGORY_UTILITIES
            format:@"TrollStore detection - Regular: %@, Lite: %@, isTrollStore: %@",
-                  hasTrollStore ? @"YES" : @"NO", hasTrollStoreLite ? @"YES" : @"NO",
+                  isTrollStore ? @"YES" : @"NO", isTrollStoreLite ? @"YES" : @"NO",
                   isTrollStore ? @"YES" : @"NO"];
 
     return isTrollStore;
@@ -591,11 +591,11 @@ static UIView   *islandOverlayView = nil;
     NSString     *bundlePath      = [[NSBundle mainBundle] bundlePath];
     NSDictionary *trollStorePaths = [self checkTrollStorePaths:bundlePath];
 
-    if ([trollStorePaths[@"hasTrollStore"] boolValue])
+    if ([trollStorePaths[@"isTrollStore"] boolValue])
     {
         return @"TrollStore";
     }
-    else if ([trollStorePaths[@"hasTrollStoreLite"] boolValue])
+    else if ([trollStorePaths[@"isTrollStoreLite"] boolValue])
     {
         return @"TrollStore Lite";
     }
