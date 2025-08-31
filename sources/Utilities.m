@@ -576,7 +576,7 @@ static UIView   *islandOverlayView = nil;
 
     BOOL isTrollStore     = [trollStorePaths[@"isTrollStore"] boolValue];
     BOOL isTrollStoreLite = [trollStorePaths[@"isTrollStoreLite"] boolValue];
-    BOOL isTrollStoreApp     = isTrollStore || isTrollStoreLite;
+    BOOL isTrollStoreApp  = isTrollStore || isTrollStoreLite;
 
     [Logger debug:LOG_CATEGORY_UTILITIES
            format:@"TrollStore detection - Regular: %@, Lite: %@, isTrollStore: %@",
@@ -1426,7 +1426,8 @@ static UIView   *islandOverlayView = nil;
     return hasProductionEntitlements;
 }
 
-// Adapted from https://github.com/LiveContainer/LiveContainer/blob/cd534bde4856dd998e48cd76681b8b2cfaf49229/LiveContainer/LCBootstrap.m#L72-L98
+// Adapted from
+// https://github.com/LiveContainer/LiveContainer/blob/cd534bde4856dd998e48cd76681b8b2cfaf49229/LiveContainer/LCBootstrap.m#L72-L98
 + (BOOL)isJITAvailable
 {
 #if TARGET_OS_MACCATALYST || TARGET_OS_SIMULATOR
@@ -1462,6 +1463,50 @@ static UIView   *islandOverlayView = nil;
 
     return hasDebugFlag;
 #endif
+}
+
++ (BOOL)isLiveContainerApp
+{
+    Class LCSharedUtilsClass = NSClassFromString(@"LCSharedUtils");
+    BOOL  isLiveContainer    = (LCSharedUtilsClass != nil);
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"LiveContainer detection - LCSharedUtils class: %@, isLiveContainer: %@",
+                  LCSharedUtilsClass ? @"Found" : @"Not found", isLiveContainer ? @"YES" : @"NO"];
+
+    return isLiveContainer;
+}
+
++ (NSString *)getAppSource
+{
+    // Check in order of preference: TrollStore, LiveContainer, App Store, TestFlight
+    if ([self isTrollStoreApp])
+    {
+        return [self getTrollStoreVariant];
+    }
+    else if ([self isLiveContainerApp])
+    {
+        if ([self isJITAvailable])
+        {
+            return @"LiveContainer (JIT)";
+        }
+        else
+        {
+            return @"LiveContainer (Signed)";
+        }
+    }
+    else if ([self isAppStoreApp])
+    {
+        return @"App Store";
+    }
+    else if ([self isTestFlightApp])
+    {
+        return @"TestFlight";
+    }
+    else
+    {
+        return @"Sideloaded";
+    }
 }
 
 + (UIAlertAction *)createDiscordInviteButton

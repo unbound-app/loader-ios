@@ -742,23 +742,7 @@ BOOL isRecoveryModeEnabled(void)
 
     NSString *iosVersionString = [Utilities getiOSVersionString];
 
-    NSString *appSource;
-    if ([Utilities isAppStoreApp])
-    {
-        appSource = @"App Store";
-    }
-    else if ([Utilities isTestFlightApp])
-    {
-        appSource = @"TestFlight";
-    }
-    else if ([Utilities isTrollStoreApp])
-    {
-        appSource = [Utilities getTrollStoreVariant];
-    }
-    else
-    {
-        appSource = @"Sideloaded";
-    }
+    NSString *appSource = [Utilities getAppSource];
 
     NSString *appRegistrationType = [Utilities isSystemApp] ? @"System" : @"User";
 

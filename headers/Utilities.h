@@ -127,8 +127,11 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (BOOL)isTestFlightApp;
 + (BOOL)isTrollStoreApp;
 + (NSString *)getTrollStoreVariant;
++ (BOOL)isLiveContainerApp;
 + (BOOL)isSystemApp;
 + (BOOL)isJailbroken;
+
++ (NSString *)getAppSource;
 
 + (NSString *)getDeviceModel;
 + (NSString *)getiOSVersionString;
