@@ -669,7 +669,12 @@ static UIView   *islandOverlayView = nil;
 
 + (BOOL)isJailbroken
 {
-    return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];
+    if (access("/var/mobile", R_OK) == 0)
+    {
+        return YES;
+    }
+
+    return NO;
 }
 
 + (NSString *)getDeviceModel
