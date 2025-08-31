@@ -147,6 +147,7 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 + (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements;
 + (BOOL)isVerifiedBuild;
++ (BOOL)hasDiscordProductionEntitlements;
 
 + (NSString *)JSONString:(NSString *)str;
 

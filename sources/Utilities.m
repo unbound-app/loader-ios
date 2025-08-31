@@ -1411,6 +1411,21 @@ static UIView   *islandOverlayView = nil;
     }
 }
 
++ (BOOL)hasDiscordProductionEntitlements
+{
+    NSDictionary *entitlements = [self getApplicationEntitlements];
+
+    NSString *teamIdentifier = entitlements[@"com.apple.developer.team-identifier"];
+
+    BOOL hasProductionEntitlements = [teamIdentifier isEqualToString:@"53Q6R32WPB"];
+
+    [Logger debug:LOG_CATEGORY_UTILITIES
+           format:@"Team identifier: %@, has production entitlements: %@",
+                  teamIdentifier ?: @"(none)", hasProductionEntitlements ? @"YES" : @"NO"];
+
+    return hasProductionEntitlements;
+}
+
 + (UIAlertAction *)createDiscordInviteButton
 {
     return [UIAlertAction

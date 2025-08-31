@@ -268,7 +268,7 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
     %init(Debug);
 #endif
 
-    if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp] && ![Utilities isTrollStoreApp])
+    if (![Utilities hasDiscordProductionEntitlements])
     {
         %init(Sideloading);
     }
