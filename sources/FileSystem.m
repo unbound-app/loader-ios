@@ -263,7 +263,6 @@ static NSString                                               *documents = nil;
     }
 }
 
-// Properties
 + (NSString *)documents
 {
     return documents;

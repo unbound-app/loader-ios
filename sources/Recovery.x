@@ -145,7 +145,6 @@ BOOL isRecoveryModeEnabled(void)
 
 - (void)setupMenuItems
 {
-    // Create a mutable array for the settings section items
     NSMutableArray *settingsItems =
         [NSMutableArray arrayWithObjects:@{
             @"title" : @"Enable Shake Motion",
@@ -161,7 +160,6 @@ BOOL isRecoveryModeEnabled(void)
                                          },
                                          nil];
 
-    // Only add app icon toggle if the app is sideloaded (not App Store or TestFlight)
     if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp])
     {
         [settingsItems addObject:@{
@@ -313,7 +311,6 @@ BOOL isRecoveryModeEnabled(void)
 
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 
-        // Special handling for app icon toggle
         if ([item[@"key"] isEqualToString:@"UnboundAppIconEnabled"])
         {
             NSString *currentIcon = [[UIApplication sharedApplication] alternateIconName];
@@ -384,7 +381,6 @@ BOOL isRecoveryModeEnabled(void)
     }
 }
 
-// Action methods
 - (void)toggleRecoveryMode
 {
     BOOL currentValue = isRecoveryModeEnabled();
@@ -451,8 +447,6 @@ BOOL isRecoveryModeEnabled(void)
                                                return;
                                            }
 
-                                           // If there's only one branch, skip straight to fetching
-                                           // commits
                                            if (branches.count == 1)
                                            {
                                                NSString *branchName = branches[0][@"name"];
@@ -461,7 +455,6 @@ BOOL isRecoveryModeEnabled(void)
                                                return;
                                            }
 
-                                           // Otherwise show branch selection
                                            UIAlertController *branchAlert = [UIAlertController
                                                alertControllerWithTitle:@"Select Branch"
                                                                 message:nil
@@ -802,14 +795,12 @@ BOOL isRecoveryModeEnabled(void)
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 
     if (sender.tag == 0)
-    { // Shake gesture
+    {
         [defaults setBool:sender.on forKey:@"UnboundShakeGestureEnabled"];
         if (!sender.on)
         {
-            // If shake is being disabled, ensure three finger is enabled
             [defaults setBool:YES forKey:@"UnboundThreeFingerGestureEnabled"];
 
-            // Find the cell containing the other switch
             UITableViewCell *otherCell =
                 [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:4]];
             if (otherCell)
@@ -823,14 +814,12 @@ BOOL isRecoveryModeEnabled(void)
         }
     }
     else if (sender.tag == 1)
-    { // Three finger gesture
+    {
         [defaults setBool:sender.on forKey:@"UnboundThreeFingerGestureEnabled"];
         if (!sender.on)
         {
-            // If three finger is being disabled, ensure shake is enabled
             [defaults setBool:YES forKey:@"UnboundShakeGestureEnabled"];
 
-            // Find the cell containing the other switch
             UITableViewCell *otherCell =
                 [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:4]];
             if (otherCell)
@@ -844,7 +833,7 @@ BOOL isRecoveryModeEnabled(void)
         }
     }
     else if (sender.tag == 2)
-    { // App icon toggle
+    {
         NSString *iconName = sender.on ? @"UnboundIcon" : nil;
 
         [[UIApplication sharedApplication] setAlternateIconName:iconName
@@ -882,7 +871,6 @@ void showMenuSheet(void)
                                                       action:@selector(dismiss)];
     settingsVC.navigationItem.rightBarButtonItem = doneButton;
 
-    // Create a high-level window that displays above everything
     UIWindowScene *activeScene = nil;
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes)
     {
@@ -908,7 +896,6 @@ void showMenuSheet(void)
 
     [rootVC presentViewController:navController animated:YES completion:nil];
 
-    // Store window reference so it stays alive
     objc_setAssociatedObject(navController, "recoveryTopWindow", topWindow,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 

@@ -174,7 +174,6 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
     return CFBridgingRelease(CGFontCopyFullName(ref));
 }
 
-// Properties
 + (NSMutableDictionary<NSString *, NSString *> *)overrides
 {
     return overrides;

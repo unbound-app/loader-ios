@@ -16,11 +16,9 @@
                      userInfo:nil];
     }
 
-    // Build selector string based on arguments
     NSString *selectorString = methodName;
     if (arguments && arguments.count > 0)
     {
-        // Add colons for each argument
         for (NSUInteger i = 0; i < arguments.count; i++)
         {
             selectorString = [selectorString stringByAppendingString:@":"];
@@ -29,7 +27,6 @@
 
     SEL selector = NSSelectorFromString(selectorString);
 
-    // If selector with colons doesn't exist, try without colons
     if (![moduleClass respondsToSelector:selector])
     {
         selector = NSSelectorFromString(methodName);
@@ -50,7 +47,6 @@
            format:@"Calling [%@ %@] with %lu arguments", moduleName, NSStringFromSelector(selector),
                   (unsigned long) (arguments ? arguments.count : 0)];
 
-    // Use NSInvocation for all method calls to ensure proper memory management
     NSMethodSignature *signature = [moduleClass methodSignatureForSelector:selector];
     if (!signature)
     {
@@ -87,7 +83,6 @@
         @throw exception;
     }
 
-    // Get return value if method returns something
     id result = nil;
     if (signature.methodReturnLength > 0)
     {

@@ -10,7 +10,6 @@ id gBridge = nil;
     [FileSystem init];
     [Settings init];
 
-    // Don't load bundle and addons if not configured to do so.
     if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES])
     {
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Loader is disabled. Aborting."];
@@ -24,7 +23,6 @@ id gBridge = nil;
     NSString *BUNDLE = [NSString pathWithComponents:@[ FileSystem.documents, @"unbound.bundle" ]];
     NSURL    *SOURCE = [NSURL URLWithString:@"unbound"];
 
-    // Apply React DevTools patch if its enabled
     if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO])
     {
         @try
@@ -42,7 +40,6 @@ id gBridge = nil;
         }
     }
 
-    // Apply modules patch
     @try
     {
         NSData *bundle = [Utilities getResource:@"modules" data:true ext:@"js"];
@@ -57,7 +54,6 @@ id gBridge = nil;
                format:@"Modules patch injection failed, expect issues. %@", e];
     }
 
-    // Preload Unbound's settings, plugins, themes and fonts
     @try
     {
         NSString *settings       = [Settings getSettings];
@@ -97,7 +93,6 @@ id gBridge = nil;
 
     %orig(script, url, true);
 
-    // Check for updates & re-download bundle if necessary
     @try
     {
         [Updater downloadBundle:BUNDLE];
@@ -117,13 +112,11 @@ id gBridge = nil;
         }
     }
 
-    // Check if Unbound was downloaded properly
     if (![FileSystem exists:BUNDLE])
     {
         return [Utilities alert:@"Bundle not found, please report this to the developers."];
     }
 
-    // Inject Unbound script
     @try
     {
         NSData *bundle = [FileSystem readFile:BUNDLE];

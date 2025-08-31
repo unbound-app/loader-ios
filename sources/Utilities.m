@@ -236,7 +236,6 @@ static UIView   *islandOverlayView = nil;
              warning:(BOOL)warning
                  tts:(BOOL)tts
 {
-    // Use default buttons if none provided
     NSArray<UIAlertAction *> *alertButtons = buttons;
     if (!alertButtons || alertButtons.count == 0)
     {
@@ -1479,7 +1478,6 @@ static UIView   *islandOverlayView = nil;
 
 + (NSString *)getAppSource
 {
-    // Check in order of preference: TrollStore, LiveContainer, App Store, TestFlight
     if ([self isTrollStoreApp])
     {
         return [self getTrollStoreVariant];

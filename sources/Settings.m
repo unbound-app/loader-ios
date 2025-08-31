@@ -83,7 +83,6 @@ static NSString            *path = nil;
             data[store] = payload;
         }
 
-        // Ensure all keys exist before the last one
         NSArray                     *keys = [key componentsSeparatedByString:@"."];
         __block NSMutableDictionary *res  = payload;
 
