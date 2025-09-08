@@ -181,7 +181,7 @@ jobs:
           command: curl -L -o discord.ipa ${{ inputs.ipa_url }}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           cache: false
           go-version: 'stable'
