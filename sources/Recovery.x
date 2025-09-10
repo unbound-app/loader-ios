@@ -1,7 +1,4 @@
-#import "MobileGestalt.h"
 #import "Recovery.h"
-
-#pragma mark - Gesture Handling
 
 static NSTimeInterval shakeStartTime      = 0;
 static BOOL           isShaking           = NO;
@@ -329,8 +326,6 @@ BOOL isRecoveryModeEnabled(void)
     return cell;
 }
 
-#pragma mark - Table View Delegate
-
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
@@ -346,8 +341,6 @@ BOOL isRecoveryModeEnabled(void)
         [self executeActionWithSelectorName:item[@"selector"]];
     }
 }
-
-#pragma mark - Menu Actions
 
 - (void)showDestructiveConfirmation:(NSString *)action selectorName:(NSString *)selectorName
 {
@@ -406,8 +399,6 @@ BOOL isRecoveryModeEnabled(void)
     [[NSFileManager defaultManager] removeItemAtPath:[self bundlePath] error:nil];
     [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
-
-#pragma mark - Bundle Management
 
 - (void)switchBundleVersion
 {
@@ -701,8 +692,6 @@ BOOL isRecoveryModeEnabled(void)
     [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
 
-#pragma mark - Utility Functions
-
 - (void)openAppFolder
 {
     if ([Utilities isJailbroken])
@@ -787,7 +776,17 @@ BOOL isRecoveryModeEnabled(void)
         stringWithFormat:@"https://github.com/unbound-app/client/issues/new?title=%@&body=%@",
                          encodedTitle, encodedBody];
     NSURL    *url       = [NSURL URLWithString:urlString];
-    [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+
+    if (!url)
+    {
+        return;
+    }
+
+    SFSafariViewController *safari = [[SFSafariViewController alloc] initWithURL:url];
+    safari.dismissButtonStyle      = SFSafariViewControllerDismissButtonStyleClose;
+    safari.delegate                = self;
+    safari.modalPresentationStyle  = UIModalPresentationPageSheet;
+    [self presentViewController:safari animated:YES completion:nil];
 }
 
 - (void)toggleSetting:(UISwitch *)sender
@@ -850,12 +849,15 @@ BOOL isRecoveryModeEnabled(void)
     [defaults synchronize];
 }
 
+- (void)safariViewControllerDidFinish:(SFSafariViewController *)controller
+{
+    [controller dismissViewControllerAnimated:YES completion:nil];
+}
+
 - (void)dismiss
 {
     [self dismissViewControllerAnimated:YES completion:nil];
 }
-
-#pragma mark - Helper Functions
 
 void showMenuSheet(void)
 {
