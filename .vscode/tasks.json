@@ -1,5 +1,21 @@
 {
 	"version": "2.0.0",
+	"inputs": [
+		{
+			"id": "inputAction",
+			"type": "pickString",
+			"description": "build actions",
+			"options": [
+				"Package",
+				"AirDrop Tweak",
+				"Build IPA",
+				".dylib -> iCloud Drive",
+				".deb -> iCloud Drive",
+				".ipa -> iCloud Drive"
+			],
+			"default": "Package"
+		}
+	],
 	"tasks": [
 		{
 			"type": "shell",
@@ -7,7 +23,7 @@
 			"command": "zsh",
 			"args": [
 				"-c",
-				"rm -rf packages && gmake clean package"
+				"chmod +x '${workspaceFolder}/.vscode/build-actions.sh' 2>/dev/null || true; '${workspaceFolder}/.vscode/build-actions.sh' \"${input:inputAction}\""
 			],
 			"problemMatcher": {
 				"owner": "cpp",
@@ -28,34 +44,9 @@
 				"panel": "shared",
 				"showReuseMessage": false,
 				"clear": true,
-				"close": true
-			}
-		},
-		{
-			"type": "shell",
-			"label": "AirDrop Tweak",
-			"command": "zsh",
-			"args": [
-				"-c",
-				"shortcuts run 'AirDrop' -i ./packages/*.deb"
-			],
-			"presentation": {
-				"panel": "shared",
-				"showReuseMessage": false,
-				"clear": true,
-				"close": true
-			},
-			"dependsOn": ["Build Tweak"]
-		},
-		{
-			"type": "shell",
-			"label": "Build IPA",
-			"command": "chmod +x build-local.sh && ./build-local.sh",
-			"presentation": {
-				"panel": "shared",
-				"showReuseMessage": false,
-				"clear": true,
-				"reveal": "always"
+				"close": true,
+				"reveal": "always",
+				"focus": true
 			}
 		}
 	]

@@ -8,17 +8,7 @@
 		{
 			"label": "$(tools) Build Tweak",
 			"task": "Build Tweak",
-			"tooltip": "Build Tweak"
-		},
-		{
-			"label": "$(cloud-upload) AirDrop Tweak",
-			"task": "AirDrop Tweak",
-			"tooltip": "AirDrop Tweak"
-		},
-		{
-			"label": "$(package) Build IPA",
-			"task": "Build IPA",
-			"tooltip": "Build IPA locally"
+			"tooltip": "Default / AirDrop Tweak / Build IPA"
 		}
 	],
 	"externalFormatters.languages": {

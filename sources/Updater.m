@@ -71,7 +71,7 @@ static NSString *etag = nil;
         }
     }
 
-    [Logger warn:LOG_CATEGORY_UPDATER
+    [Logger error:LOG_CATEGORY_UPDATER
           format:@"Failed to fetch manifest, falling back to JavaScript bundle"];
     return [NSURL URLWithString:[baseURL stringByAppendingString:@"unbound.js"]];
 }
