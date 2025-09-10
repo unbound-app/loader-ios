@@ -38,11 +38,41 @@ static NSString *etag = nil;
 
 + (NSURL *)getDownloadURL
 {
-    NSString *url = [Settings getString:@"unbound"
-                                    key:@"loader.update.url"
-                                    def:@"https://raw.githubusercontent.com/unbound-app/builds/"
-                                        @"refs/heads/main/unbound.bundle"];
+    NSString *baseURL = [Settings getString:@"unbound"
+                                        key:@"loader.update.url"
+                                        def:@"https://raw.githubusercontent.com/unbound-app/builds/"
+                                            @"refs/heads/main/"];
 
-    return [NSURL URLWithString:url];
+    NSString *manifestURL  = [baseURL stringByAppendingString:@"manifest.json"];
+    NSData   *manifestData = [NSData dataWithContentsOfURL:[NSURL URLWithString:manifestURL]];
+
+    if (manifestData)
+    {
+        NSDictionary *manifest = [Utilities parseJSON:manifestData];
+        if (manifest && manifest[@"bytecodeVersion"])
+        {
+            NSNumber *manifestBytecodeVersion = manifest[@"bytecodeVersion"];
+            uint32_t  currentBytecodeVersion  = [Utilities getHermesBytecodeVersion];
+
+            [Logger info:LOG_CATEGORY_UPDATER
+                  format:@"Manifest bytecode version: %@, Current bytecode version: %u",
+                         manifestBytecodeVersion, currentBytecodeVersion];
+
+            if ([manifestBytecodeVersion unsignedIntValue] == currentBytecodeVersion)
+            {
+                [Logger info:LOG_CATEGORY_UPDATER format:@"Using hermes bytecode bundle"];
+                return [NSURL URLWithString:[baseURL stringByAppendingString:@"unbound.bundle"]];
+            }
+            else
+            {
+                [Logger info:LOG_CATEGORY_UPDATER format:@"Using JavaScript bundle"];
+                return [NSURL URLWithString:[baseURL stringByAppendingString:@"unbound.js"]];
+            }
+        }
+    }
+
+    [Logger warn:LOG_CATEGORY_UPDATER
+          format:@"Failed to fetch manifest, falling back to JavaScript bundle"];
+    return [NSURL URLWithString:[baseURL stringByAppendingString:@"unbound.js"]];
 }
 @end
