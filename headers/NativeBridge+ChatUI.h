@@ -1,14 +1,14 @@
-#import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
-#import "Logger.h"
+#import "NativeBridge.h"
 
-@interface ChatUI : NSObject
+@interface NativeBridge (ChatUI)
 
+// Avatar customization methods
 + (void)setAvatarCornerRadius:(NSNumber *)radius;
 + (NSNumber *)getAvatarCornerRadius;
 + (void)resetAvatarCornerRadius;
 + (float)getCurrentAvatarRadius;
 
+// Message bubble customization methods
 + (void)setMessageBubblesEnabled:(NSNumber *)enabled;
 + (void)setMessageBubblesEnabled:(NSNumber *)enabled
                       lightColor:(NSString *)lightColor
@@ -23,6 +23,7 @@
 
 @end
 
+// Forward declarations for Discord classes
 @interface DCDAvatarView : UIView
 @end
 

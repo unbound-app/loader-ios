@@ -1,16 +1,12 @@
-#import "PluginAPI.h"
+#import "NativeBridge+PluginAPI.h"
 
-@interface PluginAPIDelegate : NSObject <AVPlayerViewControllerDelegate>
-+ (instancetype)sharedDelegate;
-@end
-
-@implementation PluginAPIDelegate
+@implementation NativeBridgePluginAPIDelegate
 
 + (instancetype)sharedDelegate
 {
-    static PluginAPIDelegate *sharedInstance = nil;
-    static dispatch_once_t    onceToken;
-    dispatch_once(&onceToken, ^{ sharedInstance = [[PluginAPIDelegate alloc] init]; });
+    static NativeBridgePluginAPIDelegate *sharedInstance = nil;
+    static dispatch_once_t                onceToken;
+    dispatch_once(&onceToken, ^{ sharedInstance = [[NativeBridgePluginAPIDelegate alloc] init]; });
     return sharedInstance;
 }
 
@@ -20,7 +16,7 @@
 {
     [Logger info:LOG_CATEGORY_DEFAULT format:@"Restoring user interface for PiP stop"];
 
-    UIViewController *topViewController = [PluginAPI topViewController];
+    UIViewController *topViewController = [NativeBridge topViewController];
     if (topViewController && playerViewController != topViewController.presentedViewController)
     {
         [topViewController presentViewController:playerViewController
@@ -83,7 +79,7 @@
 
 @end
 
-@implementation PluginAPI
+@implementation NativeBridge (PluginAPI)
 
 static AVPlayerViewController *currentPlayerViewController = nil;
 
@@ -122,7 +118,7 @@ static AVPlayerViewController *currentPlayerViewController = nil;
 
         currentPlayerViewController          = [[AVPlayerViewController alloc] init];
         currentPlayerViewController.player   = player;
-        currentPlayerViewController.delegate = [PluginAPIDelegate sharedDelegate];
+        currentPlayerViewController.delegate = [NativeBridgePluginAPIDelegate sharedDelegate];
 
         currentPlayerViewController.allowsPictureInPicturePlayback                  = YES;
         currentPlayerViewController.canStartPictureInPictureAutomaticallyFromInline = YES;

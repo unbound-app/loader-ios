@@ -1,6 +1,6 @@
-#import "ChatUI.h"
+#import "NativeBridge+ChatUI.h"
 
-@implementation ChatUI
+@implementation NativeBridge (ChatUI)
 
 static NSNumber   *customAvatarRadius  = nil;
 static const float defaultAvatarRadius = -1.0f;
@@ -58,8 +58,7 @@ static UIColor *messageCellDynamicColor = nil;
         UIWindow *keyWindow = nil;
         for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
         {
-            if ([scene isKindOfClass:[UIWindowScene class]] &&
-                scene.activationState == UISceneActivationStateForegroundActive)
+            if ([scene isKindOfClass:[UIWindowScene class]])
             {
                 UIWindowScene *windowScene = (UIWindowScene *) scene;
                 for (UIWindow *window in windowScene.windows)
@@ -92,10 +91,10 @@ static UIColor *messageCellDynamicColor = nil;
         }
         else
         {
-            view.layer.cornerRadius = MIN(view.frame.size.width, view.frame.size.height) / 2.0f;
+            view.layer.cornerRadius = view.bounds.size.width / 2.0;
         }
         [Logger debug:LOG_CATEGORY_DEFAULT
-               format:@"Updated DCDAvatarView corner radius to: %f", view.layer.cornerRadius];
+               format:@"Updated avatar view with radius: %f", view.layer.cornerRadius];
     }
 
     for (UIView *subview in view.subviews)
@@ -293,38 +292,16 @@ static UIColor *messageCellDynamicColor = nil;
 
     if ([color hasPrefix:@"rgba"])
     {
-        NSRegularExpression *regex =
-            [NSRegularExpression regularExpressionWithPattern:@"\\((.*)\\)"
-                                                      options:NSRegularExpressionCaseInsensitive
-                                                        error:nil];
-        NSArray  *matches = [regex matchesInString:color
-                                          options:0
-                                            range:NSMakeRange(0, [color length])];
-        NSString *value   = @"";
+        NSString *values     = [color substringWithRange:NSMakeRange(5, color.length - 6)];
+        NSArray  *components = [values componentsSeparatedByString:@","];
 
-        for (NSTextCheckingResult *match in matches)
+        if (components.count == 4)
         {
-            NSRange range = [match rangeAtIndex:1];
-            value         = [color substringWithRange:range];
-        }
+            CGFloat r = [components[0] floatValue] / 255.0;
+            CGFloat g = [components[1] floatValue] / 255.0;
+            CGFloat b = [components[2] floatValue] / 255.0;
+            CGFloat a = [components[3] floatValue];
 
-        NSCharacterSet *whitespaces = [NSCharacterSet whitespaceCharacterSet];
-        NSArray        *values      = [value componentsSeparatedByString:@","];
-        NSMutableArray *res         = [[NSMutableArray alloc] init];
-
-        for (NSString *v in values)
-        {
-            NSString *trimmed = [v stringByTrimmingCharactersInSet:whitespaces];
-            NSNumber *payload = [NSNumber numberWithFloat:[trimmed floatValue]];
-            [res addObject:payload];
-        }
-
-        if (res.count >= 4)
-        {
-            CGFloat r = [[res objectAtIndex:0] floatValue] / 255.0f;
-            CGFloat g = [[res objectAtIndex:1] floatValue] / 255.0f;
-            CGFloat b = [[res objectAtIndex:2] floatValue] / 255.0f;
-            CGFloat a = [[res objectAtIndex:3] floatValue];
             return [UIColor colorWithRed:r green:g blue:b alpha:a];
         }
     }
@@ -337,8 +314,7 @@ static UIColor *messageCellDynamicColor = nil;
     UIWindow *keyWindow = nil;
     for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
     {
-        if ([scene isKindOfClass:[UIWindowScene class]] &&
-            scene.activationState == UISceneActivationStateForegroundActive)
+        if ([scene isKindOfClass:[UIWindowScene class]])
         {
             UIWindowScene *windowScene = (UIWindowScene *) scene;
             for (UIWindow *window in windowScene.windows)
@@ -364,8 +340,7 @@ static UIColor *messageCellDynamicColor = nil;
 {
     if ([NSStringFromClass([view class]) isEqualToString:@"DCDMessageTableViewCell"])
     {
-        DCDMessageTableViewCell *cell = (DCDMessageTableViewCell *) view;
-        [self updateMessageCell:cell];
+        [self updateMessageCell:(DCDMessageTableViewCell *) view];
     }
 
     for (UIView *subview in view.subviews)
@@ -382,29 +357,29 @@ static UIColor *messageCellDynamicColor = nil;
     {
         if (cell.customBackgroundView)
         {
-            [cell.customBackgroundView removeFromSuperview];
-            cell.customBackgroundView = nil;
+            cell.customBackgroundView.hidden = YES;
         }
         return;
     }
 
     if (!cell.customBackgroundView)
     {
-        cell.customBackgroundView = [[UIView alloc] init];
-        [cell insertSubview:cell.customBackgroundView atIndex:0];
-        cell.customBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
-        cell.customBackgroundView.layer.masksToBounds                       = YES;
+        cell.customBackgroundView                     = [[UIView alloc] init];
+        cell.customBackgroundView.layer.masksToBounds = YES;
+        [cell.contentView insertSubview:cell.customBackgroundView atIndex:0];
 
+        cell.customBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
         [NSLayoutConstraint activateConstraints:@[
-            [cell.customBackgroundView.heightAnchor
-                constraintEqualToAnchor:cell.innerView.heightAnchor],
-            [cell.customBackgroundView.widthAnchor
-                constraintEqualToAnchor:cell.innerView.widthAnchor
-                               constant:messageBubbleWidthOffset],
             [cell.customBackgroundView.leadingAnchor
-                constraintEqualToAnchor:cell.innerView.leadingAnchor
+                constraintEqualToAnchor:cell.contentView.leadingAnchor
                                constant:messageBubbleLeadingOffset],
-            [cell.customBackgroundView.topAnchor constraintEqualToAnchor:cell.innerView.topAnchor],
+            [cell.customBackgroundView.trailingAnchor
+                constraintEqualToAnchor:cell.contentView.trailingAnchor
+                               constant:-messageBubbleWidthOffset],
+            [cell.customBackgroundView.topAnchor
+                constraintEqualToAnchor:cell.contentView.topAnchor],
+            [cell.customBackgroundView.bottomAnchor
+                constraintEqualToAnchor:cell.contentView.bottomAnchor]
         ]];
     }
 
@@ -430,7 +405,7 @@ static UIColor *messageCellDynamicColor = nil;
     }
     else
     {
-        self.layer.cornerRadius = MIN(self.frame.size.width, self.frame.size.height) / 2.0f;
+        self.layer.cornerRadius = self.bounds.size.width / 2.0;
     }
 }
 
@@ -453,26 +428,22 @@ static UIColor *messageCellDynamicColor = nil;
 
     if (enabled && !self.customBackgroundView)
     {
-        self.customBackgroundView = [[UIView alloc] init];
-        [self insertSubview:self.customBackgroundView atIndex:0];
-        self.customBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
-
-        float radius = messageBubbleCornerRadius ? [messageBubbleCornerRadius floatValue]
-                                                 : defaultMessageBubbleRadius;
-        self.customBackgroundView.layer.cornerRadius  = radius;
+        self.customBackgroundView                     = [[UIView alloc] init];
         self.customBackgroundView.layer.masksToBounds = YES;
-        self.customBackgroundView.backgroundColor     = messageCellDynamicColor;
+        [self.contentView insertSubview:self.customBackgroundView atIndex:0];
 
+        self.customBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
         [NSLayoutConstraint activateConstraints:@[
-            [self.customBackgroundView.heightAnchor
-                constraintEqualToAnchor:self.innerView.heightAnchor],
-            [self.customBackgroundView.widthAnchor
-                constraintEqualToAnchor:self.innerView.widthAnchor
-                               constant:messageBubbleWidthOffset],
             [self.customBackgroundView.leadingAnchor
-                constraintEqualToAnchor:self.innerView.leadingAnchor
+                constraintEqualToAnchor:self.contentView.leadingAnchor
                                constant:messageBubbleLeadingOffset],
-            [self.customBackgroundView.topAnchor constraintEqualToAnchor:self.innerView.topAnchor],
+            [self.customBackgroundView.trailingAnchor
+                constraintEqualToAnchor:self.contentView.trailingAnchor
+                               constant:-messageBubbleWidthOffset],
+            [self.customBackgroundView.topAnchor
+                constraintEqualToAnchor:self.contentView.topAnchor],
+            [self.customBackgroundView.bottomAnchor
+                constraintEqualToAnchor:self.contentView.bottomAnchor]
         ]];
     }
     else if (!enabled && self.customBackgroundView)
@@ -485,7 +456,7 @@ static UIColor *messageCellDynamicColor = nil;
 - (void)prepareForReuse
 {
     %orig;
-    dispatch_async(dispatch_get_main_queue(), ^{ [ChatUI updateMessageCell:self]; });
+    dispatch_async(dispatch_get_main_queue(), ^{ [NativeBridge updateMessageCell:self]; });
 }
 
 %end
@@ -503,5 +474,5 @@ static UIColor *messageCellDynamicColor = nil;
 %ctor
 {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(),
-                   ^{ [ChatUI loadDynamicColors]; });
+                   ^{ [NativeBridge loadDynamicColors]; });
 }

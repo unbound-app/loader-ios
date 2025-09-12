@@ -14,3 +14,7 @@ typedef void (^RCTPromiseRejectBlock)(NSString *code, NSString *message, NSError
              arguments:(NSArray *)arguments;
 
 @end
+
+// Import all category headers
+#import "NativeBridge+PluginAPI.h"
+#import "NativeBridge+ChatUI.h"
