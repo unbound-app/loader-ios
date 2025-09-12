@@ -18,6 +18,10 @@ void      reloadApp(UIViewController *viewController);
 
 extern id gBridge;
 
+@interface Recovery : NSObject
++ (void)showRecoveryMenu;
+@end
+
 @interface UnboundMenuViewController : UIViewController <UITableViewDelegate, UITableViewDataSource, SFSafariViewControllerDelegate>
 
 @property (nonatomic, strong) UITableView *tableView;

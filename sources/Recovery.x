@@ -1,5 +1,16 @@
 #import "Recovery.h"
 
+@implementation Recovery
+
++ (void)showRecoveryMenu
+{
+    dispatch_async(dispatch_get_main_queue(), ^{ showMenuSheet(); });
+}
+
+@end
+
+#pragma mark - Gesture Handling
+
 static NSTimeInterval shakeStartTime      = 0;
 static BOOL           isShaking           = NO;
 static NSHashTable   *windowsWithGestures = nil;
