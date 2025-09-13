@@ -6,13 +6,16 @@
                 method:(NSString *)methodName
              arguments:(NSArray *)arguments
 {
-    Class moduleClass = NSClassFromString(moduleName);
+    NSString *finalModuleName =
+        (moduleName && moduleName.length > 0) ? moduleName : @"NativeBridge";
+
+    Class moduleClass = NSClassFromString(finalModuleName);
     if (!moduleClass)
     {
-        [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Module %@ not found", moduleName];
+        [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Module %@ not found", finalModuleName];
         @throw [NSException
             exceptionWithName:@"ModuleNotFound"
-                       reason:[NSString stringWithFormat:@"Module %@ not found", moduleName]
+                       reason:[NSString stringWithFormat:@"Module %@ not found", finalModuleName]
                      userInfo:nil];
     }
 
@@ -35,17 +38,18 @@
     if (![moduleClass respondsToSelector:selector])
     {
         [Logger error:LOG_CATEGORY_NATIVEBRIDGE
-               format:@"Method %@ not found on %@", selectorString, moduleName];
-        @throw
-            [NSException exceptionWithName:@"MethodNotFound"
-                                    reason:[NSString stringWithFormat:@"Method %@ not found on %@",
-                                                                      selectorString, moduleName]
-                                  userInfo:nil];
+               format:@"Method %@ not found on %@", selectorString, finalModuleName];
+        @throw [NSException
+            exceptionWithName:@"MethodNotFound"
+                       reason:[NSString stringWithFormat:@"Method %@ not found on %@",
+                                                         selectorString, finalModuleName]
+                     userInfo:nil];
     }
 
-    [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
-           format:@"Calling [%@ %@] with %lu arguments", moduleName, NSStringFromSelector(selector),
-                  (unsigned long) (arguments ? arguments.count : 0)];
+    [Logger
+         debug:LOG_CATEGORY_NATIVEBRIDGE
+        format:@"Calling [%@ %@] with %lu arguments", finalModuleName,
+               NSStringFromSelector(selector), (unsigned long) (arguments ? arguments.count : 0)];
 
     NSMethodSignature *signature = [moduleClass methodSignatureForSelector:selector];
     if (!signature)
@@ -145,18 +149,22 @@
         NSString *methodName = bridgeCommand[@"method"];
         NSArray  *args       = bridgeCommand[@"args"];
 
-        if (!moduleName || !methodName)
+        if (!methodName)
         {
-            [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Missing module or method name"];
+            [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Missing method name"];
             if (reject)
             {
-                reject(@"INVALID_PARAMS", @"Missing module or method name", nil);
+                reject(@"INVALID_PARAMS", @"Missing method name", nil);
             }
             return;
         }
 
+        // Module name is now optional, will default to 'NativeBridge'
+        NSString *finalModuleName =
+            (moduleName && moduleName.length > 0) ? moduleName : @"NativeBridge";
+
         [Logger debug:LOG_CATEGORY_NATIVEBRIDGE
-               format:@"Native bridge call: [%@ %@] with %lu args", moduleName, methodName,
+               format:@"Native bridge call: [%@ %@] with %lu args", finalModuleName, methodName,
                       (unsigned long) (args ? args.count : 0)];
 
         @try
