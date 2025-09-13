@@ -14,7 +14,7 @@
     restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:
         (void (^)(BOOL))completionHandler
 {
-    [Logger info:LOG_CATEGORY_DEFAULT format:@"Restoring user interface for PiP stop"];
+    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"Restoring user interface for PiP stop"];
 
     UIViewController *topViewController = [NativeBridge topViewController];
     if (topViewController && playerViewController != topViewController.presentedViewController)
@@ -32,7 +32,7 @@
     }
     else
     {
-        [Logger info:LOG_CATEGORY_DEFAULT format:@"PiP player already presented"];
+        [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP player already presented"];
         if (completionHandler)
         {
             completionHandler(YES);
@@ -42,19 +42,19 @@
 
 - (void)playerViewControllerWillStartPictureInPicture:(AVPlayerViewController *)playerViewController
 {
-    [Logger info:LOG_CATEGORY_DEFAULT format:@"PiP will start"];
+    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP will start"];
 }
 
 - (void)playerViewControllerDidStartPictureInPicture:(AVPlayerViewController *)playerViewController
 {
-    [Logger info:LOG_CATEGORY_DEFAULT format:@"PiP did start successfully"];
+    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP did start successfully"];
 
     if (playerViewController.presentingViewController)
     {
         [playerViewController
             dismissViewControllerAnimated:YES
                                completion:^{
-                                   [Logger info:LOG_CATEGORY_DEFAULT
+                                   [Logger info:LOG_CATEGORY_NATIVEBRIDGE
                                          format:@"Full-screen player dismissed after PiP start"];
                                }];
     }
@@ -63,18 +63,18 @@
 - (void)playerViewController:(AVPlayerViewController *)playerViewController
     failedToStartPictureInPictureWithError:(NSError *)error
 {
-    [Logger error:LOG_CATEGORY_DEFAULT
+    [Logger error:LOG_CATEGORY_NATIVEBRIDGE
            format:@"Failed to start PiP: %@", error.localizedDescription];
 }
 
 - (void)playerViewControllerWillStopPictureInPicture:(AVPlayerViewController *)playerViewController
 {
-    [Logger info:LOG_CATEGORY_DEFAULT format:@"PiP will stop"];
+    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP will stop"];
 }
 
 - (void)playerViewControllerDidStopPictureInPicture:(AVPlayerViewController *)playerViewController
 {
-    [Logger info:LOG_CATEGORY_DEFAULT format:@"PiP did stop"];
+    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP did stop"];
 }
 
 @end
@@ -87,13 +87,13 @@ static AVPlayerViewController *currentPlayerViewController = nil;
 {
     if (!videoURL || [videoURL length] == 0)
     {
-        [Logger error:LOG_CATEGORY_DEFAULT format:@"Video URL is required for PiP video player"];
+        [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Video URL is required for PiP video player"];
         return nil;
     }
 
     if (![AVPictureInPictureController isPictureInPictureSupported])
     {
-        [Logger error:LOG_CATEGORY_DEFAULT
+        [Logger error:LOG_CATEGORY_NATIVEBRIDGE
                format:@"Picture in Picture is not supported on this device"];
         return nil;
     }
@@ -109,7 +109,7 @@ static AVPlayerViewController *currentPlayerViewController = nil;
         NSURL *url = [NSURL URLWithString:videoURL];
         if (!url)
         {
-            [Logger error:LOG_CATEGORY_DEFAULT format:@"Invalid video URL: %@", videoURL];
+            [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Invalid video URL: %@", videoURL];
             return;
         }
 
@@ -130,7 +130,7 @@ static AVPlayerViewController *currentPlayerViewController = nil;
                 presentViewController:currentPlayerViewController
                              animated:YES
                            completion:^{
-                               [Logger info:LOG_CATEGORY_DEFAULT
+                               [Logger info:LOG_CATEGORY_NATIVEBRIDGE
                                      format:@"PiP video player presented with ID: %@", playerId];
 
                                [player play];
@@ -138,14 +138,14 @@ static AVPlayerViewController *currentPlayerViewController = nil;
                                dispatch_after(
                                    dispatch_time(DISPATCH_TIME_NOW, (int64_t) (1.0 * NSEC_PER_SEC)),
                                    dispatch_get_main_queue(), ^{
-                                       [Logger info:LOG_CATEGORY_DEFAULT
+                                       [Logger info:LOG_CATEGORY_NATIVEBRIDGE
                                              format:@"PiP video player ready for user interaction"];
                                    });
                            }];
         }
         else
         {
-            [Logger error:LOG_CATEGORY_DEFAULT
+            [Logger error:LOG_CATEGORY_NATIVEBRIDGE
                    format:@"No top view controller found to present PiP player"];
         }
     });
@@ -222,12 +222,12 @@ static AVPlayerViewController *currentPlayerViewController = nil;
                  if (error)
                  {
                      [Logger
-                          error:LOG_CATEGORY_DEFAULT
+                          error:LOG_CATEGORY_NATIVEBRIDGE
                          format:@"Error scheduling notification: %@", error.localizedDescription];
                  }
                  else
                  {
-                     [Logger info:LOG_CATEGORY_DEFAULT
+                     [Logger info:LOG_CATEGORY_NATIVEBRIDGE
                            format:@"Notification scheduled with id: %@", notificationId];
                  }
              }];
