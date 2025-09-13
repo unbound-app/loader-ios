@@ -43,6 +43,17 @@ static NSString *etag = nil;
                                         def:@"https://raw.githubusercontent.com/unbound-app/builds/"
                                             @"refs/heads/main/"];
 
+    if ([baseURL hasSuffix:@".bundle"] || [baseURL hasSuffix:@".js"])
+    {
+        [Logger info:LOG_CATEGORY_UPDATER format:@"Using direct URL: %@", baseURL];
+        return [NSURL URLWithString:baseURL];
+    }
+
+    if (![baseURL hasSuffix:@"/"])
+    {
+        baseURL = [baseURL stringByAppendingString:@"/"];
+    }
+
     NSString *manifestURL  = [baseURL stringByAppendingString:@"manifest.json"];
     NSData   *manifestData = [NSData dataWithContentsOfURL:[NSURL URLWithString:manifestURL]];
 
@@ -72,7 +83,7 @@ static NSString *etag = nil;
     }
 
     [Logger error:LOG_CATEGORY_UPDATER
-          format:@"Failed to fetch manifest, falling back to JavaScript bundle"];
+           format:@"Failed to fetch manifest, falling back to JavaScript bundle"];
     return [NSURL URLWithString:[baseURL stringByAppendingString:@"unbound.js"]];
 }
 @end
