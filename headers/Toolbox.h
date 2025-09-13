@@ -12,17 +12,16 @@
 #import "Utilities.h"
 #import "MobileGestalt.h"
 
-BOOL      isRecoveryModeEnabled(void);
-void      showMenuSheet(void);
+void      showToolboxSheet(void);
 void      reloadApp(UIViewController *viewController);
 
 extern id gBridge;
 
-@interface Recovery : NSObject
-+ (void)showRecoveryMenu;
+@interface Toolbox : NSObject
++ (void)showToolboxMenu;
 @end
 
-@interface UnboundMenuViewController : UIViewController <UITableViewDelegate, UITableViewDataSource, SFSafariViewControllerDelegate>
+@interface UnboundToolboxViewController : UIViewController <UITableViewDelegate, UITableViewDataSource, SFSafariViewControllerDelegate>
 
 @property (nonatomic, strong) UITableView *tableView;
 
@@ -30,6 +29,6 @@ extern id gBridge;
 
 @end
 
-@interface                                             UnboundMenuViewController ()
+@interface                                                 UnboundToolboxViewController ()
 @property (nonatomic, strong) NSArray<NSDictionary *> *menuSections;
 @end

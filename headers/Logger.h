@@ -32,7 +32,7 @@ typedef NS_ENUM(NSInteger, LogLevel) {
 #define LOG_CATEGORY_FILESYSTEM "filesystem"
 #define LOG_CATEGORY_UPDATER    "updater"
 #define LOG_CATEGORY_UTILITIES  "utilities"
-#define LOG_CATEGORY_RECOVERY   "recovery"
+#define LOG_CATEGORY_TOOLBOX    "toolbox"
 #define LOG_CATEGORY_FONTS      "fonts"
 #define LOG_CATEGORY_NATIVEBRIDGE "nativebridge"
 

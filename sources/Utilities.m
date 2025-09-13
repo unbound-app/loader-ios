@@ -1537,4 +1537,9 @@ static UIView   *islandOverlayView = nil;
     return [NSString stringWithFormat:@"\"%@\"", escaped];
 }
 
++ (BOOL)isRecoveryModeEnabled
+{
+    return [Settings getBoolean:@"unbound" key:@"recovery" def:NO];
+}
+
 @end

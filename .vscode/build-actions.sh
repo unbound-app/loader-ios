@@ -8,7 +8,7 @@ icloud_dir="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
 
 build_package() {
   rm -rf packages
-  gmake clean package
+  gmake clean package DEBUG=1
 }
 
 clean_dest() {

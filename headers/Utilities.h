@@ -10,6 +10,7 @@
 
 #import "FileSystem.h"
 #import "Unbound.h"
+#import "Settings.h"
 
 #define CS_DEBUGGED 0x10000000
 int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
@@ -157,5 +158,7 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (BOOL)isJITAvailable;
 
 + (NSString *)JSONString:(NSString *)str;
+
++ (BOOL)isRecoveryModeEnabled;
 
 @end
