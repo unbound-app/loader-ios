@@ -103,18 +103,26 @@ id gBridge = nil;
 
         if (![FileSystem exists:BUNDLE])
         {
-            return [Utilities alert:@"Bundle failed to download, please report this "
-                                    @"to the developers."];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [Utilities alert:@"Bundle failed to download, please report this "
+                                 @"to the developers."];
+            });
+            return;
         }
         else
         {
-            [Utilities alert:@"Bundle failed to update, loading out of date bundle."];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [Utilities alert:@"Bundle failed to update, loading out of date bundle."];
+            });
         }
     }
 
     if (![FileSystem exists:BUNDLE])
     {
-        return [Utilities alert:@"Bundle not found, please report this to the developers."];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [Utilities alert:@"Bundle not found, please report this to the developers."];
+        });
+        return;
     }
 
     @try
@@ -129,8 +137,11 @@ id gBridge = nil;
     {
         [Logger error:LOG_CATEGORY_DEFAULT
                format:@"Unbound's bundle failed execution, aborting. (%@)", e.reason];
-        return [Utilities alert:@"Failed to load Unbound's bundle. Please report "
-                                @"this to the developers."];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [Utilities alert:@"Failed to load Unbound's bundle. Please report "
+                             @"this to the developers."];
+        });
+        return;
     }
 }
 %end
