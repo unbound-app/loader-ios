@@ -162,7 +162,6 @@ static NSString                                   *currentThemeId = nil;
 
 + (void)swizzleRawColors:(NSDictionary *)payload
 {
-    // Get the class reference for UIColor
     Class instance = object_getClass(NSClassFromString(@"UIColor"));
 
     [Logger info:LOG_CATEGORY_THEMES format:@"Attempting swizzle raw colors..."];
@@ -173,7 +172,6 @@ static NSString                                   *currentThemeId = nil;
         {
             SEL selector = NSSelectorFromString(raw);
 
-            // Define a block to replace the original method implementation
             __block id (*original)(Class, SEL);
             IMP     replacement = imp_implementationWithBlock(^UIColor *(id self) {
                 @try
@@ -189,14 +187,11 @@ static NSString                                   *currentThemeId = nil;
                            format:@"Failed to use modified raw color %@. (%@)", raw, e.reason];
                 }
 
-                // Call the original implementation if parsing fails
                 return original(instance, selector);
                 });
 
-            // Hook the original method with the replacement block
             MSHookMessageEx(instance, selector, replacement, (IMP *) &original);
 
-            // Store the original implementation for restoration when the theme changes
             originalRawImplementations[raw] = [NSValue valueWithPointer:(void *) original];
         }
 
@@ -212,13 +207,11 @@ static NSString                                   *currentThemeId = nil;
 {
     Class instance = object_getClass(NSClassFromString(@"UIColor"));
 
-    // Iterate over the stored original implementations and restore them
     for (NSString *selectorName in originalRawImplementations)
     {
         SEL selector    = NSSelectorFromString(selectorName);
         IMP originalIMP = (IMP)[originalRawImplementations[selectorName] pointerValue];
 
-        // Reapply the original implementation
         if (originalIMP)
         {
             MSHookMessageEx(instance, selector, originalIMP, NULL);
@@ -231,7 +224,6 @@ static NSString                                   *currentThemeId = nil;
         }
     }
 
-    // Clear the dictionary after unsetting swizzles
     [originalRawImplementations removeAllObjects];
 }
 
@@ -241,11 +233,8 @@ static NSString                                   *currentThemeId = nil;
 
     @try
     {
-        // Get the class reference for DCDThemeColor
         Class instance = object_getClass(NSClassFromString(@"DCDThemeColor"));
 
-        // All DCDThemeColor methods return UIColor and are semantic colors.
-        // We dynamically copy them and patch them to avoid hardcoding each color.
         unsigned methodCount = 0;
         Method  *methods     = class_copyMethodList(instance, &methodCount);
 
@@ -255,7 +244,6 @@ static NSString                                   *currentThemeId = nil;
             SEL       selector = method_getName(method);
             NSString *name     = NSStringFromSelector(selector);
 
-            // Define a block to replace the original method implementation
             __block id (*original)(Class, SEL);
             IMP     replacement = imp_implementationWithBlock(^UIColor *(id self) {
                 if (currentThemeId != nil)
@@ -280,7 +268,6 @@ static NSString                                   *currentThemeId = nil;
                         NSString *colorValue   = color[@"value"];
                         NSNumber *colorOpacity = color[@"opacity"];
 
-                        // Theme Developers are allowed to specify a custom color. (rgb/rgba/hex)
                         if ([colorType isEqualToString:@"color"])
                         {
                             UIColor *parsed = [Themes parseColor:colorValue];
@@ -297,7 +284,6 @@ static NSString                                   *currentThemeId = nil;
                             }
                         }
 
-                        // Theme Developers can also use Discord's raw colors.
                         if ([colorType isEqualToString:@"raw"])
                         {
                             SEL   colorSelector = NSSelectorFromString(colorValue);
@@ -325,12 +311,9 @@ static NSString                                   *currentThemeId = nil;
                     }
                 }
 
-                // Call the original implementation if parsing fails or the user does not have a
-                // theme applied.
                 return original(instance, selector);
                 });
 
-            // Hook the original method with the replacement block
             MSHookMessageEx(instance, selector, replacement, (IMP *) &original);
         }
 

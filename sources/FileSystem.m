@@ -90,7 +90,6 @@ static NSString                                               *documents = nil;
 
 + (void)monitor:(NSString *)filePath onChange:(void (^)())onChange autoRestart:(BOOL)autoRestart
 {
-    // If file is already being monitored, ignore this extra request.
     if ([monitors objectForKey:filePath])
     {
         return;
@@ -100,9 +99,7 @@ static NSString                                               *documents = nil;
 
     int fdescriptor = open(path, O_EVTONLY);
 
-    // Get a reference to the default queue so our file notifications can go out on it
     dispatch_queue_t defaultQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-    // Create a dispatch source
     dispatch_source_t source = dispatch_source_create(
         DISPATCH_SOURCE_TYPE_VNODE, fdescriptor,
         DISPATCH_VNODE_ATTRIB | DISPATCH_VNODE_DELETE | DISPATCH_VNODE_EXTEND |
@@ -110,7 +107,6 @@ static NSString                                               *documents = nil;
             DISPATCH_VNODE_WRITE,
         defaultQueue);
 
-    // Add cancel handler
 
     NSMutableDictionary *monitor = [[NSMutableDictionary alloc] init];
 
@@ -145,8 +141,6 @@ static NSString                                               *documents = nil;
                format:@"event listener got cancelled for %@", filePath];
         close(fdescriptor);
 
-        // If this dispatch source was canceled because of a rename or delete notification, recreate
-        // it
         if (autoRestart)
         {
             [Logger debug:LOG_CATEGORY_FILESYSTEM format:@"Restarting file watcher."];
@@ -154,7 +148,6 @@ static NSString                                               *documents = nil;
         }
     });
 
-    // Start monitoring the target file
     dispatch_resume(source);
 }
 
@@ -234,7 +227,6 @@ static NSString                                               *documents = nil;
         }
     });
 
-    // Freeze the main thread until the file is downloaded
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
 
     if (exception)

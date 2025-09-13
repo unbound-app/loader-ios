@@ -65,7 +65,6 @@
     [invocation setTarget:moduleClass];
     [invocation setSelector:selector];
 
-    // Set arguments (starting at index 2, after self and _cmd)
     if (arguments && arguments.count > 0)
     {
         NSUInteger maxArgs = MIN(arguments.count, signature.numberOfArguments - 2);
@@ -159,7 +158,6 @@
             return;
         }
 
-        // Module name is now optional, will default to 'NativeBridge'
         NSString *finalModuleName =
             (moduleName && moduleName.length > 0) ? moduleName : @"NativeBridge";
 

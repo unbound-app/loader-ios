@@ -4,43 +4,37 @@
 
 static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *info)
 {
-    // Firebase Dynamic Links errors
     if ([domain isEqualToString:@"com.firebase.dynamicLinks"] && code == 1)
     {
         return YES;
     }
 
-    // AppSSO errors
     if ([domain isEqualToString:@"com.apple.AppSSO.AuthorizationError"] && (code == -1000))
     {
         return YES;
     }
 
-    // RCT JavaScript loader errors
     if ([domain isEqualToString:@"RCTJavaScriptLoaderErrorDomain"] && code == 1000)
     {
         return YES;
     }
 
-    // File not found errors
     if ([domain isEqualToString:@"NSPOSIXErrorDomain"])
     {
         // Error code 2: No such file
         if (code == 2)
             return YES;
 
-        // Error code 17: File exists (harmless error when creating directories/files)
+        // Error code 17: File exists
         if (code == 17)
             return YES;
     }
 
-    // BS Action errors
     if ([domain isEqualToString:@"BSActionErrorDomain"] && code == 1)
     {
         return YES;
     }
 
-    // Filter NSOSStatusErrorDomain errors related to FSNode
     if ([domain isEqualToString:@"NSOSStatusErrorDomain"])
     {
         // -10813: Common error related to FSNode getHFSType
@@ -48,14 +42,14 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
             return YES;
     }
 
-    // Related Cocoa errors
+    // Cocoa errors
     if ([domain isEqualToString:@"NSCocoaErrorDomain"])
     {
-        // File not found related
+        // File not found
         if (code == 260)
             return YES;
 
-        // File exists related error
+        // File exists
         if (code == 516)
             return YES;
 
