@@ -14,16 +14,12 @@
     restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:
         (void (^)(BOOL))completionHandler
 {
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"Restoring user interface for PiP stop"];
-
     UIViewController *topViewController = [NativeBridge topViewController];
     if (topViewController && playerViewController != topViewController.presentedViewController)
     {
         [topViewController presentViewController:playerViewController
                                         animated:NO
                                       completion:^{
-                                          [Logger info:LOG_CATEGORY_DEFAULT
-                                                format:@"PiP player interface restored"];
                                           if (completionHandler)
                                           {
                                               completionHandler(YES);
@@ -32,7 +28,6 @@
     }
     else
     {
-        [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP player already presented"];
         if (completionHandler)
         {
             completionHandler(YES);
@@ -40,23 +35,11 @@
     }
 }
 
-- (void)playerViewControllerWillStartPictureInPicture:(AVPlayerViewController *)playerViewController
-{
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP will start"];
-}
-
 - (void)playerViewControllerDidStartPictureInPicture:(AVPlayerViewController *)playerViewController
 {
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP did start successfully"];
-
     if (playerViewController.presentingViewController)
     {
-        [playerViewController
-            dismissViewControllerAnimated:YES
-                               completion:^{
-                                   [Logger info:LOG_CATEGORY_NATIVEBRIDGE
-                                         format:@"Full-screen player dismissed after PiP start"];
-                               }];
+        [playerViewController dismissViewControllerAnimated:YES completion:nil];
     }
 }
 
@@ -65,28 +48,6 @@
 {
     [Logger error:LOG_CATEGORY_NATIVEBRIDGE
            format:@"Failed to start PiP: %@", error.localizedDescription];
-}
-
-- (void)playerViewControllerWillStopPictureInPicture:(AVPlayerViewController *)playerViewController
-{
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP will stop"];
-}
-
-- (void)playerViewControllerDidStopPictureInPicture:(AVPlayerViewController *)playerViewController
-{
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP did stop"];
-}
-
-- (void)pictureInPictureControllerWillStartPictureInPicture:
-    (AVPictureInPictureController *)pictureInPictureController
-{
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP controller will start"];
-}
-
-- (void)pictureInPictureControllerDidStartPictureInPicture:
-    (AVPictureInPictureController *)pictureInPictureController
-{
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP controller did start successfully"];
 }
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController
@@ -100,23 +61,49 @@
     restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:
         (void (^)(BOOL))completionHandler
 {
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"Restoring UI after PiP (controller)"];
     if (completionHandler)
         completionHandler(YES);
-}
-
-- (void)pictureInPictureControllerWillStopPictureInPicture:
-    (AVPictureInPictureController *)pictureInPictureController
-{
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP controller will stop"];
 }
 
 - (void)pictureInPictureControllerDidStopPictureInPicture:
     (AVPictureInPictureController *)pictureInPictureController
 {
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE
-          format:@"PiP controller did stop; cleaning up resources"];
     [NativeBridge cleanupPiPResources];
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary<NSKeyValueChangeKey, id> *)change
+                       context:(void *)context
+{
+    if (![keyPath isEqualToString:@"pictureInPicturePossible"])
+    {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+        return;
+    }
+
+    NSNumber *newValue = change[NSKeyValueChangeNewKey];
+    if (![newValue isKindOfClass:[NSNumber class]] || !newValue.boolValue)
+    {
+        return;
+    }
+
+    AVPictureInPictureController *pip = (AVPictureInPictureController *) object;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @try
+        {
+            [pip removeObserver:[NativeBridgePluginAPIDelegate sharedDelegate]
+                     forKeyPath:@"pictureInPicturePossible"];
+        }
+        @catch (__unused NSException *e)
+        {
+        }
+
+        if (!pip.pictureInPictureActive)
+        {
+            [pip startPictureInPicture];
+        }
+    });
 }
 
 @end
@@ -128,27 +115,25 @@ static AVPictureInPictureController *currentPiPController        = nil;
 static AVPlayer                     *currentPlayer               = nil;
 static AVPlayerLayer                *currentPlayerLayer          = nil;
 static UIView                       *currentHostView             = nil;
-
-+ (void)tryStartPiPWithRetries:(NSInteger)remaining
-{
-    if (!currentPiPController)
-        return;
-    if (currentPiPController.pictureInPictureActive)
-        return;
-    if (currentPiPController.pictureInPicturePossible)
-    {
-        [currentPiPController startPictureInPicture];
-        return;
-    }
-    if (remaining <= 0)
-        return;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t) (0.1 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(),
-                   ^{ [NativeBridge tryStartPiPWithRetries:remaining - 1]; });
-}
+static char                          kPiPObserverContext;
+static BOOL                          sPiPObservationAdded = NO;
 
 + (void)cleanupPiPResources
 {
+    if (sPiPObservationAdded && currentPiPController)
+    {
+        @try
+        {
+            [currentPiPController removeObserver:[NativeBridgePluginAPIDelegate sharedDelegate]
+                                      forKeyPath:@"pictureInPicturePossible"
+                                         context:&kPiPObserverContext];
+        }
+        @catch (__unused NSException *e)
+        {
+        }
+        sPiPObservationAdded = NO;
+    }
+
     if (currentPiPController && currentPiPController.pictureInPictureActive)
     {
         [currentPiPController stopPictureInPicture];
@@ -185,8 +170,7 @@ static UIView                       *currentHostView             = nil;
 
     if (![AVPictureInPictureController isPictureInPictureSupported])
     {
-        [Logger error:LOG_CATEGORY_NATIVEBRIDGE
-               format:@"Picture in Picture is not supported on this device"];
+        [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP is not supported on this device"];
         return nil;
     }
 
@@ -197,6 +181,20 @@ static UIView                       *currentHostView             = nil;
         {
             [currentPlayerViewController dismissViewControllerAnimated:NO completion:nil];
         }
+        if (sPiPObservationAdded && currentPiPController)
+        {
+            @try
+            {
+                [currentPiPController removeObserver:[NativeBridgePluginAPIDelegate sharedDelegate]
+                                          forKeyPath:@"pictureInPicturePossible"
+                                             context:&kPiPObserverContext];
+            }
+            @catch (__unused NSException *e)
+            {
+            }
+            sPiPObservationAdded = NO;
+        }
+
         if (currentPiPController && currentPiPController.pictureInPictureActive)
         {
             [currentPiPController stopPictureInPicture];
@@ -213,7 +211,7 @@ static UIView                       *currentHostView             = nil;
         {
             NSError        *audioError = nil;
             AVAudioSession *session    = [AVAudioSession sharedInstance];
-            BOOL ok = [session setCategory:AVAudioSessionCategoryPlayback
+            BOOL            ok         = [session setCategory:AVAudioSessionCategoryPlayback
                                withOptions:AVAudioSessionCategoryOptionDuckOthers
                                      error:&audioError];
             if (!ok || audioError)
@@ -277,25 +275,28 @@ static UIView                       *currentHostView             = nil;
         currentPiPController.delegate = [NativeBridgePluginAPIDelegate sharedDelegate];
         currentPiPController.canStartPictureInPictureAutomaticallyFromInline = YES;
 
-        [Logger info:LOG_CATEGORY_NATIVEBRIDGE
-              format:@"Starting playback and requesting PiP for ID: %@", playerId];
-
         [currentPlayer play];
 
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t) (0.1 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-                           if (currentPiPController &&
-                               currentPiPController.pictureInPicturePossible)
-                           {
-                               [currentPiPController startPictureInPicture];
-                           }
-                           else
-                           {
-                               [Logger info:LOG_CATEGORY_NATIVEBRIDGE
-                                     format:@"PiP not yet possible; retrying..."];
-                               [NativeBridge tryStartPiPWithRetries:20];
-                           }
-                       });
+        if (currentPiPController.pictureInPicturePossible)
+        {
+            [currentPiPController startPictureInPicture];
+        }
+        else
+        {
+            @try
+            {
+                [currentPiPController addObserver:[NativeBridgePluginAPIDelegate sharedDelegate]
+                                       forKeyPath:@"pictureInPicturePossible"
+                                          options:NSKeyValueObservingOptionNew
+                                          context:&kPiPObserverContext];
+                sPiPObservationAdded = YES;
+            }
+            @catch (NSException *exception)
+            {
+                [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+                       format:@"Failed to add PiP KVO observer: %@", exception.reason];
+            }
+        }
     });
 
     return playerId;

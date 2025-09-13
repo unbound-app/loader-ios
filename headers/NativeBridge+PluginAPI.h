@@ -13,7 +13,6 @@
 + (NSString *)playPiPVideo:(NSString *)videoURL;
 + (UIViewController *)topViewController;
 + (void)cleanupPiPResources;
-+ (void)tryStartPiPWithRetries:(NSInteger)remaining;
 
 @end
 
