@@ -874,6 +874,16 @@ void showToolboxSheet(void)
     if (!activeScene)
         return;
 
+    UIWindow *originalKeyWindow = nil;
+    for (UIWindow *w in activeScene.windows)
+    {
+        if (w.isKeyWindow)
+        {
+            originalKeyWindow = w;
+            break;
+        }
+    }
+
     UIWindow *topWindow       = [[UIWindow alloc] initWithWindowScene:activeScene];
     topWindow.windowLevel     = UIWindowLevelAlert + 100;
     topWindow.backgroundColor = [UIColor clearColor];
@@ -887,17 +897,38 @@ void showToolboxSheet(void)
 
     objc_setAssociatedObject(navController, "recoveryTopWindow", topWindow,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (originalKeyWindow)
+    {
+        objc_setAssociatedObject(navController, "recoveryOriginalKeyWindow", originalKeyWindow,
+                                 OBJC_ASSOCIATION_ASSIGN);
+    }
 
     Method dismissMethod =
         class_getInstanceMethod([UnboundToolboxViewController class], @selector(dismiss));
     method_setImplementation(
         dismissMethod, imp_implementationWithBlock(^(id _self) {
-            [_self dismissViewControllerAnimated:YES
-                                      completion:^{
-                                          UIWindow *storedWindow = objc_getAssociatedObject(
-                                              navController, "recoveryTopWindow");
-                                          storedWindow.hidden = YES;
-                                      }];
+            [_self
+                dismissViewControllerAnimated:YES
+                                   completion:^{
+                                       UIWindow *storedWindow = objc_getAssociatedObject(
+                                           navController, "recoveryTopWindow");
+                                       UIWindow *origKeyWindow = objc_getAssociatedObject(
+                                           navController, "recoveryOriginalKeyWindow");
+
+                                       if (storedWindow)
+                                       {
+                                           storedWindow.hidden             = YES;
+                                           storedWindow.rootViewController = nil;
+                                       }
+
+                                       [origKeyWindow makeKeyAndVisible];
+
+                                       objc_setAssociatedObject(navController, "recoveryTopWindow",
+                                                                nil, OBJC_ASSOCIATION_ASSIGN);
+                                       objc_setAssociatedObject(navController,
+                                                                "recoveryOriginalKeyWindow", nil,
+                                                                OBJC_ASSOCIATION_ASSIGN);
+                                   }];
         }));
 }
 
