@@ -38,15 +38,33 @@ static NSString *etag = nil;
 
 + (NSURL *)getDownloadURL
 {
-    NSString *baseURL = [Settings getString:@"unbound"
+    NSString *baseURL             = [Settings getString:@"unbound"
                                         key:@"loader.update.url"
                                         def:@"https://raw.githubusercontent.com/unbound-app/builds/"
-                                            @"refs/heads/main/"];
+                                                        @"refs/heads/main/"];
+    NSString *directURLIfProvided = nil;
 
     if ([baseURL hasSuffix:@".bundle"] || [baseURL hasSuffix:@".js"])
     {
-        [Logger info:LOG_CATEGORY_UPDATER format:@"Using direct URL: %@", baseURL];
-        return [NSURL URLWithString:baseURL];
+        NSURL *providedURL = [NSURL URLWithString:baseURL];
+        if (providedURL)
+        {
+            NSURL *dirURL = [providedURL URLByDeletingLastPathComponent];
+            if (dirURL)
+            {
+                baseURL = dirURL.absoluteString ?: baseURL;
+            }
+        }
+        if (![baseURL hasSuffix:@"/"])
+        {
+            baseURL = [baseURL stringByAppendingString:@"/"];
+        }
+        directURLIfProvided =
+            ((NSURL *) [NSURL URLWithString:((NSString *) [Settings getString:@"unbound"
+                                                                          key:@"loader.update.url"
+                                                                          def:@""])])
+                    .absoluteString
+                ?: nil;
     }
 
     if (![baseURL hasSuffix:@"/"])
@@ -82,8 +100,11 @@ static NSString *etag = nil;
         }
     }
 
-    [Logger error:LOG_CATEGORY_UPDATER
-           format:@"Failed to fetch manifest, falling back to JavaScript bundle"];
+    [Logger error:LOG_CATEGORY_UPDATER format:@"Failed to fetch manifest; falling back to JavaScript bundle"];
+    if (directURLIfProvided)
+    {
+        return [NSURL URLWithString:directURLIfProvided];
+    }
     return [NSURL URLWithString:[baseURL stringByAppendingString:@"unbound.js"]];
 }
 @end
