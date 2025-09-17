@@ -1,6 +1,7 @@
-#import "NativeBridge.h"
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
-@interface NativeBridge (ChatUI)
+@interface ChatUI : NSObject
 
 + (void)setAvatarCornerRadius:(NSNumber *)radius;
 + (NSNumber *)getAvatarCornerRadius;

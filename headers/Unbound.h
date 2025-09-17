@@ -13,6 +13,5 @@
 #import "Themes.h"
 #import "Fonts.h"
 #import "Updater.h"
-#import "NativeBridge.h"
 #import "MobileGestalt.h"
 #import "RCTCxxBridge.h"
