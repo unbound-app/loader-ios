@@ -15,8 +15,6 @@
 void      showToolboxSheet(void);
 void      reloadApp(UIViewController *viewController);
 
-extern id gBridge;
-
 @interface Toolbox : NSObject
 + (void)showToolboxMenu;
 @end

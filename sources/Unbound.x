@@ -1,12 +1,47 @@
 #import "Unbound.h"
 
-id gBridge = nil;
+static BOOL sUnboundModuleRegistered = NO;
+
+static void RegisterUnboundNativeModule(id bridge)
+{
+    if (sUnboundModuleRegistered)
+        return;
+    if (!bridge)
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"bridge is nil"];
+        return;
+    }
+
+    Class unboundNative = NSClassFromString(@"UnboundNative");
+    if (!unboundNative)
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"UnboundNative class not found"];
+        return;
+    }
+
+    SEL sel = NSSelectorFromString(@"registerAdditionalModuleClasses:");
+    if (![bridge respondsToSelector:sel])
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"RCTCxxBridge lacks registerAdditionalModuleClasses:"];
+        return;
+    }
+
+    @try
+    {
+        ((void (*)(id, SEL, NSArray *)) objc_msgSend)(bridge, sel, @[ unboundNative ]);
+        sUnboundModuleRegistered = YES;
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Registered UnboundNative module"];
+    }
+    @catch (NSException *e)
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"Failed to register UnboundNative module: %@", e];
+    }
+}
 
 %hook RCTCxxBridge
 - (void)executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async
 {
-    gBridge = self;
-
     [FileSystem init];
     [Settings init];
 
@@ -92,6 +127,7 @@ id gBridge = nil;
     }
 
     %orig(script, url, true);
+    RegisterUnboundNativeModule(self);
 
     @try
     {

@@ -1,5 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
 
 #import "FileSystem.h"
 #import "Fonts.h"
@@ -13,4 +15,4 @@
 #import "Updater.h"
 #import "NativeBridge.h"
 #import "MobileGestalt.h"
-#import "RCT.h"
+#import "RCTCxxBridge.h"

@@ -939,14 +939,30 @@ void reloadApp(UIViewController *viewController)
     [viewController
         dismissViewControllerAnimated:NO
                            completion:^{
-                               if (gBridge &&
-                                   [gBridge isKindOfClass:NSClassFromString(@"RCTCxxBridge")])
+                               Class RCTBridge = NSClassFromString(@"RCTBridge");
+                               if (RCTBridge &&
+                                   [RCTBridge
+                                       respondsToSelector:NSSelectorFromString(@"currentBridge")])
                                {
-                                   SEL reloadSelector = NSSelectorFromString(@"reload");
-                                   if ([gBridge respondsToSelector:reloadSelector])
+                                   id (*msg)(id, SEL) = (id (*)(id, SEL)) objc_msgSend;
+                                   id bridge =
+                                       msg(RCTBridge, NSSelectorFromString(@"currentBridge"));
+                                   if (bridge)
                                    {
-                                       ((void (*)(id, SEL)) objc_msgSend)(gBridge, reloadSelector);
-                                       return;
+                                       SEL reloadSel = NSSelectorFromString(@"reload");
+                                       if ([bridge respondsToSelector:reloadSel])
+                                       {
+                                           ((void (*)(id, SEL)) objc_msgSend)(bridge, reloadSel);
+                                           return;
+                                       }
+                                       SEL requestReloadSel =
+                                           NSSelectorFromString(@"requestReload");
+                                       if ([bridge respondsToSelector:requestReloadSel])
+                                       {
+                                           ((void (*)(id, SEL)) objc_msgSend)(bridge,
+                                                                              requestReloadSel);
+                                           return;
+                                       }
                                    }
                                }
 
