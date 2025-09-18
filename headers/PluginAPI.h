@@ -1,9 +1,11 @@
-#import "NativeBridge.h"
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <UserNotifications/UserNotifications.h>
+#import "Logger.h"
 
-@interface NativeBridge (PluginAPI)
+@interface PluginAPI : NSObject
 
 + (NSString *)showNotification:(NSString *)title 
                           body:(NSString *)body 

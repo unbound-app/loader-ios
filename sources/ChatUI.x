@@ -1,6 +1,7 @@
-#import "NativeBridge+ChatUI.h"
+#import "ChatUI.h"
+#import "Logger.h"
 
-@implementation NativeBridge (ChatUI)
+@implementation ChatUI
 
 static NSNumber   *customAvatarRadius  = nil;
 static const float defaultAvatarRadius = -1.0f;
@@ -171,7 +172,8 @@ static UIColor *messageCellDynamicColor = nil;
 {
     if (!radius)
     {
-        [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Message bubble corner radius cannot be nil"];
+        [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+               format:@"Message bubble corner radius cannot be nil"];
         return;
     }
 
@@ -184,7 +186,8 @@ static UIColor *messageCellDynamicColor = nil;
     }
 
     messageBubbleCornerRadius = radius;
-    [Logger info:LOG_CATEGORY_NATIVEBRIDGE format:@"Message bubble corner radius set to: %@", radius];
+    [Logger info:LOG_CATEGORY_NATIVEBRIDGE
+          format:@"Message bubble corner radius set to: %@", radius];
 
     [self updateMessageBubbleSettings];
 }
@@ -456,7 +459,7 @@ static UIColor *messageCellDynamicColor = nil;
 - (void)prepareForReuse
 {
     %orig;
-    dispatch_async(dispatch_get_main_queue(), ^{ [NativeBridge updateMessageCell:self]; });
+    dispatch_async(dispatch_get_main_queue(), ^{ [ChatUI updateMessageCell:self]; });
 }
 
 %end
@@ -474,5 +477,5 @@ static UIColor *messageCellDynamicColor = nil;
 %ctor
 {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(),
-                   ^{ [NativeBridge loadDynamicColors]; });
+                   ^{ [ChatUI loadDynamicColors]; });
 }

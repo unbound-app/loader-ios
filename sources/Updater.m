@@ -100,7 +100,8 @@ static NSString *etag = nil;
         }
     }
 
-    [Logger error:LOG_CATEGORY_UPDATER format:@"Failed to fetch manifest; falling back to JavaScript bundle"];
+    [Logger error:LOG_CATEGORY_UPDATER
+           format:@"Failed to fetch manifest; falling back to JavaScript bundle"];
     if (directURLIfProvided)
     {
         return [NSURL URLWithString:directURLIfProvided];

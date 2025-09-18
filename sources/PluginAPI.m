@@ -1,4 +1,4 @@
-#import "NativeBridge+PluginAPI.h"
+#import "PluginAPI.h"
 
 @implementation NativeBridgePluginAPIDelegate
 
@@ -14,7 +14,7 @@
     restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:
         (void (^)(BOOL))completionHandler
 {
-    UIViewController *topViewController = [NativeBridge topViewController];
+    UIViewController *topViewController = [PluginAPI topViewController];
     if (topViewController && playerViewController != topViewController.presentedViewController)
     {
         [topViewController presentViewController:playerViewController
@@ -68,7 +68,7 @@
 - (void)pictureInPictureControllerDidStopPictureInPicture:
     (AVPictureInPictureController *)pictureInPictureController
 {
-    [NativeBridge cleanupPiPResources];
+    [PluginAPI cleanupPiPResources];
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath
@@ -108,7 +108,7 @@
 
 @end
 
-@implementation NativeBridge (PluginAPI)
+@implementation PluginAPI
 
 static AVPlayerViewController       *currentPlayerViewController = nil;
 static AVPictureInPictureController *currentPiPController        = nil;
