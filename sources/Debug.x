@@ -62,6 +62,16 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
             return YES;
     }
 
+    if ([domain isEqualToString:@"com.appsflyer.sdk.network"] && code == 50)
+    {
+        return YES;
+    }
+
+    if ([domain isEqualToString:@"AVFoundationErrorDomain"] && code == -11800)
+    {
+        return YES;
+    }
+
     return NO;
 }
 
