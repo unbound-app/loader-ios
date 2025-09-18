@@ -28,6 +28,10 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
         // Error code 17: File exists
         if (code == 17)
             return YES;
+
+        // Error code 22: Invalid argument with no extra context (often benign)
+        if (code == 22 && (!info || info.count == 0))
+            return YES;
     }
 
     if ([domain isEqualToString:@"BSActionErrorDomain"] && code == 1)
@@ -60,6 +64,34 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
         // Saved application state errors
         if (code == 4)
             return YES;
+
+        // 256: Often wraps underlying POSIX 22 or AppsFlyer cache path noise
+        if (code == 256)
+        {
+            id   underlying = info[@"NSUnderlyingError"];
+            BOOL isPOSIX22  = NO;
+            if ([underlying isKindOfClass:[NSError class]])
+            {
+                NSError *e = (NSError *) underlying;
+                isPOSIX22  = [e.domain isEqualToString:@"NSPOSIXErrorDomain"] && e.code == 22;
+            }
+            else if ([underlying isKindOfClass:[NSString class]])
+            {
+                NSString *s = (NSString *) underlying;
+                isPOSIX22 =
+                    ([s containsString:@"NSPOSIXErrorDomain"] && [s containsString:@"Code=22"]);
+            }
+
+            NSString *path = [info objectForKey:@"NSFilePath"];
+            NSURL    *url  = [info objectForKey:@"NSURL"];
+            BOOL      isAppsFlyerPath =
+                ([path isKindOfClass:NSString.class] && [path containsString:@"appsflyer-v1"]);
+            BOOL isAppsFlyerURL = ([url isKindOfClass:NSURL.class] &&
+                                   [[url absoluteString] containsString:@"appsflyer-v1"]);
+
+            if (isPOSIX22 || isAppsFlyerPath || isAppsFlyerURL)
+                return YES;
+        }
     }
 
     if ([domain isEqualToString:@"com.appsflyer.sdk.network"] && code == 50)
@@ -79,6 +111,16 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
         {
             return YES;
         }
+    }
+
+    if ([domain isEqualToString:@"kAFAssistantErrorDomain"] && code == 401)
+    {
+        return YES;
+    }
+
+    if ([domain isEqualToString:@"SDWebImageErrorDomain"] && code == 1000)
+    {
+        return YES;
     }
 
     return NO;
