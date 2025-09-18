@@ -72,6 +72,15 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
         return YES;
     }
 
+    if ([domain isEqualToString:@"_UIViewServiceErrorDomain"] && code == 1)
+    {
+        NSString *message = [info objectForKey:@"Message"];
+        if ((message && [message containsString:@"StoreKitUIService"]) || info[@"Terminated"])
+        {
+            return YES;
+        }
+    }
+
     return NO;
 }
 
@@ -80,8 +89,7 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 {
     if (!shouldIgnoreError(domain, code, userInfo))
     {
-        [Logger error:LOG_CATEGORY_DEFAULT
-               format:@"Initialized with info: %@ %@ %d", userInfo, domain, code];
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"NSError %@ (%d) %@", domain, code, userInfo];
     }
     return %orig;
 }
@@ -90,8 +98,7 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 {
     if (!shouldIgnoreError(domain, code, userInfo))
     {
-        [Logger error:LOG_CATEGORY_DEFAULT
-               format:@"Initialized with info: %@ %@ %d", userInfo, domain, code];
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"NSError %@ (%d) %@", domain, code, userInfo];
     }
     return %orig;
 }
@@ -100,15 +107,13 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 %hook NSException
 - (id)initWithName:(id)name reason:(id)reason userInfo:(id)userInfo
 {
-    [Logger error:LOG_CATEGORY_DEFAULT
-           format:@"Initialized with info: %@ %@ %@", userInfo, name, reason];
+    [Logger error:LOG_CATEGORY_DEFAULT format:@"NSException %@: %@ %@", name, reason, userInfo];
     return %orig;
 }
 
 + (id)exceptionWithName:(id)name reason:(id)reason userInfo:(id)userInfo
 {
-    [Logger error:LOG_CATEGORY_DEFAULT
-           format:@"Initialized with info: %@ %@ %@", userInfo, name, reason];
+    [Logger error:LOG_CATEGORY_DEFAULT format:@"NSException %@: %@ %@", name, reason, userInfo];
     return %orig;
 }
 %end
