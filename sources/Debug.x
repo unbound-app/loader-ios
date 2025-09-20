@@ -21,15 +21,12 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 
     if ([domain isEqualToString:@"NSPOSIXErrorDomain"])
     {
-        // Error code 2: No such file
         if (code == 2)
             return YES;
 
-        // Error code 17: File exists
         if (code == 17)
             return YES;
 
-        // Error code 22: Invalid argument with no extra context (often benign)
         if (code == 22 && (!info || info.count == 0))
             return YES;
     }
@@ -41,31 +38,24 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 
     if ([domain isEqualToString:@"NSOSStatusErrorDomain"])
     {
-        // -10813: Common error related to FSNode getHFSType
         if (code == -10813)
             return YES;
     }
 
-    // Cocoa errors
     if ([domain isEqualToString:@"NSCocoaErrorDomain"])
     {
-        // File not found
         if (code == 260)
             return YES;
 
-        // File exists
         if (code == 516)
             return YES;
 
-        // NSKeyedUnarchiver null data
         if (code == 4864)
             return YES;
 
-        // Saved application state errors
         if (code == 4)
             return YES;
 
-        // 256: Often wraps underlying POSIX 22 or AppsFlyer cache path noise
         if (code == 256)
         {
             id   underlying = info[@"NSUnderlyingError"];
