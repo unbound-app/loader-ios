@@ -55,8 +55,8 @@ static void RegisterUnboundNativeModule(id bridge)
     [Themes init];
     [Fonts init];
 
-    NSString *BUNDLE = [NSString pathWithComponents:@[ FileSystem.documents, @"unbound.bundle" ]];
-    NSURL    *SOURCE = [NSURL URLWithString:@"unbound"];
+    NSString *bundlePath = [Updater resolveBundlePath];
+    NSURL    *SOURCE     = [NSURL URLWithString:@"unbound"];
 
     if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO])
     {
@@ -131,13 +131,13 @@ static void RegisterUnboundNativeModule(id bridge)
 
     @try
     {
-        [Updater downloadBundle:BUNDLE];
+        bundlePath = [Updater downloadBundle:bundlePath];
     }
     @catch (NSException *e)
     {
         [Logger error:LOG_CATEGORY_DEFAULT format:@"Bundle download failed. (%@)", e];
 
-        if (![FileSystem exists:BUNDLE])
+        if (![FileSystem exists:bundlePath])
         {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [Utilities alert:@"Bundle failed to download, please report this "
@@ -153,7 +153,7 @@ static void RegisterUnboundNativeModule(id bridge)
         }
     }
 
-    if (![FileSystem exists:BUNDLE])
+    if (![FileSystem exists:bundlePath])
     {
         dispatch_async(dispatch_get_main_queue(), ^{
             [Utilities alert:@"Bundle not found, please report this to the developers."];
@@ -163,7 +163,7 @@ static void RegisterUnboundNativeModule(id bridge)
 
     @try
     {
-        NSData *bundle = [FileSystem readFile:BUNDLE];
+        NSData *bundle = [FileSystem readFile:bundlePath];
 
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
         %orig(bundle, SOURCE, true);

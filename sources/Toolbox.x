@@ -110,11 +110,6 @@ static void triggerHapticFeedback(void)
 
 @implementation UnboundToolboxViewController
 
-- (NSString *)bundlePath
-{
-    return [NSString pathWithComponents:@[ FileSystem.documents, @"unbound.bundle" ]];
-}
-
 - (void)viewDidLoad
 {
     [super viewDidLoad];
@@ -383,7 +378,8 @@ static void triggerHapticFeedback(void)
 - (void)refetchBundle
 {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [Updater downloadBundle:[self bundlePath]];
+        NSString *bundlePath = [Updater resolveBundlePath];
+        [Updater downloadBundle:bundlePath];
         dispatch_async(dispatch_get_main_queue(), ^{
             [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
         });
@@ -395,7 +391,7 @@ static void triggerHapticFeedback(void)
     [Settings set:@"unbound" key:@"loader.update.url" value:nil];
     [Settings set:@"unbound" key:@"loader.update.force" value:nil];
 
-    [[NSFileManager defaultManager] removeItemAtPath:[self bundlePath] error:nil];
+    [[NSFileManager defaultManager] removeItemAtPath:[Updater resolveBundlePath] error:nil];
     [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
 }
 
@@ -639,7 +635,8 @@ static void triggerHapticFeedback(void)
                                              dispatch_get_global_queue(
                                                  DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
                                              ^{
-                                                 [Updater downloadBundle:[self bundlePath]];
+                                                 NSString *bundlePath = [Updater resolveBundlePath];
+                                                 [Updater downloadBundle:bundlePath];
                                                  dispatch_async(dispatch_get_main_queue(), ^{
                                                      [self dismissViewControllerAnimated:YES
                                                                               completion:^{

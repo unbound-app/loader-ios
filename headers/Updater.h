@@ -5,7 +5,8 @@
     NSString *etag;
 }
 
-+ (void)downloadBundle:(NSString *)path;
++ (NSString *)downloadBundle:(NSString *)preferredPath;
++ (NSString *)resolveBundlePath;
 + (NSURL *)getDownloadURL;
 
 @end

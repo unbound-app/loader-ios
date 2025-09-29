@@ -3,24 +3,65 @@
 @implementation Updater
 static NSString *etag = nil;
 
-+ (void)downloadBundle:(NSString *)path
++ (NSString *)resolveBundlePath
+{
+    [FileSystem init];
+
+    NSArray<NSString *> *extensions = @[ @"bundle", @"js" ];
+
+    for (NSString *extension in extensions)
+    {
+        NSString *path =
+            [NSString pathWithComponents:@[ FileSystem.documents,
+                                             [NSString stringWithFormat:@"unbound.%@", extension] ]];
+
+        if ([FileSystem exists:path])
+        {
+            return path;
+        }
+    }
+
+    return [NSString pathWithComponents:@[ FileSystem.documents, @"unbound.bundle" ]];
+}
+
++ (NSString *)downloadBundle:(NSString *)preferredPath
 {
     [Logger info:LOG_CATEGORY_UPDATER format:@"Ensuring bundle is up to date..."];
 
-    NSString *etag = [Settings getString:@"unbound" key:@"loader.update.etag" def:@""];
-    NSURL    *url  = [Updater getDownloadURL];
+    NSString *storedEtag = [Settings getString:@"unbound" key:@"loader.update.etag" def:@""];
+    NSURL    *url        = [Updater getDownloadURL];
+
+    NSString *urlExtension = [[url pathExtension] lowercaseString];
+
+    NSString *currentPath =
+        preferredPath ? preferredPath : [Updater resolveBundlePath];
+    NSString *currentExtension = [[currentPath pathExtension] lowercaseString];
+
+    NSSet<NSString *> *supportedExtensions = [NSSet setWithArray:@[ @"bundle", @"js" ]];
+
+    if (![supportedExtensions containsObject:urlExtension])
+    {
+        urlExtension = [supportedExtensions containsObject:currentExtension] ? currentExtension : @"js";
+    }
+
+    NSString *targetPath = [NSString
+        pathWithComponents:@[ FileSystem.documents,
+                               [NSString stringWithFormat:@"unbound.%@", urlExtension] ]];
+
+    NSDictionary *headers = storedEtag.length > 0 ? @{ @"If-None-Match" : storedEtag } : @{};
 
     __block NSHTTPURLResponse *response;
 
-    if (![FileSystem exists:path] || [Settings getBoolean:@"unbound"
-                                                      key:@"loader.update.force"
-                                                      def:NO])
+    BOOL forceUpdate =
+        [Settings getBoolean:@"unbound" key:@"loader.update.force" def:NO];
+
+    if (![FileSystem exists:targetPath] || forceUpdate)
     {
-        response = [FileSystem download:url path:path];
+        response = [FileSystem download:url path:targetPath];
     }
     else
     {
-        response = [FileSystem download:url path:path withHeaders:@{@"If-None-Match" : etag}];
+        response = [FileSystem download:url path:targetPath withHeaders:headers];
     }
 
     if ([response statusCode] == 304)
@@ -34,6 +75,21 @@ static NSString *etag = nil;
                   key:@"loader.update.etag"
                 value:[response valueForHTTPHeaderField:@"etag"]];
     }
+
+    NSArray<NSString *> *extensionsToClean = @[ @"bundle", @"js" ];
+    for (NSString *extension in extensionsToClean)
+    {
+        NSString *candidatePath = [NSString
+            pathWithComponents:@[ FileSystem.documents,
+                                   [NSString stringWithFormat:@"unbound.%@", extension] ]];
+
+        if (![candidatePath isEqualToString:targetPath] && [FileSystem exists:candidatePath])
+        {
+            [FileSystem delete:candidatePath];
+        }
+    }
+
+    return targetPath;
 }
 
 + (NSURL *)getDownloadURL
