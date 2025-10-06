@@ -1,12 +1,12 @@
 #import "PluginAPI.h"
 
-@implementation NativeBridgePluginAPIDelegate
+@implementation PluginAPIDelegate
 
 + (instancetype)sharedDelegate
 {
-    static NativeBridgePluginAPIDelegate *sharedInstance = nil;
+    static PluginAPIDelegate *sharedInstance = nil;
     static dispatch_once_t                onceToken;
-    dispatch_once(&onceToken, ^{ sharedInstance = [[NativeBridgePluginAPIDelegate alloc] init]; });
+    dispatch_once(&onceToken, ^{ sharedInstance = [[PluginAPIDelegate alloc] init]; });
     return sharedInstance;
 }
 
@@ -46,14 +46,14 @@
 - (void)playerViewController:(AVPlayerViewController *)playerViewController
     failedToStartPictureInPictureWithError:(NSError *)error
 {
-    [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+    [Logger error:LOG_CATEGORY_PLUGINAPI
            format:@"Failed to start PiP: %@", error.localizedDescription];
 }
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController
     failedToStartPictureInPictureWithError:(NSError *)error
 {
-    [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+    [Logger error:LOG_CATEGORY_PLUGINAPI
            format:@"PiP controller failed to start: %@", error.localizedDescription];
 }
 
@@ -92,7 +92,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         @try
         {
-            [pip removeObserver:[NativeBridgePluginAPIDelegate sharedDelegate]
+            [pip removeObserver:[PluginAPIDelegate sharedDelegate]
                      forKeyPath:@"pictureInPicturePossible"];
         }
         @catch (__unused NSException *e)
@@ -124,7 +124,7 @@ static BOOL                          sPiPObservationAdded = NO;
     {
         @try
         {
-            [currentPiPController removeObserver:[NativeBridgePluginAPIDelegate sharedDelegate]
+            [currentPiPController removeObserver:[PluginAPIDelegate sharedDelegate]
                                       forKeyPath:@"pictureInPicturePossible"
                                          context:&kPiPObserverContext];
         }
@@ -163,14 +163,14 @@ static BOOL                          sPiPObservationAdded = NO;
 {
     if (!videoURL || [videoURL length] == 0)
     {
-        [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+        [Logger error:LOG_CATEGORY_PLUGINAPI
                format:@"Video URL is required for PiP video player"];
         return nil;
     }
 
     if (![AVPictureInPictureController isPictureInPictureSupported])
     {
-        [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"PiP is not supported on this device"];
+        [Logger error:LOG_CATEGORY_PLUGINAPI format:@"PiP is not supported on this device"];
         return nil;
     }
 
@@ -185,9 +185,9 @@ static BOOL                          sPiPObservationAdded = NO;
         {
             @try
             {
-                [currentPiPController removeObserver:[NativeBridgePluginAPIDelegate sharedDelegate]
-                                          forKeyPath:@"pictureInPicturePossible"
-                                             context:&kPiPObserverContext];
+                [currentPiPController removeObserver:[PluginAPIDelegate sharedDelegate]
+                                              forKeyPath:@"pictureInPicturePossible"
+                                                 context:&kPiPObserverContext];
             }
             @catch (__unused NSException *e)
             {
@@ -203,7 +203,7 @@ static BOOL                          sPiPObservationAdded = NO;
         NSURL *url = [NSURL URLWithString:videoURL];
         if (!url)
         {
-            [Logger error:LOG_CATEGORY_NATIVEBRIDGE format:@"Invalid video URL: %@", videoURL];
+            [Logger error:LOG_CATEGORY_PLUGINAPI format:@"Invalid video URL: %@", videoURL];
             return;
         }
 
@@ -216,20 +216,20 @@ static BOOL                          sPiPObservationAdded = NO;
                                      error:&audioError];
             if (!ok || audioError)
             {
-                [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+                [Logger error:LOG_CATEGORY_PLUGINAPI
                        format:@"Audio session category error: %@", audioError.localizedDescription];
             }
             audioError = nil;
             ok         = [session setActive:YES error:&audioError];
             if (!ok || audioError)
             {
-                [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+                [Logger error:LOG_CATEGORY_PLUGINAPI
                        format:@"Audio session activate error: %@", audioError.localizedDescription];
             }
         }
         @catch (NSException *exception)
         {
-            [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+            [Logger error:LOG_CATEGORY_PLUGINAPI
                    format:@"Audio session exception: %@", exception.reason];
         }
 
@@ -244,7 +244,7 @@ static BOOL                          sPiPObservationAdded = NO;
         UIViewController *topViewController = [self topViewController];
         if (!topViewController)
         {
-            [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+            [Logger error:LOG_CATEGORY_PLUGINAPI
                    format:@"No top view controller found to host PiP layer"];
             return;
         }
@@ -272,7 +272,7 @@ static BOOL                          sPiPObservationAdded = NO;
             currentPiPController =
                 [[AVPictureInPictureController alloc] initWithPlayerLayer:currentPlayerLayer];
         }
-        currentPiPController.delegate = [NativeBridgePluginAPIDelegate sharedDelegate];
+        currentPiPController.delegate = [PluginAPIDelegate sharedDelegate];
         currentPiPController.canStartPictureInPictureAutomaticallyFromInline = YES;
 
         [currentPlayer play];
@@ -285,7 +285,7 @@ static BOOL                          sPiPObservationAdded = NO;
         {
             @try
             {
-                [currentPiPController addObserver:[NativeBridgePluginAPIDelegate sharedDelegate]
+                [currentPiPController addObserver:[PluginAPIDelegate sharedDelegate]
                                        forKeyPath:@"pictureInPicturePossible"
                                           options:NSKeyValueObservingOptionNew
                                           context:&kPiPObserverContext];
@@ -293,7 +293,7 @@ static BOOL                          sPiPObservationAdded = NO;
             }
             @catch (NSException *exception)
             {
-                [Logger error:LOG_CATEGORY_NATIVEBRIDGE
+                [Logger error:LOG_CATEGORY_PLUGINAPI
                        format:@"Failed to add PiP KVO observer: %@", exception.reason];
             }
         }
@@ -371,12 +371,12 @@ static BOOL                          sPiPObservationAdded = NO;
                  if (error)
                  {
                      [Logger
-                          error:LOG_CATEGORY_NATIVEBRIDGE
+                          error:LOG_CATEGORY_PLUGINAPI
                          format:@"Error scheduling notification: %@", error.localizedDescription];
                  }
                  else
                  {
-                     [Logger info:LOG_CATEGORY_NATIVEBRIDGE
+                     [Logger info:LOG_CATEGORY_PLUGINAPI
                            format:@"Notification scheduled with id: %@", notificationId];
                  }
              }];

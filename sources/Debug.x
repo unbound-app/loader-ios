@@ -27,8 +27,16 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
         if (code == 17)
             return YES;
 
+        if (code == 57)
+            return YES;
+
         if (code == 22 && (!info || info.count == 0))
             return YES;
+    }
+
+    if ([domain isEqualToString:@"kCFErrorDomainCFNetwork"] && code == -1004)
+    {
+        return YES;
     }
 
     if ([domain isEqualToString:@"BSActionErrorDomain"] && code == 1)
@@ -82,6 +90,9 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
             if (isPOSIX22 || isAppsFlyerPath || isAppsFlyerURL)
                 return YES;
         }
+
+        if (code == 4099)
+            return YES;
     }
 
     if ([domain isEqualToString:@"com.appsflyer.sdk.network"] && code == 50)
@@ -108,7 +119,21 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
         return YES;
     }
 
-    if ([domain isEqualToString:@"SDWebImageErrorDomain"] && code == 1000)
+    if ([domain isEqualToString:@"SDWebImageErrorDomain"])
+    {
+        if (code == 1000)
+            return YES;
+
+        if (code == 2002)
+            return YES;
+    }
+
+    if ([domain isEqualToString:@"LLVideoPlayerCacheTask"] && code == -999)
+    {
+        return YES;
+    }
+
+    if ([domain isEqualToString:@"NSURLErrorDomain"] && code == -999)
     {
         return YES;
     }

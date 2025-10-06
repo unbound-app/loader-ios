@@ -18,6 +18,6 @@
 
 @end
 
-@interface NativeBridgePluginAPIDelegate : NSObject <AVPlayerViewControllerDelegate, AVPictureInPictureControllerDelegate>
+@interface PluginAPIDelegate : NSObject <AVPlayerViewControllerDelegate, AVPictureInPictureControllerDelegate>
 + (instancetype)sharedDelegate;
 @end
