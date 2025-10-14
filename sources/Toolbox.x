@@ -127,6 +127,9 @@ static void triggerHapticFeedback(void)
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     self.tableView.delegate                                  = self;
     self.tableView.dataSource                                = self;
+    self.tableView.separatorInset                            = UIEdgeInsetsMake(0, 16, 0, 16);
+    self.tableView.layoutMargins                             = UIEdgeInsetsMake(0, 16, 0, 16);
+    self.tableView.cellLayoutMarginsFollowReadableWidth      = NO;
     [self.view addSubview:self.tableView];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -283,15 +286,21 @@ static void triggerHapticFeedback(void)
 
     NSDictionary *item = self.menuSections[indexPath.section][@"items"][indexPath.row];
 
-    cell.textLabel.text = item[@"title"];
-
-    UIImageConfiguration *config =
+    UIImageSymbolConfiguration *symbolConfig =
         [UIImageSymbolConfiguration configurationWithPointSize:22
                                                         weight:UIImageSymbolWeightRegular];
-    UIImage *icon        = [UIImage systemImageNamed:item[@"icon"] withConfiguration:config];
-    cell.imageView.image = icon;
-    cell.imageView.tintColor =
+    UIImage *icon = [UIImage systemImageNamed:item[@"icon"] withConfiguration:symbolConfig];
+    UIColor *iconTint =
         [item[@"destructive"] boolValue] ? UIColor.systemRedColor : UIColor.systemBlueColor;
+
+    UIListContentConfiguration *content                  = [cell defaultContentConfiguration];
+    content.text                                         = item[@"title"];
+    content.image                                        = icon;
+    content.imageProperties.tintColor                    = iconTint;
+    content.imageProperties.preferredSymbolConfiguration = symbolConfig;
+    content.imageProperties.reservedLayoutSize           = CGSizeMake(28, 28);
+    content.imageToTextPadding                           = 16;
+    cell.contentConfiguration                            = content;
 
     if ([item[@"isSwitch"] boolValue])
     {
@@ -335,6 +344,16 @@ static void triggerHapticFeedback(void)
     {
         [self executeActionWithSelectorName:item[@"selector"]];
     }
+}
+
+- (void)tableView:(UITableView *)tableView
+      willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    UIEdgeInsets uniformInsets           = UIEdgeInsetsMake(0, 16, 0, 16);
+    cell.separatorInset                  = uniformInsets;
+    cell.layoutMargins                   = uniformInsets;
+    cell.preservesSuperviewLayoutMargins = NO;
 }
 
 - (void)showDestructiveConfirmation:(NSString *)action selectorName:(NSString *)selectorName
