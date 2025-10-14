@@ -123,7 +123,6 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 + (uint32_t)getHermesBytecodeVersion;
 + (BOOL)isHermesBytecode:(NSData *)data;
-+ (void *)getHermesSymbol:(const char *)symbol error:(NSString **)error;
 + (BOOL)isAppStoreApp;
 + (BOOL)isTestFlightApp;
 + (BOOL)isTrollStoreApp;
@@ -156,6 +155,8 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (BOOL)isVerifiedBuild;
 + (BOOL)hasDiscordProductionEntitlements;
 + (BOOL)isJITAvailable;
+
++ (BOOL)isRNNewArchEnabled;
 
 + (NSString *)JSONString:(NSString *)str;
 

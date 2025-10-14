@@ -35,11 +35,13 @@ static void RegisterUnboundNativeModule(id bridge)
     }
     @catch (NSException *e)
     {
-        [Logger error:LOG_CATEGORY_DEFAULT format:@"Failed to register UnboundNative module: %@", e];
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"Failed to register UnboundNative module: %@", e];
     }
 }
 
-%hook RCTCxxBridge
+%group RNLegacyArch
+%hook  RCTCxxBridge
 - (void)executeApplicationScript:(NSData *)script url:(NSURL *)url async:(BOOL)async
 {
     [FileSystem init];
@@ -181,9 +183,21 @@ static void RegisterUnboundNativeModule(id bridge)
     }
 }
 %end
+%end
 
 %ctor
 {
+    if ([Utilities isRNNewArchEnabled])
+    {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [Utilities
+                alert:@"This version of Discord is incompatible with this version of the Tweak."];
+        });
+        return;
+    }
+
+    %init(RNLegacyArch);
+
 #ifndef DEBUG
     dispatch_after(
         dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
