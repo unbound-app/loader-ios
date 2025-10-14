@@ -9,8 +9,11 @@ COMMIT_HASH := $(shell git rev-parse HEAD)
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Unbound
+COMMON_FLAGS = -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -I$(THEOS_PROJECT_DIR)/headers
+
 $(TWEAK_NAME)_FILES = $(shell find sources -name "*.x*" -o -name "*.m*")
-$(TWEAK_NAME)_CFLAGS = -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -I$(THEOS_PROJECT_DIR)/headers
+$(TWEAK_NAME)_CFLAGS = $(COMMON_FLAGS)
+$(TWEAK_NAME)_CXXFLAGS = $(COMMON_FLAGS) -std=c++20
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers UserNotifications Security SafariServices AVKit AVFoundation
 
 BUNDLE_NAME = UnboundResources
