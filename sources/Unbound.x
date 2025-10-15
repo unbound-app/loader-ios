@@ -1,10 +1,10 @@
 #import "Unbound.h"
 
-static BOOL sUnboundModuleRegistered = NO;
+static BOOL isUnboundModuleRegistered = NO;
 
-static void RegisterUnboundNativeModule(id bridge)
+static void registerUnboundNativeModule(id bridge)
 {
-    if (sUnboundModuleRegistered)
+    if (isUnboundModuleRegistered)
         return;
     if (!bridge)
     {
@@ -30,7 +30,7 @@ static void RegisterUnboundNativeModule(id bridge)
     @try
     {
         ((void (*)(id, SEL, NSArray *)) objc_msgSend)(bridge, sel, @[ unboundNative ]);
-        sUnboundModuleRegistered = YES;
+        isUnboundModuleRegistered = YES;
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Registered UnboundNative module"];
     }
     @catch (NSException *e)
@@ -129,7 +129,7 @@ static void RegisterUnboundNativeModule(id bridge)
     }
 
     %orig(script, url, true);
-    RegisterUnboundNativeModule(self);
+    registerUnboundNativeModule(self);
 
     @try
     {
