@@ -1,3 +1,5 @@
+#import <TargetConditionals.h>
+
 #import "Utilities.h"
 
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
@@ -1478,8 +1480,22 @@ static UIView   *islandOverlayView = nil;
     return isLiveContainer;
 }
 
++ (BOOL)isRunningInSimulator
+{
+#if TARGET_OS_SIMULATOR
+    return YES;
+#else
+    return NO;
+#endif
+}
+
 + (NSString *)getAppSource
 {
+    if ([self isRunningInSimulator])
+    {
+        return @"iOS Simulator";
+    }
+
     if ([self isTrollStoreApp])
     {
         return [self getTrollStoreVariant];
