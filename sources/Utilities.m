@@ -1,5 +1,3 @@
-#import <TargetConditionals.h>
-
 #import "Utilities.h"
 
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
