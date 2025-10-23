@@ -16,9 +16,9 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 
 ### Jailed
 
-<a href="https://tinyurl.com/bdejdwwm"><img src="https://adriancastro.dev/0byxzkzdsauj.png" width="230"></a>
-<a href="https://tinyurl.com/2bpk9kd5"><img src="https://i.imgur.com/dsbDLK9.png" width="230"></a>
-<a href="https://tinyurl.com/yvcu8fc8"><img src="https://adriancastro.dev/basmxxk8sj3k.png" width="230"></a>
+<a href="https://tinyurl.com/unbound-feather"><img src="https://adriancastro.dev/0byxzkzdsauj.png" width="230"></a>
+<a href="https://tinyurl.com/unbound-trollstore"><img src="https://i.imgur.com/dsbDLK9.png" width="230"></a>
+<a href="https://tinyurl.com/unbound-sidestore"><img src="https://adriancastro.dev/basmxxk8sj3k.png" width="230"></a>
 
 > [!WARNING]
 > Trying to use non-ellekit tweak runtimes will likely break functionality. Ideally always use the pre-patched ipa when sideloading.
