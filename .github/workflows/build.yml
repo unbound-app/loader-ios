@@ -75,7 +75,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -158,7 +158,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -187,7 +187,7 @@ jobs:
           go-version: 'stable'
 
       - name: Clone patcher
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: unbound-app/patcher-ios
           path: patcher-ios
@@ -294,7 +294,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download ipa artifact
         uses: actions/download-artifact@v6
@@ -346,7 +346,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download build artifacts
         uses: actions/download-artifact@v6
@@ -388,7 +388,7 @@ jobs:
     needs: release-app
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download ipa artifact
         uses: actions/download-artifact@v6
