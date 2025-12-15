@@ -137,7 +137,7 @@ jobs:
 
       - name: Upload rootless package
         id: upload-deb
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: rootless package
           path: packages/*.deb
@@ -276,7 +276,7 @@ jobs:
 
       - name: Upload ipa as artifact
         id: upload-ipa
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ipa
           path: ${{ env.APP_NAME }}.ipa
@@ -330,7 +330,7 @@ jobs:
 
       - name: Upload iOS Simulator artifact
         id: upload-simulator
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ios-simulator
           path: unbound-ios-simulator.zip
