@@ -42,37 +42,6 @@ RCT_REMAP_METHOD(isVerifiedBuild, util_isVerifiedBuildWithResolver : (RCTPromise
     resolve(@([Utilities isVerifiedBuild]));
 }
 
-RCT_REMAP_METHOD(isAppStoreApp, util_isAppStoreAppWithResolver : (RCTPromiseResolveBlock)
-                                    resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    resolve(@([Utilities isAppStoreApp]));
-}
-
-RCT_REMAP_METHOD(isTestFlightApp, util_isTestFlightAppWithResolver : (RCTPromiseResolveBlock)
-                                      resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    resolve(@([Utilities isTestFlightApp]));
-}
-
-RCT_REMAP_METHOD(isTrollStoreApp, util_isTrollStoreAppWithResolver : (RCTPromiseResolveBlock)
-                                      resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    resolve(@([Utilities isTrollStoreApp]));
-}
-
-RCT_REMAP_METHOD(isLiveContainerApp, util_isLiveContainerAppWithResolver : (RCTPromiseResolveBlock)
-                                         resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    resolve(@([Utilities isLiveContainerApp]));
-}
-
-RCT_REMAP_METHOD(getTrollStoreVariant,
-                 util_getTrollStoreVariantWithResolver : (RCTPromiseResolveBlock)
-                     resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    resolve([Utilities getTrollStoreVariant] ?: [NSNull null]);
-}
-
 RCT_REMAP_METHOD(getApplicationEntitlements,
                  util_getApplicationEntitlementsWithResolver : (RCTPromiseResolveBlock)
                      resolve rejecter : (RCTPromiseRejectBlock) reject)

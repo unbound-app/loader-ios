@@ -537,20 +537,35 @@ static UIView   *islandOverlayView = nil;
     return isNewArchEnabled ? isNewArchEnabled() : NO;
 }
 
-+ (BOOL)isAppStoreApp
-{
-    return [[NSFileManager defaultManager]
-        fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
-}
-
-+ (BOOL)isTestFlightApp
++ (NSString *)getAppStoreReceiptName
 {
     NSURL *appStoreReceiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
     if (!appStoreReceiptURL)
     {
+        return nil;
+    }
+    return appStoreReceiptURL.lastPathComponent;
+}
+
++ (BOOL)isAppStoreApp
+{
+    NSString *receiptName = [self getAppStoreReceiptName];
+    if (!receiptName || [receiptName isEqualToString:@"sandboxReceipt"])
+    {
         return NO;
     }
-    return [appStoreReceiptURL.lastPathComponent isEqualToString:@"sandboxReceipt"];
+    NSURL *appStoreReceiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
+    return [[NSFileManager defaultManager] fileExistsAtPath:appStoreReceiptURL.path];
+}
+
++ (BOOL)isTestFlightApp
+{
+    NSString *receiptName = [self getAppStoreReceiptName];
+    if (!receiptName)
+    {
+        return NO;
+    }
+    return [receiptName isEqualToString:@"sandboxReceipt"];
 }
 
 + (NSDictionary *)checkTrollStorePaths:(NSString *)bundlePath
