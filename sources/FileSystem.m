@@ -179,7 +179,7 @@ static NSString                                               *documents = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-        config.timeoutIntervalForRequest  = 10.0;
+        config.timeoutIntervalForRequest  = 1.0;
         bundleUrlSession = [NSURLSession sessionWithConfiguration:config];
     });
 
