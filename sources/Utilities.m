@@ -463,16 +463,22 @@ static UIView   *islandOverlayView = nil;
 
 + (NSData *)fetchDataWithTimeout:(NSURL *)url timeout:(NSTimeInterval)timeout
 {
+    static NSURLSession *bundleUrlSession = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+        config.timeoutIntervalForRequest  = timeout;
+        bundleUrlSession = [NSURLSession sessionWithConfiguration:config];
+    });
+
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.timeoutInterval      = timeout;
     request.cachePolicy          = NSURLRequestReloadIgnoringCacheData;
 
     __block NSData *resultData = nil;
 
-    NSURLSession     *session = [NSURLSession sharedSession];
-    NSURLSessionTask *task    = [session
+    NSURLSessionTask *task = [bundleUrlSession
         dataTaskWithRequest:request
           completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
               if (!error && [(NSHTTPURLResponse *)response statusCode] == 200)

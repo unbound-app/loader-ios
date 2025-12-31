@@ -175,15 +175,21 @@ static NSString                                               *documents = nil;
                            path:(NSString *)path
                     withHeaders:(NSDictionary *)headers
 {
+    static NSURLSession *bundleUrlSession = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+        config.timeoutIntervalForRequest  = 10.0;
+        bundleUrlSession = [NSURLSession sessionWithConfiguration:config];
+    });
+
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.cachePolicy          = NSURLRequestReloadIgnoringCacheData;
 
     __block NSHTTPURLResponse *response;
     __block NSException       *exception;
-
-    request.timeoutInterval = 1.0;
-    request.cachePolicy     = NSURLRequestReloadIgnoringCacheData;
 
     for (NSString *header in headers)
     {
@@ -194,8 +200,7 @@ static NSString                                               *documents = nil;
     dispatch_async(dispatch_get_main_queue(), ^{
         @try
         {
-            NSURLSession     *session = [NSURLSession sharedSession];
-            NSURLSessionTask *task    = [session
+            NSURLSessionTask *task = [bundleUrlSession
                 dataTaskWithRequest:request
                   completionHandler:^(NSData *data, NSURLResponse *res, NSError *error) {
                       response = (NSHTTPURLResponse *) res;
