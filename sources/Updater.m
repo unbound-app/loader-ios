@@ -129,7 +129,8 @@ static NSString *etag = nil;
     }
 
     NSString *manifestURL  = [baseURL stringByAppendingString:@"manifest.json"];
-    NSData   *manifestData = [NSData dataWithContentsOfURL:[NSURL URLWithString:manifestURL]];
+    NSData   *manifestData = [Utilities fetchDataWithTimeout:[NSURL URLWithString:manifestURL]
+                                                      timeout:5.0];
 
     if (manifestData)
     {

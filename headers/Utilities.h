@@ -117,6 +117,8 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 + (id)parseJSON:(NSData *)data;
 
++ (NSData *)fetchDataWithTimeout:(NSURL *)url timeout:(NSTimeInterval)timeout;
+
 + (dispatch_source_t)createDebounceTimer:(double)delay
                                    queue:(dispatch_queue_t)queue
                                    block:(dispatch_block_t)block;
