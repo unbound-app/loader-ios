@@ -461,6 +461,39 @@ static UIView   *islandOverlayView = nil;
     return object;
 }
 
++ (NSData *)fetchDataWithTimeout:(NSURL *)url timeout:(NSTimeInterval)timeout
+{
+    static NSURLSession *bundleUrlSession = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+        config.timeoutIntervalForRequest  = timeout;
+        bundleUrlSession = [NSURLSession sessionWithConfiguration:config];
+    });
+
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.cachePolicy          = NSURLRequestReloadIgnoringCacheData;
+
+    __block NSData *resultData = nil;
+
+    NSURLSessionTask *task = [bundleUrlSession
+        dataTaskWithRequest:request
+          completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+              if (!error && [(NSHTTPURLResponse *)response statusCode] == 200)
+              {
+                  resultData = data;
+              }
+              dispatch_semaphore_signal(semaphore);
+          }];
+
+    [task resume];
+    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+
+    return resultData;
+}
+
 + (dispatch_source_t)createDebounceTimer:(double)delay
                                    queue:(dispatch_queue_t)queue
                                    block:(dispatch_block_t)block
