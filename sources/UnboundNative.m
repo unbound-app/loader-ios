@@ -11,59 +11,112 @@
     return NO;
 }
 
-RCT_REMAP_METHOD(getDeviceModel, util_getDeviceModelWithResolver : (RCTPromiseResolveBlock)
-                                     resolve rejecter : (RCTPromiseRejectBlock) reject)
+// Synchronous methods: return-typed (no resolver/rejecter), so they run on the
+// JS thread and return directly. Only non-blocking reads / work that doesn't need
+// to complete on the main thread before returning. JS may still await them
+// harmlessly. (await on a non-Promise resolves immediately.)
+
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getDeviceModel, id, util_getDeviceModel)
 {
-    resolve([Utilities getDeviceModel] ?: [NSNull null]);
+    return [Utilities getDeviceModel] ?: [NSNull null];
 }
 
-RCT_REMAP_METHOD(getiOSVersionString,
-                 util_getiOSVersionStringWithResolver : (RCTPromiseResolveBlock)
-                     resolve rejecter : (RCTPromiseRejectBlock) reject)
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getiOSVersionString, id, util_getiOSVersionString)
 {
-    resolve([Utilities getiOSVersionString] ?: [NSNull null]);
+    return [Utilities getiOSVersionString] ?: [NSNull null];
 }
 
-RCT_REMAP_METHOD(isJailbroken, util_isJailbrokenWithResolver : (RCTPromiseResolveBlock)
-                                   resolve rejecter : (RCTPromiseRejectBlock) reject)
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(isJailbroken, id, util_isJailbroken)
 {
-    resolve(@([Utilities isJailbroken]));
+    return @([Utilities isJailbroken]);
 }
 
-RCT_REMAP_METHOD(isSystemApp, util_isSystemAppWithResolver : (RCTPromiseResolveBlock)
-                                  resolve rejecter : (RCTPromiseRejectBlock) reject)
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(isSystemApp, id, util_isSystemApp)
 {
-    resolve(@([Utilities isSystemApp]));
+    return @([Utilities isSystemApp]);
 }
 
-RCT_REMAP_METHOD(isVerifiedBuild, util_isVerifiedBuildWithResolver : (RCTPromiseResolveBlock)
-                                      resolve rejecter : (RCTPromiseRejectBlock) reject)
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(isVerifiedBuild, id, util_isVerifiedBuild)
 {
-    resolve(@([Utilities isVerifiedBuild]));
+    return @([Utilities isVerifiedBuild]);
 }
 
-RCT_REMAP_METHOD(getApplicationEntitlements,
-                 util_getApplicationEntitlementsWithResolver : (RCTPromiseResolveBlock)
-                     resolve rejecter : (RCTPromiseRejectBlock) reject)
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getApplicationEntitlements, id,
+                                      util_getApplicationEntitlements)
 {
     NSDictionary *ent = [Utilities getApplicationEntitlements];
-    resolve(ent ?: @{});
+    return ent ?: @{};
 }
 
-RCT_REMAP_METHOD(getAppSource, util_getAppSourceWithResolver : (RCTPromiseResolveBlock)
-                                   resolve rejecter : (RCTPromiseRejectBlock) reject)
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getAppSource, id, util_getAppSource)
 {
-    resolve([Utilities getAppSource] ?: [NSNull null]);
+    return [Utilities getAppSource] ?: [NSNull null];
 }
 
-RCT_REMAP_METHOD(getEntitlementsAsPlist,
-                 util_getEntitlementsAsPlistWithResolver : (RCTPromiseResolveBlock)
-                     resolve rejecter : (RCTPromiseRejectBlock) reject)
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getEntitlementsAsPlist, id, util_getEntitlementsAsPlist)
 {
     NSDictionary *entitlements = [Utilities getApplicationEntitlements];
     NSString     *plist        = [Utilities formatEntitlementsAsPlist:entitlements];
-    resolve(plist ?: [NSNull null]);
+    return plist ?: [NSNull null];
 }
+
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(
+    showNotification, id,
+    plugin_showNotificationWithTitle : (NSString *) title body : (NSString *)
+        body scheduledTime : (NSNumber *) scheduledTime sound : (NSNumber *)
+            sound notificationId : (NSString *) notificationId)
+{
+    // Returns the id synchronously; PluginAPI schedules the notification on main.
+    NSString *nid =
+        [PluginAPI showNotification:(title ?: @"Notification")
+                               body:(body ?: @"") timeDelay:(scheduledTime ?: @(1)) soundEnabled
+                                   :(sound ?: @(YES)) identifier
+                                   :(notificationId ?: [[NSUUID UUID] UUIDString])];
+    return nid ?: [NSNull null];
+}
+
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(playPiPVideo, id,
+                                      plugin_playPiPVideoWithURL : (NSString *) videoURL)
+{
+    // Returns the id synchronously; PluginAPI presents the player on main.
+    if (![videoURL isKindOfClass:[NSString class]] || videoURL.length == 0)
+    {
+        return [NSNull null];
+    }
+    NSString *pid = [PluginAPI playPiPVideo:videoURL];
+    return pid ?: [NSNull null];
+}
+
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getAvatarCornerRadius, id, chat_getAvatarCornerRadius)
+{
+    return [ChatUI getAvatarCornerRadius] ?: @(-1.0f);
+}
+
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getMessageBubbleLightColor, id,
+                                      chat_getMessageBubbleLightColor)
+{
+    return [ChatUI getMessageBubbleLightColor] ?: [NSNull null];
+}
+
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getMessageBubbleDarkColor, id, chat_getMessageBubbleDarkColor)
+{
+    return [ChatUI getMessageBubbleDarkColor] ?: [NSNull null];
+}
+
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getMessageBubblesEnabled, id, chat_getMessageBubblesEnabled)
+{
+    NSNumber *val = [ChatUI getMessageBubblesEnabled] ?: @NO;
+    return @(val.boolValue);
+}
+
+RCT_REMAP_BLOCKING_SYNCHRONOUS_METHOD(getMessageBubbleCornerRadius, id,
+                                      chat_getMessageBubbleCornerRadius)
+{
+    return [ChatUI getMessageBubbleCornerRadius] ?: @(10.0f);
+}
+
+// Asynchronous (Promise) methods: dispatch to the main thread, so they stay
+// async to avoid blocking/deadlocking the JS thread.
 
 RCT_REMAP_METHOD(showToolboxMenu, util_showToolboxMenuWithResolver : (RCTPromiseResolveBlock)
                                       resolve rejecter : (RCTPromiseRejectBlock) reject)
@@ -72,48 +125,6 @@ RCT_REMAP_METHOD(showToolboxMenu, util_showToolboxMenuWithResolver : (RCTPromise
         [Toolbox showToolboxMenu];
         resolve([NSNull null]);
     });
-}
-
-RCT_REMAP_METHOD(showNotification,
-                 plugin_showNotificationWithTitle : (NSString *) title body : (NSString *)
-                     body scheduledTime : (NSNumber *) scheduledTime sound : (NSNumber *)
-                         sound                                       notificationId : (NSString *)
-                             notificationId resolver : (RCTPromiseResolveBlock)
-                                 resolve    rejecter : (RCTPromiseRejectBlock) reject)
-{
-    NSString *nid =
-        [PluginAPI showNotification:(title ?: @"Notification")
-                               body:(body ?: @"") timeDelay:(scheduledTime ?: @(1)) soundEnabled
-                                   :(sound ?: @(YES)) identifier
-                                   :(notificationId ?: [[NSUUID UUID] UUIDString])];
-    if (nid)
-    {
-        resolve(nid);
-    }
-    else
-    {
-        reject(@"E_SCHEDULE", @"Failed to schedule notification", nil);
-    }
-}
-
-RCT_REMAP_METHOD(playPiPVideo,
-                 plugin_playPiPVideoWithURL : (NSString *) videoURL resolver : (
-                     RCTPromiseResolveBlock) resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    if (![videoURL isKindOfClass:[NSString class]] || videoURL.length == 0)
-    {
-        reject(@"EINVAL", @"videoURL must be a non-empty string", nil);
-        return;
-    }
-    NSString *pid = [PluginAPI playPiPVideo:videoURL];
-    if (pid)
-    {
-        resolve(pid);
-    }
-    else
-    {
-        reject(@"E_PIP", @"Failed to start Picture in Picture", nil);
-    }
 }
 
 RCT_REMAP_METHOD(setAvatarCornerRadius,
@@ -134,13 +145,6 @@ RCT_REMAP_METHOD(resetAvatarCornerRadius,
         [ChatUI resetAvatarCornerRadius];
         resolve([NSNull null]);
     });
-}
-
-RCT_REMAP_METHOD(getAvatarCornerRadius,
-                 chat_getAvatarCornerRadiusWithResolver : (RCTPromiseResolveBlock)
-                     resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    resolve([ChatUI getAvatarCornerRadius] ?: @(-1.0f));
 }
 
 RCT_REMAP_METHOD(setMessageBubblesEnabled,
@@ -176,35 +180,6 @@ RCT_REMAP_METHOD(setMessageBubbleColors,
         [ChatUI setMessageBubbleColors:lightColor darkColor:darkColor];
         resolve([NSNull null]);
     });
-}
-
-RCT_REMAP_METHOD(getMessageBubbleLightColor,
-                 chat_getMessageBubbleLightColorWithResolver : (RCTPromiseResolveBlock)
-                     resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    resolve([ChatUI getMessageBubbleLightColor] ?: [NSNull null]);
-}
-
-RCT_REMAP_METHOD(getMessageBubbleDarkColor,
-                 chat_getMessageBubbleDarkColorWithResolver : (RCTPromiseResolveBlock)
-                     resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    resolve([ChatUI getMessageBubbleDarkColor] ?: [NSNull null]);
-}
-
-RCT_REMAP_METHOD(getMessageBubblesEnabled,
-                 chat_getMessageBubblesEnabledWithResolver : (RCTPromiseResolveBlock)
-                     resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    NSNumber *val = [ChatUI getMessageBubblesEnabled] ?: @NO;
-    resolve(@(val.boolValue));
-}
-
-RCT_REMAP_METHOD(getMessageBubbleCornerRadius,
-                 chat_getMessageBubbleCornerRadiusWithResolver : (RCTPromiseResolveBlock)
-                     resolve rejecter : (RCTPromiseRejectBlock) reject)
-{
-    resolve([ChatUI getMessageBubbleCornerRadius] ?: @(10.0f));
 }
 
 RCT_REMAP_METHOD(setMessageBubbleCornerRadius,

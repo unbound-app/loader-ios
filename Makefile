@@ -13,7 +13,10 @@ COMMON_FLAGS = -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -
 
 $(TWEAK_NAME)_FILES = $(shell find sources -name "*.x*" -o -name "*.m*")
 $(TWEAK_NAME)_CFLAGS = $(COMMON_FLAGS)
-$(TWEAK_NAME)_CXXFLAGS = $(COMMON_FLAGS) -std=c++20
+# _CCFLAGS (not _CXXFLAGS) is what Theos applies to C++/Objective-C++ compiles.
+$(TWEAK_NAME)_CCFLAGS = $(COMMON_FLAGS) -std=c++20
+# Resolve JSI/TurboModule symbols from Discord's React dylib at load time.
+$(TWEAK_NAME)_LDFLAGS = -undefined dynamic_lookup
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers UserNotifications Security SafariServices AVKit AVFoundation
 
 BUNDLE_NAME = UnboundResources

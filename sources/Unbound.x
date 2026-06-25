@@ -1,5 +1,8 @@
 #import "Unbound.h"
 
+// Initializes the RNNewArch hook group (defined in UnboundBridgeless.xm).
+extern void UnboundInitNewArch(void);
+
 static BOOL isUnboundModuleRegistered = NO;
 
 static void registerUnboundNativeModule(id bridge)
@@ -189,14 +192,16 @@ static void registerUnboundNativeModule(id bridge)
 {
     if ([Utilities isRNNewArchEnabled])
     {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [Utilities
-                alert:@"This version of Discord is incompatible with this version of the Tweak."];
-        });
-        return;
+        [Logger info:LOG_CATEGORY_DEFAULT
+              format:@"RN new architecture detected; using bridgeless loader path."];
+        UnboundInitNewArch();
     }
-
-    %init(RNLegacyArch);
+    else
+    {
+        [Logger info:LOG_CATEGORY_DEFAULT
+              format:@"RN legacy architecture detected; using bridge loader path."];
+        %init(RNLegacyArch);
+    }
 
 #ifndef DEBUG
     dispatch_after(
