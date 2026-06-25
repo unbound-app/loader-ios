@@ -1,9 +1,7 @@
-#import <Foundation/Foundation.h>
-#import "RCTBridgeModule.h"
-#import "Toolbox.h"
-#import "Utilities.h"
-#import "ChatUI.h"
-#import "PluginAPI.h"
+#pragma once
 
-@interface UnboundNative : NSObject <RCTBridgeModule>
-@end
+#import <jsi/jsi.h>
+
+namespace unbound {
+void registerNativeInterop(facebook::jsi::Runtime &runtime);
+}
