@@ -18,12 +18,12 @@ jobs:
             - name: Get latest Discord ipa
               id: get-latest-ipa
               run: |
-                  RESPONSE=$(curl -s -H "Accept: application/json" https://ipa.aspy.dev/discord/stable/)
-                  LATEST_IPA=$(echo $RESPONSE | jq -r '.[-1].url' | sed 's/^\.\///')
-                  if [ -z "$LATEST_IPA" ] || [ "$LATEST_IPA" = "null" ]; then
-                    FULL_URL="https://files.catbox.moe/pk80qh.ipa"
+                  RESPONSE=$(curl -s -H "Accept: application/json" https://ipa.aspy.dev/discord/stable/ || true)
+                  LATEST_IPA=$(echo "$RESPONSE" | jq -r '.[-1].url // empty' 2>/dev/null | sed 's/^\.\///' || true)
+                  if [ -z "$LATEST_IPA" ]; then
+                          FULL_URL="https://files.catbox.moe/pk80qh.ipa"
                   else
-                    FULL_URL="https://ipa.aspy.dev/discord/stable/$LATEST_IPA"
+                          FULL_URL="https://ipa.aspy.dev/discord/stable/$LATEST_IPA"
                   fi
                   echo "ipa_url=$FULL_URL" >> $GITHUB_OUTPUT
 
