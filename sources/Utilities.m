@@ -463,12 +463,12 @@ static UIView   *islandOverlayView = nil;
 
 + (NSData *)fetchDataWithTimeout:(NSURL *)url timeout:(NSTimeInterval)timeout
 {
-    static NSURLSession *bundleUrlSession = nil;
+    static NSURLSession   *bundleUrlSession = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
         config.timeoutIntervalForRequest  = timeout;
-        bundleUrlSession = [NSURLSession sessionWithConfiguration:config];
+        bundleUrlSession                  = [NSURLSession sessionWithConfiguration:config];
     });
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
@@ -481,7 +481,7 @@ static UIView   *islandOverlayView = nil;
     NSURLSessionTask *task = [bundleUrlSession
         dataTaskWithRequest:request
           completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-              if (!error && [(NSHTTPURLResponse *)response statusCode] == 200)
+              if (!error && [(NSHTTPURLResponse *) response statusCode] == 200)
               {
                   resultData = data;
               }
@@ -1354,15 +1354,19 @@ static UIView   *islandOverlayView = nil;
     }
 
     CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-    CGFloat height      = 20.0;
+    CGFloat height      = 36.0;
     CGFloat yPosition   = window.safeAreaInsets.top;
 
     devBuildLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, yPosition, screenWidth, height)];
     devBuildLabel.backgroundColor = [UIColor colorWithRed:0.0 green:0.0 blue:0.0 alpha:0.7];
     devBuildLabel.textColor       = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
-    devBuildLabel.font            = [UIFont boldSystemFontOfSize:12.0];
+    devBuildLabel.font            = [UIFont boldSystemFontOfSize:11.0];
     devBuildLabel.textAlignment   = NSTextAlignmentCenter;
-    devBuildLabel.text            = @"DEVELOPMENT BUILD - DO NOT USE";
+    devBuildLabel.numberOfLines   = 2;
+    devBuildLabel.lineBreakMode   = NSLineBreakByTruncatingTail;
+    devBuildLabel.text =
+        [NSString stringWithFormat:@"DEVELOPMENT BUILD - DO NOT USE\n#%@ - %@ - %@",
+                                   COMMIT_SHORT_HASH, COMMIT_SUBJECT, COMMIT_BRANCH];
 
     devBuildLabel.layer.shadowColor   = [UIColor blackColor].CGColor;
     devBuildLabel.layer.shadowOffset  = CGSizeMake(0.0, 1.0);

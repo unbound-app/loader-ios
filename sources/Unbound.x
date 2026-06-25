@@ -278,9 +278,7 @@ static void registerUnboundNativeModule(id bridge)
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
                    ^{
                        [Utilities initializeDynamicIslandOverlay];
-
-        // TODO: remove before initial release
-#ifndef DEBUG
+#ifdef DEBUG
                        [Utilities showDevelopmentBuildBanner];
 #endif
                    });
