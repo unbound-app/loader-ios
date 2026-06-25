@@ -35,16 +35,7 @@ case "$ACTION" in
     REMOTE_DEB="/tmp/$(basename "$DEB")"
 
     sshpass -p alpine scp -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$DEB" "$SSH_TARGET:$REMOTE_DEB"
-    sshpass -p alpine ssh $SSH_OPTS "$SSH_TARGET" "echo 'alpine' | sudo -S dpkg -i '$REMOTE_DEB' && echo 'alpine' | sudo -S killall -9 SpringBoard"
-
-    VPHONE_SOCK="$HOME/vphone-cli/vm/vphone.sock"
-    if [[ ! -S "$VPHONE_SOCK" ]]; then
-      echo "vphone control socket not found: $VPHONE_SOCK" >&2
-      exit 1
-    fi
-
-    sleep 5
-    echo '{"t":"key","name":"home"}' | nc -U "$VPHONE_SOCK"
+    sshpass -p alpine ssh $SSH_OPTS "$SSH_TARGET" "echo 'alpine' | sudo -S dpkg -i '$REMOTE_DEB' && echo 'alpine' | sudo -S killall -9 Discord; uiopen --bundleid com.hammerandchisel.discord"
     ;;
   Package)
     build_package
