@@ -1354,7 +1354,7 @@ static UIView   *islandOverlayView = nil;
     }
 
     CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-    CGFloat height      = 36.0;
+    CGFloat height      = 52.0;
     CGFloat yPosition   = window.safeAreaInsets.top;
 
     devBuildLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, yPosition, screenWidth, height)];
@@ -1362,11 +1362,20 @@ static UIView   *islandOverlayView = nil;
     devBuildLabel.textColor       = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     devBuildLabel.font            = [UIFont boldSystemFontOfSize:11.0];
     devBuildLabel.textAlignment   = NSTextAlignmentCenter;
-    devBuildLabel.numberOfLines   = 2;
+    devBuildLabel.numberOfLines   = 3;
     devBuildLabel.lineBreakMode   = NSLineBreakByTruncatingTail;
-    devBuildLabel.text =
-        [NSString stringWithFormat:@"DEVELOPMENT BUILD - DO NOT USE\n#%@ - %@ - %@",
-                                   COMMIT_SHORT_HASH, COMMIT_SUBJECT, COMMIT_BRANCH];
+
+    NSString               *commitSubject     = COMMIT_SUBJECT ?: @"";
+    static const NSUInteger kMaxSubjectLength = 36;
+    if (commitSubject.length > kMaxSubjectLength)
+    {
+        commitSubject =
+            [[commitSubject substringToIndex:kMaxSubjectLength] stringByAppendingString:@"..."];
+    }
+
+    devBuildLabel.text = [NSString
+        stringWithFormat:@"DEVELOPMENT BUILD - DO NOT USE\n#%@ - %@ - %@\nBuilt: %@",
+                         COMMIT_SHORT_HASH, commitSubject, COMMIT_BRANCH, BUILD_TIMESTAMP];
 
     devBuildLabel.layer.shadowColor   = [UIColor blackColor].CGColor;
     devBuildLabel.layer.shadowOffset  = CGSizeMake(0.0, 1.0);

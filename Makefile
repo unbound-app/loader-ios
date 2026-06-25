@@ -8,11 +8,12 @@ COMMIT_HASH := $(shell git rev-parse HEAD)
 COMMIT_SHORT_HASH := $(shell git rev-parse --short HEAD)
 COMMIT_SUBJECT := $(shell git log -1 --pretty=format:%s)
 COMMIT_BRANCH := $(shell git branch --show-current 2>/dev/null || echo detached)
+BUILD_TIMESTAMP := $(shell date "+%Y-%m-%d %H:%M:%S %Z")
 
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Unbound
-COMMON_FLAGS = -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -DCOMMIT_SHORT_HASH='@"$(COMMIT_SHORT_HASH)"' -DCOMMIT_SUBJECT='@"$(COMMIT_SUBJECT)"' -DCOMMIT_BRANCH='@"$(COMMIT_BRANCH)"' -I$(THEOS_PROJECT_DIR)/headers
+COMMON_FLAGS = -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -DCOMMIT_SHORT_HASH='@"$(COMMIT_SHORT_HASH)"' -DCOMMIT_SUBJECT='@"$(COMMIT_SUBJECT)"' -DCOMMIT_BRANCH='@"$(COMMIT_BRANCH)"' -DBUILD_TIMESTAMP='@"$(BUILD_TIMESTAMP)"' -I$(THEOS_PROJECT_DIR)/headers
 
 $(TWEAK_NAME)_FILES = $(shell find sources -name "*.x*" -o -name "*.m*")
 $(TWEAK_NAME)_CFLAGS = $(COMMON_FLAGS)
