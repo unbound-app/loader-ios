@@ -1,22 +1,22 @@
+#import <jsi/jsi.h>
+
+#import "FileSystem.h"
+#import "Fonts.h"
+#import "Logger.h"
+#import "Plugins.h"
+#import "RCTInstance.h"
+#import "Settings.h"
+#import "Themes.h"
+#import "Unbound.h"
+#import "Updater.h"
+#import "Utilities.h"
+
 // React Native new-architecture (bridgeless) loader path (RN 0.83.1). Hooks
 // RCTInstance to inject scripts over raw JSI and to feed the UnboundNative module
 // into RN's legacy-interop TurboModule path. All entry points are ObjC selectors
 // (resolved by the ObjC runtime) or jsi symbols (exported by hermes.framework);
 // the shipped Discord binary does NOT export the React C++ runtime/TurboModule
 // symbols, so we never call them directly.
-
-#import "Unbound.h"
-#import "Logger.h"
-#import "Settings.h"
-#import "FileSystem.h"
-#import "Plugins.h"
-#import "Themes.h"
-#import "Fonts.h"
-#import "Updater.h"
-#import "Utilities.h"
-
-#import "RCTInstance.h"
-#import <jsi/jsi.h>
 
 // Minimal interface for RCTHost (RN 0.83.1 bridgeless): only the RCTInstanceDelegate
 // callback we hook to capture the live jsi::Runtime&. Declared inline to avoid a new
@@ -33,23 +33,25 @@ using namespace facebook;
 
 #pragma mark - JSI helpers
 
-namespace
-{
+namespace {
 
 // jsi::Buffer over NSData for the Hermes bytecode path; retains the NSData.
 class NSDataBuffer : public jsi::Buffer
 {
-  public:
+public:
     explicit NSDataBuffer(NSData *data) : data_(data) {}
 
-    size_t size() const override { return data_.length; }
+    size_t size() const override
+    {
+        return data_.length;
+    }
 
     const uint8_t *data() const override
     {
         return static_cast<const uint8_t *>(data_.bytes);
     }
 
-  private:
+private:
     NSData *data_;
 };
 
@@ -168,7 +170,7 @@ static void injectUnboundPreBundle(jsi::Runtime &runtime)
 // Discord's — so globalThis.modules (populated by Discord via the modules.js __d
 // patch) exists when Unbound initializes. A semaphore lets the post-Discord hook
 // wait for the (usually cached, fast) download to finish before enqueueing.
-static NSData             *gUnboundBundle    = nil;
+static NSData              *gUnboundBundle    = nil;
 static dispatch_semaphore_t gUnboundBundleSem = nil;
 
 // Kicks off the background download. Signals gUnboundBundleSem when gUnboundBundle
@@ -260,8 +262,6 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
 #pragma mark - Hooks
 
-%group RNNewArch
-
 // Captures the live jsi::Runtime& on the JS thread before bundle load. RCTHost is
 // the RCTInstanceDelegate and implements instance:didInitializeRuntime: (RCTHost.mm:368),
 // invoked from RCTInstance.mm:461 inside the init closure, BEFORE _loadJSBundle:
@@ -352,11 +352,95 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
 %end
 
-%end
-
-// %init(group) must live in the file declaring the %group, so Unbound.x calls
-// this instead of %init(RNNewArch). C linkage for the ObjC caller.
-extern "C" void UnboundInitNewArch(void)
+%ctor
 {
-    %init(RNNewArch);
+    if (![Utilities isRNNewArchEnabled])
+    {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [Utilities
+                alert:@"This version of Discord is incompatible with this version of the Tweak."];
+        });
+        return;
+    }
+
+#ifndef DEBUG
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            // TODO: remove before initial release
+            [Utilities alert:@"This is a development build that is not designed for end users. "
+                             @"Please do not use it and refrain from reporting any issues."
+                       title:@"⚠️ DEVELOPMENT BUILD"
+                     timeout:10
+                     warning:YES
+                         tts:YES];
+
+            if (![Utilities isVerifiedBuild])
+            {
+                [Logger error:LOG_CATEGORY_DEFAULT format:@"Tweak signature verification failed"];
+                [Utilities alert:@"The injected tweak is missing Unbound's detached signature. "
+                                 @"You cannot be sure that this is free of malware. "
+                                 @"If this app was obtained via 'cypwn' or similar sources "
+                                 @"we heavily recommend you uninstall it immediately."
+                           title:@"⚠️ SECURITY WARNING"
+                         timeout:15
+                         warning:YES];
+            }
+        });
+#endif
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
+                   ^{
+                       if (![Utilities isLoadedWithElleKit])
+                       {
+                           [Utilities alert:@"Warning: Tweak is not loaded through ElleKit. "
+                                            @"Functionality is not guaranteed."
+                                      title:@"Runtime Detection"];
+                       }
+                   });
+
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp] &&
+                ![Utilities isTrollStoreApp])
+            {
+                [Logger info:LOG_CATEGORY_DEFAULT
+                      format:@"App is sideloaded, checking for critical extensions"];
+
+                BOOL hasOpenInDiscord = [Utilities hasAppExtension:@"OpenInDiscord"];
+                BOOL hasShare         = [Utilities hasAppExtension:@"Share"];
+
+                if (!hasOpenInDiscord)
+                {
+                    [Logger info:LOG_CATEGORY_DEFAULT
+                          format:@"OpenInDiscord extension missing, showing alert"];
+                    [Utilities alert:@"The Safari extension (OpenInDiscord.appex) is missing. "
+                                     @"You won't be able to open Discord links directly in the app."
+                               title:@"Missing Safari Extension"];
+                }
+
+                if (!hasShare)
+                {
+                    [Logger info:LOG_CATEGORY_DEFAULT
+                          format:@"Share extension missing, showing alert"];
+                    [Utilities alert:@"The Share extension (Share.appex) is missing. "
+                                     @"You won't be able to receive shared media and files "
+                                     @"from other apps through the share sheet."
+                               title:@"Missing Share Extension"];
+                }
+
+                if (hasOpenInDiscord && hasShare)
+                {
+                    [Logger info:LOG_CATEGORY_DEFAULT format:@"All critical extensions present"];
+                }
+            }
+        });
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
+                   ^{
+                       [Utilities initializeDynamicIslandOverlay];
+                       // TODO: uncomment before initial release
+                       // #ifdef DEBUG
+                       [Utilities showDevelopmentBuildBanner];
+                       // #endif
+                   });
 }
