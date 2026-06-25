@@ -6,6 +6,7 @@
 			"type": "pickString",
 			"description": "build actions",
 			"options": [
+				"vphone",
 				"Package",
 				"AirDrop Tweak",
 				"Build IPA",
@@ -13,7 +14,7 @@
 				".deb -> iCloud Drive",
 				".ipa -> iCloud Drive"
 			],
-			"default": "Package"
+			"default": "vphone"
 		}
 	],
 	"tasks": [
