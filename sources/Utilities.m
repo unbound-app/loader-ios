@@ -1384,6 +1384,21 @@ static UIView   *islandOverlayView = nil;
 
     [window addSubview:devBuildLabel];
     [window bringSubviewToFront:devBuildLabel];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
+                   ^{
+                       if (!devBuildLabel || !devBuildLabel.superview)
+                       {
+                           return;
+                       }
+
+                       [UIView animateWithDuration:0.4
+                           animations:^{ devBuildLabel.alpha = 0.0; }
+                           completion:^(BOOL finished) {
+                               [devBuildLabel removeFromSuperview];
+                               devBuildLabel = nil;
+                           }];
+                   });
 }
 
 + (BOOL)isVerifiedBuild
