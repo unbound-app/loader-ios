@@ -1381,9 +1381,12 @@ static UIView   *islandOverlayView = nil;
     devBuildLabel.layer.shadowOffset  = CGSizeMake(0.0, 1.0);
     devBuildLabel.layer.shadowOpacity = 0.8;
     devBuildLabel.layer.shadowRadius  = 1.0;
+    devBuildLabel.alpha               = 0.0;
 
     [window addSubview:devBuildLabel];
     [window bringSubviewToFront:devBuildLabel];
+
+    [UIView animateWithDuration:0.4 animations:^{ devBuildLabel.alpha = 1.0; }];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
                    ^{
