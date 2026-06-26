@@ -1,4 +1,11 @@
 #import "Unbound.h"
+#import "FileSystem.h"
+#import "Logger.h"
+#import "Settings.h"
+#import "Plugins.h"
+#import "Themes.h"
+#import "Fonts.h"
+#import "Utilities.h"
 
 // Plain-ObjC loader helpers, kept free of Logos/C++ so they don't pull in the
 // jsi/TurboModule headers the bridgeless loader needs.

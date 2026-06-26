@@ -2,6 +2,8 @@
 #import <UIKit/UIKit.h>
 
 #import "Discord.h"
+#import "Logger.h"
+#import "Utilities.h"
 
 @interface ChatUI : NSObject
 

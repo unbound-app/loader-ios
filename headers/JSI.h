@@ -3,6 +3,12 @@
 #import <Foundation/Foundation.h>
 #import <functional>
 #import <jsi/jsi.h>
+#import <exception>
+#import <memory>
+#import <string>
+
+#import "Logger.h"
+#import "Utilities.h"
 
 // Shared facebook::jsi helpers for the bridgeless loader path. Importable only from
 // ObjC++ TUs (selectors reference facebook::jsi types) — every JSI consumer is a .xm,

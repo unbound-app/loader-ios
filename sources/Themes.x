@@ -1,4 +1,3 @@
-#import "LoaderShared.h"
 #import "Themes.h"
 
 @implementation Themes

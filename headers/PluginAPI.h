@@ -3,7 +3,10 @@
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <UserNotifications/UserNotifications.h>
+
 #import "Logger.h"
+#import "Utilities.h"
+
 
 @interface PluginAPI : NSObject
 

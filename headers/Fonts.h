@@ -4,6 +4,7 @@
 #import <substrate.h>
 
 #import "Unbound.h"
+#import "LoaderShared.h"
 
 @interface Fonts : NSObject
 {

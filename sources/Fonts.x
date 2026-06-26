@@ -1,5 +1,4 @@
 #import "Fonts.h"
-#import "LoaderShared.h"
 
 @implementation Fonts
 static NSMutableDictionary<NSString *, NSString *>            *overrides = nil;

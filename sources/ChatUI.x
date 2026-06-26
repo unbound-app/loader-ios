@@ -1,6 +1,4 @@
 #import "ChatUI.h"
-#import "Logger.h"
-#import "Utilities.h"
 
 @implementation ChatUI
 

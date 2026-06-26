@@ -8,6 +8,7 @@
 #import <rootless.h>
 #import <sys/utsname.h>
 
+#import "Discord.h"
 #import "FileSystem.h"
 #import "Settings.h"
 #import "Unbound.h"

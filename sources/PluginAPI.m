@@ -1,5 +1,4 @@
 #import "PluginAPI.h"
-#import "Utilities.h"
 
 @interface PluginAPI ()
 + (void)removePiPObservation;

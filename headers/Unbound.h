@@ -8,7 +8,7 @@
 #import "Logger.h"
 #import "Plugins.h"
 #import "Settings.h"
-#import "Utilities.h"
 #import "Themes.h"
+#import "Utilities.h"
 #import "Updater.h"
 #import "MobileGestalt.h"

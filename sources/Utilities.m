@@ -1,7 +1,5 @@
 #import "Utilities.h"
 
-#import "Discord.h"
-
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
 NSString *const TROLL_STORE_LITE_PATH = @"../_TrollStoreLite";
 
@@ -1022,8 +1020,8 @@ static __weak DCDBundleUpdaterManager *gBundleUpdater = nil;
                                                         error:nil];
 
         NSArray  *matches = [regex matchesInString:color
-                                          options:0
-                                            range:NSMakeRange(0, [color length])];
+                                           options:0
+                                             range:NSMakeRange(0, [color length])];
         NSString *value   = [[NSString alloc] init];
 
         for (NSTextCheckingResult *match in matches)
@@ -1065,8 +1063,8 @@ static __weak DCDBundleUpdaterManager *gBundleUpdater = nil;
                                                         error:nil];
 
         NSArray  *matches = [regex matchesInString:color
-                                          options:0
-                                            range:NSMakeRange(0, [color length])];
+                                           options:0
+                                             range:NSMakeRange(0, [color length])];
         NSString *value   = [[NSString alloc] init];
 
         for (NSTextCheckingResult *match in matches)

@@ -1,4 +1,5 @@
 #import "Unbound.h"
+#import "LoaderShared.h"
 
 @interface Plugins : NSObject
 {

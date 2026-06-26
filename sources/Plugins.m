@@ -1,5 +1,4 @@
 #import "Plugins.h"
-#import "LoaderShared.h"
 
 @implementation Plugins
 static NSMutableArray *plugins = nil;

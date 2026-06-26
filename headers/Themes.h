@@ -3,6 +3,7 @@
 
 #import "Discord.h"
 #import "Unbound.h"
+#import "LoaderShared.h"
 
 @interface Themes : NSObject
 {
