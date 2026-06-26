@@ -99,6 +99,13 @@ static NSString                                               *documents = nil;
 
     int fdescriptor = open(path, O_EVTONLY);
 
+    if (fdescriptor < 0)
+    {
+        [Logger error:LOG_CATEGORY_FILESYSTEM
+               format:@"Failed to open %@ for monitoring (errno %d)", filePath, errno];
+        return;
+    }
+
     dispatch_queue_t defaultQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
     dispatch_source_t source = dispatch_source_create(
         DISPATCH_SOURCE_TYPE_VNODE, fdescriptor,
@@ -111,7 +118,6 @@ static NSString                                               *documents = nil;
     NSMutableDictionary *monitor = [[NSMutableDictionary alloc] init];
 
     monitor[@"cancel"] = ^{
-        close(fdescriptor);
         dispatch_source_cancel(source);
 
         [monitors removeObjectForKey:filePath];
@@ -179,7 +185,7 @@ static NSString                                               *documents = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-        config.timeoutIntervalForRequest  = 1.0;
+        config.timeoutIntervalForRequest  = 30.0;
         bundleUrlSession = [NSURLSession sessionWithConfiguration:config];
     });
 
@@ -197,40 +203,28 @@ static NSString                                               *documents = nil;
         [request setValue:value forHTTPHeaderField:header];
     }
 
-    dispatch_async(dispatch_get_main_queue(), ^{
-        @try
-        {
-            NSURLSessionTask *task = [bundleUrlSession
-                dataTaskWithRequest:request
-                  completionHandler:^(NSData *data, NSURLResponse *res, NSError *error) {
-                      response = (NSHTTPURLResponse *) res;
+    NSURLSessionTask *task = [bundleUrlSession
+        dataTaskWithRequest:request
+          completionHandler:^(NSData *data, NSURLResponse *res, NSError *error) {
+              response = (NSHTTPURLResponse *) res;
 
-                      if (error != nil ||
-                          ([response statusCode] != 200 && [response statusCode] != 304))
-                      {
-                          exception = [[NSException alloc] initWithName:@"DownloadFailed"
-                                                                 reason:error.localizedDescription
-                                                               userInfo:nil];
-                      }
-                      else if ([response statusCode] != 304)
-                      {
-                          [Logger info:LOG_CATEGORY_FILESYSTEM
-                                format:@"Saving file from %@ to %@", url, path];
-                          [data writeToFile:path atomically:YES];
-                      }
+              if (error != nil || ([response statusCode] != 200 && [response statusCode] != 304))
+              {
+                  exception = [[NSException alloc] initWithName:@"DownloadFailed"
+                                                         reason:error.localizedDescription
+                                                       userInfo:nil];
+              }
+              else if ([response statusCode] != 304)
+              {
+                  [Logger info:LOG_CATEGORY_FILESYSTEM
+                        format:@"Saving file from %@ to %@", url, path];
+                  [data writeToFile:path atomically:YES];
+              }
 
-                      dispatch_semaphore_signal(semaphore);
-                  }];
+              dispatch_semaphore_signal(semaphore);
+          }];
 
-            [task resume];
-        }
-        @catch (NSException *e)
-        {
-            exception = e;
-
-            dispatch_semaphore_signal(semaphore);
-        }
-    });
+    [task resume];
 
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
 

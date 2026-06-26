@@ -1,13 +1,12 @@
 #import "Utilities.h"
 
+#import "Discord.h"
+
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
 NSString *const TROLL_STORE_LITE_PATH = @"../_TrollStoreLite";
 
-const CGFloat DYNAMIC_ISLAND_TOP_INSET = 59.0;
-
 @implementation Utilities
-static NSString *bundle            = nil;
-static UIView   *islandOverlayView = nil;
+static NSString *bundle = nil;
 
 + (NSString *)getBundlePath
 {
@@ -39,13 +38,6 @@ static UIView   *islandOverlayView = nil;
 + (NSString *)getResource:(NSString *)file
 {
     return [Utilities getResource:file ext:@"js"];
-}
-
-+ (NSData *)getResource:(NSString *)file data:(BOOL)data
-{
-    NSString *resource = [Utilities getResource:file];
-
-    return [resource dataUsingEncoding:NSUTF8StringEncoding];
 }
 
 + (NSData *)getResource:(NSString *)file data:(BOOL)data ext:(NSString *)ext
@@ -334,6 +326,12 @@ static UIView   *islandOverlayView = nil;
                                    1.0 * NSEC_PER_SEC, 0.1 * NSEC_PER_SEC);
 
                                dispatch_source_set_event_handler(timer, ^{
+                                   if (!alert.presentingViewController)
+                                   {
+                                       dispatch_source_cancel(timer);
+                                       return;
+                                   }
+
                                    countdown--;
 
                                    if (countdown > 0)
@@ -463,12 +461,12 @@ static UIView   *islandOverlayView = nil;
 
 + (NSData *)fetchDataWithTimeout:(NSURL *)url timeout:(NSTimeInterval)timeout
 {
-    static NSURLSession *bundleUrlSession = nil;
+    static NSURLSession   *bundleUrlSession = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
         config.timeoutIntervalForRequest  = timeout;
-        bundleUrlSession = [NSURLSession sessionWithConfiguration:config];
+        bundleUrlSession                  = [NSURLSession sessionWithConfiguration:config];
     });
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
@@ -481,7 +479,7 @@ static UIView   *islandOverlayView = nil;
     NSURLSessionTask *task = [bundleUrlSession
         dataTaskWithRequest:request
           completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-              if (!error && [(NSHTTPURLResponse *)response statusCode] == 200)
+              if (!error && [(NSHTTPURLResponse *) response statusCode] == 200)
               {
                   resultData = data;
               }
@@ -753,300 +751,6 @@ static UIView   *islandOverlayView = nil;
                : device.systemVersion;
 }
 
-+ (BOOL)deviceHasDynamicIsland
-{
-    if ([[UIDevice currentDevice] userInterfaceIdiom] != UIUserInterfaceIdiomPhone)
-    {
-        [Logger debug:LOG_CATEGORY_UTILITIES format:@"Not an iPhone, no Dynamic Island"];
-        return NO;
-    }
-
-    UIWindow *keyWindow = nil;
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
-    {
-        if (scene.activationState == UISceneActivationStateForegroundActive &&
-            [scene isKindOfClass:[UIWindowScene class]])
-        {
-            UIWindowScene *windowScene = (UIWindowScene *) scene;
-            for (UIWindow *window in windowScene.windows)
-            {
-                if (window.isKeyWindow)
-                {
-                    keyWindow = window;
-                    break;
-                }
-            }
-            if (keyWindow)
-                break;
-        }
-    }
-
-    if (!keyWindow)
-    {
-        [Logger debug:LOG_CATEGORY_UTILITIES
-               format:@"No key window found, cannot determine Dynamic Island"];
-        return NO;
-    }
-
-    CGFloat topInset         = keyWindow.safeAreaInsets.top;
-    BOOL    hasDynamicIsland = fabs(topInset - DYNAMIC_ISLAND_TOP_INSET) < 0.1;
-
-    [Logger debug:LOG_CATEGORY_UTILITIES
-           format:@"Key window top safe area inset: %.1f, Dynamic Island: %@", topInset,
-                  hasDynamicIsland ? @"YES" : @"NO"];
-
-    return hasDynamicIsland;
-}
-
-+ (UIImage *)createLogoImage
-{
-    CGFloat size = 512.0;
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(size, size), NO, 0);
-
-    [[UIColor whiteColor] setFill];
-
-    UIBezierPath *rightPath = [UIBezierPath bezierPath];
-    [rightPath moveToPoint:CGPointMake(272.52, 177.27)];
-    [rightPath addLineToPoint:CGPointMake(277.81, 215.63)];
-    [rightPath addLineToPoint:CGPointMake(338.67, 215.74)];
-    [rightPath addLineToPoint:CGPointMake(338.67, 215.83)];
-    [rightPath addCurveToPoint:CGPointMake(373.01, 240.88)
-                 controlPoint1:CGPointMake(345.73, 216.18)
-                 controlPoint2:CGPointMake(359.97, 225.73)];
-    [rightPath addLineToPoint:CGPointMake(349.25, 240.88)];
-    [rightPath addCurveToPoint:CGPointMake(333.37, 260.06)
-                 controlPoint1:CGPointMake(345.04, 240.88)
-                 controlPoint2:CGPointMake(333.37, 249.47)];
-    [rightPath addCurveToPoint:CGPointMake(349.25, 279.24)
-                 controlPoint1:CGPointMake(333.37, 270.65)
-                 controlPoint2:CGPointMake(345.04, 279.24)];
-    [rightPath addLineToPoint:CGPointMake(376.41, 279.24)];
-    [rightPath addCurveToPoint:CGPointMake(338.67, 313.64)
-                 controlPoint1:CGPointMake(373.86, 288.78)
-                 controlPoint2:CGPointMake(357.41, 308.18)];
-    [rightPath addLineToPoint:CGPointMake(338.67, 313.75)];
-    [rightPath addLineToPoint:CGPointMake(297.66, 313.64)];
-    [rightPath addLineToPoint:CGPointMake(302.95, 351.9)];
-    [rightPath addLineToPoint:CGPointMake(338.67, 352.01)];
-    [rightPath addCurveToPoint:CGPointMake(416.94, 279.23)
-                 controlPoint1:CGPointMake(378, 352.01)
-                 controlPoint2:CGPointMake(410.64, 320.52)];
-    [rightPath addLineToPoint:CGPointMake(473.61, 279.14)];
-    [rightPath addLineToPoint:CGPointMake(489.48, 240.77)];
-    [rightPath addLineToPoint:CGPointMake(415.05, 240.88)];
-    [rightPath addCurveToPoint:CGPointMake(338.67, 177.38)
-                 controlPoint1:CGPointMake(405.63, 204.23)
-                 controlPoint2:CGPointMake(375, 177.38)];
-    [rightPath addLineToPoint:CGPointMake(272.52, 177.27)];
-    [rightPath closePath];
-
-    UIBezierPath *leftPath = [UIBezierPath bezierPath];
-    [leftPath moveToPoint:CGPointMake(164.04, 160.07)];
-    [leftPath addCurveToPoint:CGPointMake(87.66, 223.57)
-                controlPoint1:CGPointMake(127.71, 160.07)
-                controlPoint2:CGPointMake(97.08, 186.92)];
-    [leftPath addLineToPoint:CGPointMake(41.01, 223.57)];
-    [leftPath addLineToPoint:CGPointMake(25.14, 261.94)];
-    [leftPath addLineToPoint:CGPointMake(85.77, 261.94)];
-    [leftPath addCurveToPoint:CGPointMake(164.04, 334.7)
-                controlPoint1:CGPointMake(92.07, 303.24)
-                controlPoint2:CGPointMake(124.7, 334.7)];
-    [leftPath addLineToPoint:CGPointMake(243.41, 334.7)];
-    [leftPath addLineToPoint:CGPointMake(238.12, 296.34)];
-    [leftPath addLineToPoint:CGPointMake(164.04, 296.34)];
-    [leftPath addLineToPoint:CGPointMake(164.04, 296.26)];
-    [leftPath addCurveToPoint:CGPointMake(126.3, 261.94)
-                controlPoint1:CGPointMake(145.3, 296.01)
-                controlPoint2:CGPointMake(128.85, 271.48)];
-    [leftPath addLineToPoint:CGPointMake(153.46, 261.94)];
-    [leftPath addCurveToPoint:CGPointMake(169.33, 242.76)
-                controlPoint1:CGPointMake(157.67, 261.94)
-                controlPoint2:CGPointMake(169.33, 253.35)];
-    [leftPath addCurveToPoint:CGPointMake(153.46, 223.57)
-                controlPoint1:CGPointMake(169.33, 232.17)
-                controlPoint2:CGPointMake(157.67, 223.57)];
-    [leftPath addLineToPoint:CGPointMake(129.7, 223.57)];
-    [leftPath addCurveToPoint:CGPointMake(164.04, 198.44)
-                controlPoint1:CGPointMake(133.15, 216.35)
-                controlPoint2:CGPointMake(147.27, 198.89)];
-    [leftPath addLineToPoint:CGPointMake(164.04, 198.44)];
-    [leftPath addLineToPoint:CGPointMake(219.6, 198.44)];
-    [leftPath addLineToPoint:CGPointMake(214.3, 160.07)];
-    [leftPath addLineToPoint:CGPointMake(164.04, 160.07)];
-    [leftPath closePath];
-
-    [rightPath fill];
-    [leftPath fill];
-
-    UIImage *result = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-
-    return result;
-}
-
-+ (void)showDynamicIslandOverlay
-{
-    if (!islandOverlayView)
-    {
-        [self createDynamicIslandOverlayView];
-    }
-
-    if (islandOverlayView && !islandOverlayView.hidden && islandOverlayView.alpha >= 1.0)
-    {
-        return;
-    }
-
-    islandOverlayView.hidden = NO;
-
-    [UIView animateWithDuration:0.2 animations:^{ islandOverlayView.alpha = 1.0; }];
-
-    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Showing Dynamic Island overlay"];
-}
-
-+ (void)hideDynamicIslandOverlay
-{
-    if (!islandOverlayView || islandOverlayView.hidden)
-    {
-        return;
-    }
-
-    islandOverlayView.hidden = YES;
-    islandOverlayView.alpha  = 0.0;
-
-    [islandOverlayView.superview setNeedsLayout];
-    [islandOverlayView.superview layoutIfNeeded];
-
-    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Hiding Dynamic Island overlay"];
-}
-
-+ (void)createDynamicIslandOverlayView
-{
-    if (islandOverlayView)
-    {
-        [Logger debug:LOG_CATEGORY_UTILITIES
-               format:@"Island overlay view already exists, skipping creation"];
-        return;
-    }
-
-    CGFloat width  = 126.0;
-    CGFloat height = 37.33;
-
-    CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-    CGFloat x           = (screenWidth - width) / 2;
-    CGFloat y           = 11.0;
-
-    [Logger debug:LOG_CATEGORY_UTILITIES
-           format:@"Creating Dynamic Island overlay view at x:%f y:%f width:%f height:%f", x, y,
-                  width, height];
-
-    islandOverlayView = [[UIView alloc] initWithFrame:CGRectMake(x, y, width, height)];
-    islandOverlayView.backgroundColor = [UIColor blackColor];
-    islandOverlayView.alpha           = 0.0;
-    islandOverlayView.hidden          = YES;
-
-    islandOverlayView.userInteractionEnabled = NO;
-
-    UIBezierPath *path =
-        [UIBezierPath bezierPathWithRoundedRect:islandOverlayView.bounds
-                              byRoundingCorners:UIRectCornerAllCorners
-                                    cornerRadii:CGSizeMake(height / 2, height / 2)];
-
-    CAShapeLayer *maskLayer      = [CAShapeLayer layer];
-    maskLayer.path               = path.CGPath;
-    islandOverlayView.layer.mask = maskLayer;
-
-    UIImage *logoImage = [self createLogoImage];
-    [Logger debug:LOG_CATEGORY_UTILITIES format:@"Created logo image for Dynamic Island overlay"];
-
-    UIImageView *logoView = [[UIImageView alloc] init];
-    logoView.image        = logoImage;
-    logoView.contentMode  = UIViewContentModeScaleAspectFit;
-
-    CGFloat logoHeight  = height * 0.99;
-    CGFloat aspectRatio = logoImage.size.width / logoImage.size.height;
-    CGFloat logoWidth   = logoHeight * aspectRatio;
-    logoView.frame =
-        CGRectMake((width - logoWidth) / 2, (height - logoHeight) / 2, logoWidth, logoHeight);
-
-    [islandOverlayView addSubview:logoView];
-
-    UIWindow *keyWindow = nil;
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
-    {
-        if (scene.activationState == UISceneActivationStateForegroundActive)
-        {
-            keyWindow = ((UIWindowScene *) scene).windows.firstObject;
-            break;
-        }
-    }
-
-    if (keyWindow)
-    {
-        [keyWindow addSubview:islandOverlayView];
-        [keyWindow bringSubviewToFront:islandOverlayView];
-        [Logger info:LOG_CATEGORY_UTILITIES
-              format:@"Successfully added Dynamic Island overlay to key window"];
-    }
-    else
-    {
-        [Logger error:LOG_CATEGORY_UTILITIES
-               format:@"Failed to find key window for Dynamic Island overlay"];
-    }
-}
-
-+ (void)initializeDynamicIslandOverlay
-{
-    [Logger info:LOG_CATEGORY_UTILITIES format:@"Checking if device has Dynamic Island..."];
-
-    if (![self deviceHasDynamicIsland])
-    {
-        [Logger info:LOG_CATEGORY_UTILITIES
-              format:@"Device does not have Dynamic Island, skipping overlay"];
-        return;
-    }
-
-    static BOOL isInitialized = NO;
-    if (isInitialized)
-    {
-        [Logger info:LOG_CATEGORY_UTILITIES format:@"Dynamic Island overlay already initialized"];
-        return;
-    }
-    isInitialized = YES;
-
-    [Logger info:LOG_CATEGORY_UTILITIES format:@"Setting up Dynamic Island overlay notifications"];
-
-    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
-
-    [center addObserverForName:UIApplicationDidBecomeActiveNotification
-                        object:nil
-                         queue:[NSOperationQueue mainQueue]
-                    usingBlock:^(NSNotification *note) {
-                        [Logger debug:LOG_CATEGORY_UTILITIES
-                               format:@"App did become active, showing overlay"];
-                        dispatch_async(dispatch_get_main_queue(),
-                                       ^{ [self showDynamicIslandOverlay]; });
-                    }];
-
-    [center addObserverForName:UIApplicationWillResignActiveNotification
-                        object:nil
-                         queue:[NSOperationQueue mainQueue]
-                    usingBlock:^(NSNotification *note) {
-                        [Logger debug:LOG_CATEGORY_UTILITIES
-                               format:@"App will resign active, hiding overlay"];
-                        dispatch_async(dispatch_get_main_queue(),
-                                       ^{ [self hideDynamicIslandOverlay]; });
-                    }];
-
-    dispatch_after(
-        dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            [Logger info:LOG_CATEGORY_UTILITIES format:@"Creating Dynamic Island overlay..."];
-            [self createDynamicIslandOverlayView];
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC),
-                           dispatch_get_main_queue(), ^{ [self showDynamicIslandOverlay]; });
-        });
-}
-
 + (BOOL)isLoadedWithElleKit
 {
     void *EKEnableThreadSafetyPtr = dlsym(RTLD_DEFAULT, "EKEnableThreadSafety");
@@ -1056,43 +760,6 @@ static UIView   *islandOverlayView = nil;
     }
 
     return NO;
-}
-
-+ (NSArray<NSString *> *)getAvailableAppExtensions
-{
-    NSString *plugInsPath =
-        [[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"PlugIns"];
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-
-    if (![fileManager fileExistsAtPath:plugInsPath])
-    {
-        [Logger debug:LOG_CATEGORY_UTILITIES format:@"No PlugIns folder found"];
-        return @[];
-    }
-
-    NSError *error    = nil;
-    NSArray *contents = [fileManager contentsOfDirectoryAtPath:plugInsPath error:&error];
-
-    if (error)
-    {
-        [Logger error:LOG_CATEGORY_UTILITIES
-               format:@"Failed to read PlugIns directory: %@", error.localizedDescription];
-        return @[];
-    }
-
-    NSMutableArray *extensions = [NSMutableArray array];
-    for (NSString *item in contents)
-    {
-        if ([item hasSuffix:@".appex"])
-        {
-            NSString *extensionName = [item stringByDeletingPathExtension];
-            [extensions addObject:extensionName];
-        }
-    }
-
-    [Logger info:LOG_CATEGORY_UTILITIES
-          format:@"Found %lu app extensions: %@", (unsigned long) extensions.count, extensions];
-    return [extensions copy];
 }
 
 + (BOOL)hasAppExtension:(NSString *)extensionName
@@ -1123,356 +790,6 @@ static UIView   *islandOverlayView = nil;
     }
 
     return nil;
-}
-
-+ (NSDictionary *)getApplicationEntitlements
-{
-    NSDictionary *signatureInfo = [self getApplicationSignatureInfo];
-    return signatureInfo[@"entitlements"] ?: @{};
-}
-
-+ (NSDictionary *)getApplicationSignatureInfo
-{
-    NSBundle *bundle         = [NSBundle mainBundle];
-    NSString *executableName = bundle.infoDictionary[@"CFBundleExecutable"];
-    if (!executableName)
-    {
-        return @{};
-    }
-
-    NSString *executablePath = [bundle pathForResource:executableName ofType:nil];
-    if (!executablePath)
-    {
-        return @{};
-    }
-
-    FILE *file = fopen([executablePath UTF8String], "rb");
-    if (!file)
-    {
-        return @{};
-    }
-
-    uint32_t magic;
-    if (fread(&magic, sizeof(magic), 1, file) != 1)
-    {
-        fclose(file);
-        return @{};
-    }
-
-    fseek(file, 0, SEEK_SET);
-
-    NSDictionary *result = nil;
-    if (magic == MH_MAGIC_64 || magic == MH_CIGAM_64)
-    {
-        result = [self readEntitlementsFrom64BitBinary:file];
-    }
-    else
-    {
-        result = @{};
-    }
-
-    fclose(file);
-    return result ?: @{};
-}
-
-+ (NSDictionary *)readEntitlementsFrom64BitBinary:(FILE *)file
-{
-    struct mach_header_64 header;
-    if (fread(&header, sizeof(header), 1, file) != 1)
-    {
-        return nil;
-    }
-
-    for (uint32_t i = 0; i < header.ncmds; i++)
-    {
-        struct load_command cmd;
-        long                cmdPos = ftell(file);
-
-        if (fread(&cmd, sizeof(cmd), 1, file) != 1)
-        {
-            return nil;
-        }
-
-        if (cmd.cmd == LC_CODE_SIGNATURE)
-        {
-            struct linkedit_data_command sigCmd;
-            fseek(file, cmdPos, SEEK_SET);
-            if (fread(&sigCmd, sizeof(sigCmd), 1, file) != 1)
-            {
-                return nil;
-            }
-
-            return [self extractEntitlements:file offset:sigCmd.dataoff];
-        }
-
-        fseek(file, cmdPos + cmd.cmdsize, SEEK_SET);
-    }
-
-    return nil;
-}
-
-+ (NSDictionary *)extractEntitlements:(FILE *)file offset:(uint32_t)offset
-{
-    if (fseek(file, offset, SEEK_SET) != 0)
-    {
-        return nil;
-    }
-
-    struct {
-        uint32_t magic;
-        uint32_t length;
-        uint32_t count;
-    } superBlob;
-
-    if (fread(&superBlob, sizeof(superBlob), 1, file) != 1)
-    {
-        return nil;
-    }
-
-    superBlob.magic  = CFSwapInt32BigToHost(superBlob.magic);
-    superBlob.length = CFSwapInt32BigToHost(superBlob.length);
-    superBlob.count  = CFSwapInt32BigToHost(superBlob.count);
-
-    if (superBlob.magic != 0xfade0cc0)
-    { // CSMAGIC_EMBEDDED_SIGNATURE
-        return nil;
-    }
-
-    for (uint32_t i = 0; i < superBlob.count; i++)
-    {
-        struct {
-            uint32_t type;
-            uint32_t offset;
-        } blobIndex;
-
-        if (fread(&blobIndex, sizeof(blobIndex), 1, file) != 1)
-        {
-            continue;
-        }
-
-        blobIndex.type   = CFSwapInt32BigToHost(blobIndex.type);
-        blobIndex.offset = CFSwapInt32BigToHost(blobIndex.offset);
-
-        if (blobIndex.type == 5)
-        { // CSSLOT_ENTITLEMENTS
-            long          currentPos   = ftell(file);
-            NSDictionary *entitlements = [self readEntitlementsBlob:file
-                                                             offset:offset + blobIndex.offset];
-            fseek(file, currentPos, SEEK_SET);
-
-            if (entitlements)
-            {
-                return @{@"entitlements" : entitlements};
-            }
-        }
-    }
-
-    return @{};
-}
-
-+ (NSDictionary *)readEntitlementsBlob:(FILE *)file offset:(uint32_t)offset
-{
-    if (fseek(file, offset, SEEK_SET) != 0)
-        return nil;
-
-    struct {
-        uint32_t magic;
-        uint32_t length;
-    } blobHeader;
-
-    if (fread(&blobHeader, sizeof(blobHeader), 1, file) != 1)
-        return nil;
-
-    blobHeader.magic  = CFSwapInt32BigToHost(blobHeader.magic);
-    blobHeader.length = CFSwapInt32BigToHost(blobHeader.length);
-
-    if (blobHeader.magic != 0xfade7171)
-        return nil; // CSMAGIC_EMBEDDED_ENTITLEMENTS
-
-    uint32_t       entitlementsLength = blobHeader.length - 8;
-    NSMutableData *entitlementsData   = [NSMutableData dataWithLength:entitlementsLength];
-
-    if (fread([entitlementsData mutableBytes], entitlementsLength, 1, file) != 1)
-        return nil;
-
-    NSError      *error        = nil;
-    NSDictionary *entitlements = [NSPropertyListSerialization propertyListWithData:entitlementsData
-                                                                           options:0
-                                                                            format:nil
-                                                                             error:&error];
-
-    return (error || !entitlements) ? nil : entitlements;
-}
-
-+ (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements
-{
-    if (!entitlements || entitlements.count == 0)
-    {
-        return nil;
-    }
-
-    NSError *error = nil;
-    NSData  *plistData =
-        [NSPropertyListSerialization dataWithPropertyList:entitlements
-                                                   format:NSPropertyListXMLFormat_v1_0
-                                                  options:0
-                                                    error:&error];
-
-    if (error || !plistData)
-    {
-        return nil;
-    }
-
-    NSString *plistString = [[NSString alloc] initWithData:plistData encoding:NSUTF8StringEncoding];
-    return plistString;
-}
-
-+ (void)showDevelopmentBuildBanner
-{
-    static UILabel *devBuildLabel = nil;
-
-    if (devBuildLabel)
-    {
-        return;
-    }
-
-    UIWindow *window = nil;
-
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
-    {
-        if (scene.activationState == UISceneActivationStateForegroundActive)
-        {
-            UIWindowScene *windowScene = (UIWindowScene *) scene;
-            window                     = windowScene.windows.firstObject;
-            break;
-        }
-    }
-
-    if (!window)
-    {
-        return;
-    }
-
-    CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-    CGFloat height      = 20.0;
-    CGFloat yPosition   = window.safeAreaInsets.top;
-
-    devBuildLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, yPosition, screenWidth, height)];
-    devBuildLabel.backgroundColor = [UIColor colorWithRed:0.0 green:0.0 blue:0.0 alpha:0.7];
-    devBuildLabel.textColor       = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
-    devBuildLabel.font            = [UIFont boldSystemFontOfSize:12.0];
-    devBuildLabel.textAlignment   = NSTextAlignmentCenter;
-    devBuildLabel.text            = @"DEVELOPMENT BUILD - DO NOT USE";
-
-    devBuildLabel.layer.shadowColor   = [UIColor blackColor].CGColor;
-    devBuildLabel.layer.shadowOffset  = CGSizeMake(0.0, 1.0);
-    devBuildLabel.layer.shadowOpacity = 0.8;
-    devBuildLabel.layer.shadowRadius  = 1.0;
-
-    [window addSubview:devBuildLabel];
-    [window bringSubviewToFront:devBuildLabel];
-}
-
-+ (BOOL)isVerifiedBuild
-{
-    [Logger info:LOG_CATEGORY_UTILITIES format:@"Starting tweak signature verification..."];
-
-    @try
-    {
-        NSData *signatureData = [Utilities getResource:@"signature" data:YES ext:@"bin"];
-        if (!signatureData)
-        {
-            [Logger error:LOG_CATEGORY_UTILITIES format:@"Signature file not found"];
-            return NO;
-        }
-
-        [Logger info:LOG_CATEGORY_UTILITIES
-              format:@"Signature file found, size: %lu bytes",
-                     (unsigned long) [signatureData length]];
-
-        NSData *publicKeyData = [Utilities getResource:@"public_key" data:YES ext:@"der"];
-        if (!publicKeyData)
-        {
-            [Logger error:LOG_CATEGORY_UTILITIES format:@"Public key file not found"];
-            return NO;
-        }
-
-        [Logger info:LOG_CATEGORY_UTILITIES
-              format:@"Public key data size: %lu bytes", (unsigned long) [publicKeyData length]];
-
-        CFErrorRef error = NULL;
-        SecKeyRef  publicKey =
-            SecKeyCreateWithData((__bridge CFDataRef) publicKeyData, (__bridge CFDictionaryRef) @{
-                (__bridge id) kSecAttrKeyType : (__bridge id) kSecAttrKeyTypeRSA,
-                (__bridge id) kSecAttrKeyClass : (__bridge id) kSecAttrKeyClassPublic,
-                (__bridge id) kSecAttrKeySizeInBits : @(2048),
-            },
-                                 &error);
-        if (!publicKey)
-        {
-            [Logger error:LOG_CATEGORY_UTILITIES
-                   format:@"Failed to create public key from DER data: %@",
-                          error ? CFBridgingRelease(error) : @"Unknown error"];
-            return NO;
-        }
-
-        [Logger info:LOG_CATEGORY_UTILITIES format:@"Public key created successfully"];
-
-        const char *commitHashString = [COMMIT_HASH UTF8String];
-
-        if (!commitHashString || strlen(commitHashString) == 0)
-        {
-            [Logger error:LOG_CATEGORY_UTILITIES format:@"Commit hash string is empty"];
-            CFRelease(publicKey);
-            return NO;
-        }
-
-        NSData *commitData = [NSData dataWithBytes:commitHashString
-                                            length:strlen(commitHashString)];
-        uint8_t digest[CC_SHA256_DIGEST_LENGTH];
-        CC_SHA256(commitData.bytes, (CC_LONG) commitData.length, digest);
-        NSData *commitHashData = [NSData dataWithBytes:digest length:sizeof(digest)];
-
-        BOOL verified = SecKeyVerifySignature(
-            publicKey, kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA256,
-            (__bridge CFDataRef) commitHashData, (__bridge CFDataRef) signatureData, &error);
-
-        CFRelease(publicKey);
-
-        if (verified)
-        {
-            [Logger info:LOG_CATEGORY_UTILITIES format:@"Tweak signature verification successful"];
-            return YES;
-        }
-        else
-        {
-            [Logger error:LOG_CATEGORY_UTILITIES
-                   format:@"Signature verification failed: %@",
-                          error ? CFBridgingRelease(error) : @"Unknown error"];
-            return NO;
-        }
-    }
-    @catch (NSException *e)
-    {
-        [Logger error:LOG_CATEGORY_UTILITIES
-               format:@"Exception during signature verification: %@", e.reason];
-        return NO;
-    }
-}
-
-+ (BOOL)hasDiscordProductionEntitlements
-{
-    NSDictionary *entitlements = [self getApplicationEntitlements];
-
-    NSString *teamIdentifier = entitlements[@"com.apple.developer.team-identifier"];
-
-    BOOL hasProductionEntitlements = [teamIdentifier isEqualToString:@"53Q6R32WPB"];
-
-    [Logger debug:LOG_CATEGORY_UTILITIES
-           format:@"Team identifier: %@, has production entitlements: %@",
-                  teamIdentifier ?: @"(none)", hasProductionEntitlements ? @"YES" : @"NO"];
-
-    return hasProductionEntitlements;
 }
 
 // Adapted from
@@ -1601,9 +918,188 @@ static UIView   *islandOverlayView = nil;
     return [NSString stringWithFormat:@"\"%@\"", escaped];
 }
 
++ (NSString *)JSONStringFromObject:(id)object
+                           options:(NSJSONWritingOptions)opts
+                          fallback:(NSString *)fallback
+{
+    NSError *error = nil;
+    NSData  *data  = [NSJSONSerialization dataWithJSONObject:object options:opts error:&error];
+
+    if (error != nil || data == nil)
+    {
+        return fallback;
+    }
+
+    return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+}
+
 + (BOOL)isRecoveryModeEnabled
 {
     return [Settings getBoolean:@"unbound" key:@"recovery" def:NO];
+}
+
++ (UIWindow *)keyWindow
+{
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
+    {
+        if (scene.activationState == UISceneActivationStateForegroundActive &&
+            [scene isKindOfClass:[UIWindowScene class]])
+        {
+            UIWindowScene *windowScene = (UIWindowScene *) scene;
+            for (UIWindow *window in windowScene.windows)
+            {
+                if (window.isKeyWindow)
+                {
+                    return window;
+                }
+            }
+        }
+    }
+
+    return nil;
+}
+
++ (UIViewController *)topViewController
+{
+    UIViewController *controller = [self keyWindow].rootViewController;
+
+    while (controller.presentedViewController)
+    {
+        controller = controller.presentedViewController;
+    }
+
+    return controller;
+}
+
+static __weak DCDBundleUpdaterManager *gBundleUpdater = nil;
+
++ (void)setBundleUpdater:(id)bundleUpdater
+{
+    gBundleUpdater = bundleUpdater;
+}
+
++ (void)reloadApp
+{
+    DCDBundleUpdaterManager *updater = gBundleUpdater;
+    if (![updater respondsToSelector:@selector(reload)])
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"BundleUpdaterManager not captured; cannot reload."];
+        return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{ [updater reload]; });
+}
+
++ (UIColor *)parseColor:(NSString *)color
+{
+    if ([color hasPrefix:@"#"])
+    {
+        if (color.length == 7)
+        {
+            color = [color stringByAppendingString:@"FF"];
+        }
+
+        NSScanner *scanner = [NSScanner scannerWithString:color];
+        unsigned   res     = 0;
+
+        [scanner setScanLocation:1];
+        [scanner scanHexInt:&res];
+
+        CGFloat r = ((res & 0xFF000000) >> 24) / 255.0;
+        CGFloat g = ((res & 0x00FF0000) >> 16) / 255.0;
+        CGFloat b = ((res & 0x0000FF00) >> 8) / 255.0;
+        CGFloat a = (res & 0x000000FF) / 255.0;
+
+        return [UIColor colorWithRed:r green:g blue:b alpha:a];
+    }
+
+    if ([color hasPrefix:@"rgba"])
+    {
+        NSRegularExpression *regex =
+            [NSRegularExpression regularExpressionWithPattern:@"\\((.*)\\)"
+                                                      options:NSRegularExpressionCaseInsensitive
+                                                        error:nil];
+
+        NSArray  *matches = [regex matchesInString:color
+                                          options:0
+                                            range:NSMakeRange(0, [color length])];
+        NSString *value   = [[NSString alloc] init];
+
+        for (NSTextCheckingResult *match in matches)
+        {
+            NSRange range = [match rangeAtIndex:1];
+            value         = [color substringWithRange:range];
+        }
+
+        NSCharacterSet *whitespaces = [NSCharacterSet whitespaceCharacterSet];
+        NSArray        *values      = [value componentsSeparatedByString:@","];
+        NSMutableArray *res         = [[NSMutableArray alloc] init];
+
+        for (NSString *value in values)
+        {
+            NSString *trimmed = [value stringByTrimmingCharactersInSet:whitespaces];
+            NSNumber *payload = [NSNumber numberWithFloat:[trimmed floatValue]];
+
+            [res addObject:payload];
+        }
+
+        if (res.count < 4)
+        {
+            return nil;
+        }
+
+        CGFloat r = [[res objectAtIndex:0] floatValue] / 255.0f;
+        CGFloat g = [[res objectAtIndex:1] floatValue] / 255.0f;
+        CGFloat b = [[res objectAtIndex:2] floatValue] / 255.0f;
+        CGFloat a = [[res objectAtIndex:3] floatValue];
+
+        return [UIColor colorWithRed:r green:g blue:b alpha:a];
+    }
+
+    if ([color hasPrefix:@"rgb"])
+    {
+        NSRegularExpression *regex =
+            [NSRegularExpression regularExpressionWithPattern:@"\\((.*)\\)"
+                                                      options:NSRegularExpressionCaseInsensitive
+                                                        error:nil];
+
+        NSArray  *matches = [regex matchesInString:color
+                                          options:0
+                                            range:NSMakeRange(0, [color length])];
+        NSString *value   = [[NSString alloc] init];
+
+        for (NSTextCheckingResult *match in matches)
+        {
+            NSRange range = [match rangeAtIndex:1];
+            value         = [color substringWithRange:range];
+        }
+
+        NSCharacterSet *whitespaces = [NSCharacterSet whitespaceCharacterSet];
+        NSArray        *values      = [value componentsSeparatedByString:@","];
+        NSMutableArray *res         = [[NSMutableArray alloc] init];
+
+        for (NSString *value in values)
+        {
+            NSString *trimmed = [value stringByTrimmingCharactersInSet:whitespaces];
+            NSNumber *payload = [NSNumber numberWithFloat:[trimmed floatValue]];
+
+            [res addObject:payload];
+        }
+
+        if (res.count < 3)
+        {
+            return nil;
+        }
+
+        CGFloat r = [[res objectAtIndex:0] floatValue] / 255.0f;
+        CGFloat g = [[res objectAtIndex:1] floatValue] / 255.0f;
+        CGFloat b = [[res objectAtIndex:2] floatValue] / 255.0f;
+
+        return [UIColor colorWithRed:r green:g blue:b alpha:1.0f];
+    }
+
+    return nil;
 }
 
 @end

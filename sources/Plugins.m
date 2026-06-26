@@ -1,103 +1,64 @@
 #import "Plugins.h"
+#import "LoaderShared.h"
 
 @implementation Plugins
 static NSMutableArray *plugins = nil;
 
 + (NSString *)makeJSON
 {
-    NSError *error;
-    NSData  *data = [NSJSONSerialization dataWithJSONObject:plugins options:0 error:&error];
-
-    if (error != nil)
-    {
-        return @"[]";
-    }
-    else
-    {
-        return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    }
+    return [Utilities JSONStringFromObject:plugins options:0 fallback:@"[]"];
 };
 
 + (void)init
 {
     plugins = [[NSMutableArray alloc] init];
 
-    NSString *path = [NSString pathWithComponents:@[ FileSystem.documents, @"Plugins" ]];
-    [FileSystem createDirectory:path];
+    [LoaderShared
+        scanAddonDirectory:@"Plugins"
+                  category:LOG_CATEGORY_PLUGINS
+                   handler:^(NSString *folder, NSString *dir) {
+                       if (![FileSystem isDirectory:dir])
+                       {
+                           [Logger info:LOG_CATEGORY_PLUGINS
+                                 format:@"Skipping %@ as it is not a directory.", folder];
+                           return;
+                       }
 
-    NSArray *contents = [FileSystem readDirectory:path];
+                       NSString *data = [NSString pathWithComponents:@[ dir, @"manifest.json" ]];
+                       if (![FileSystem exists:data])
+                       {
+                           [Logger info:LOG_CATEGORY_PLUGINS
+                                 format:@"Skipping %@ as it is missing a manifest.", folder];
+                           return;
+                       }
 
-    for (NSString *folder in contents)
-    {
-        [Logger info:LOG_CATEGORY_PLUGINS format:@"Attempting to load %@...", folder];
+                       NSMutableDictionary *manifest = [LoaderShared parseManifestAt:data
+                                                                              folder:folder
+                                                                            category:LOG_CATEGORY_PLUGINS];
+                       if (!manifest)
+                       {
+                           return;
+                       }
 
-        @try
-        {
-            NSString *dir = [NSString pathWithComponents:@[ path, folder ]];
+                       NSString *entry = [NSString pathWithComponents:@[ dir, @"bundle.js" ]];
+                       if (![FileSystem exists:entry])
+                       {
+                           [Logger info:LOG_CATEGORY_PLUGINS
+                                 format:@"Skipping %@ as it is missing a bundle.", folder];
+                           return;
+                       }
 
-            if (![FileSystem isDirectory:dir])
-            {
-                [Logger info:LOG_CATEGORY_PLUGINS
-                      format:@"Skipping %@ as it is not a directory.", folder];
-                continue;
-            }
+                       NSData *bundle = [FileSystem readFile:entry];
 
-            NSString *data = [NSString pathWithComponents:@[ dir, @"manifest.json" ]];
-            if (![FileSystem exists:data])
-            {
-                [Logger info:LOG_CATEGORY_PLUGINS
-                      format:@"Skipping %@ as it is missing a manifest.", folder];
-                continue;
-            }
+                       manifest[@"folder"] = folder;
+                       manifest[@"path"]   = dir;
 
-            __block NSMutableDictionary *manifest = nil;
-
-            @try
-            {
-                id json = [Utilities parseJSON:[FileSystem readFile:data]];
-
-                if ([json isKindOfClass:[NSDictionary class]])
-                {
-                    manifest = [json mutableCopy];
-                }
-                else
-                {
-                    [Logger info:LOG_CATEGORY_PLUGINS
-                          format:@"Skipping %@ as its manifest is invalid.", folder];
-                    continue;
-                }
-            }
-            @catch (NSException *e)
-            {
-                [Logger error:LOG_CATEGORY_PLUGINS
-                       format:@"Skipping %@ as its manifest failed to be parsed. (%@)", folder,
-                              e.reason];
-                continue;
-            }
-
-            NSString *entry = [NSString pathWithComponents:@[ dir, @"bundle.js" ]];
-            if (![FileSystem exists:entry])
-            {
-                [Logger info:LOG_CATEGORY_PLUGINS
-                      format:@"Skipping %@ as it is missing a bundle.", folder];
-                continue;
-            }
-
-            NSData *bundle = [FileSystem readFile:entry];
-
-            manifest[@"folder"] = folder;
-            manifest[@"path"]   = dir;
-
-            [plugins addObject:@{
-                @"manifest" : manifest,
-                @"bundle" : [[NSString alloc] initWithData:bundle encoding:NSUTF8StringEncoding]
-            }];
-        }
-        @catch (NSException *e)
-        {
-            [Logger error:LOG_CATEGORY_PLUGINS format:@"Failed to load %@ (%@)", folder, e.reason];
-        }
-    }
+                       [plugins addObject:@{
+                           @"manifest" : manifest,
+                           @"bundle" :
+                               [[NSString alloc] initWithData:bundle encoding:NSUTF8StringEncoding]
+                       }];
+                   }];
 };
 
 @end

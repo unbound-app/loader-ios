@@ -6,14 +6,12 @@
 			"type": "pickString",
 			"description": "build actions",
 			"options": [
+				"Install on vphone",
 				"Package",
 				"AirDrop Tweak",
-				"Build IPA",
-				".dylib -> iCloud Drive",
-				".deb -> iCloud Drive",
-				".ipa -> iCloud Drive"
+				"Build IPA"
 			],
-			"default": "Package"
+			"default": "Install on vphone"
 		}
 	],
 	"tasks": [

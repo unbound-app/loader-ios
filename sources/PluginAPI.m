@@ -1,4 +1,9 @@
 #import "PluginAPI.h"
+#import "Utilities.h"
+
+@interface PluginAPI ()
++ (void)removePiPObservation;
+@end
 
 @implementation PluginAPIDelegate
 
@@ -90,14 +95,7 @@
 
     AVPictureInPictureController *pip = (AVPictureInPictureController *) object;
     dispatch_async(dispatch_get_main_queue(), ^{
-        @try
-        {
-            [pip removeObserver:[PluginAPIDelegate sharedDelegate]
-                     forKeyPath:@"pictureInPicturePossible"];
-        }
-        @catch (__unused NSException *e)
-        {
-        }
+        [PluginAPI removePiPObservation];
 
         if (!pip.pictureInPictureActive)
         {
@@ -117,22 +115,32 @@ static AVPlayerLayer                *currentPlayerLayer          = nil;
 static UIView                       *currentHostView             = nil;
 static char                          kPiPObserverContext;
 static BOOL                          sPiPObservationAdded = NO;
+// The exact controller the observer was registered on; removal must target this, not
+// the live currentPiPController, which may point at a newer one — leaving the old
+// controller observed when it deallocates crashes.
+static AVPictureInPictureController *sPiPObservedController = nil;
 
-+ (void)cleanupPiPResources
++ (void)removePiPObservation
 {
-    if (sPiPObservationAdded && currentPiPController)
+    if (sPiPObservationAdded && sPiPObservedController)
     {
         @try
         {
-            [currentPiPController removeObserver:[PluginAPIDelegate sharedDelegate]
-                                      forKeyPath:@"pictureInPicturePossible"
-                                         context:&kPiPObserverContext];
+            [sPiPObservedController removeObserver:[PluginAPIDelegate sharedDelegate]
+                                       forKeyPath:@"pictureInPicturePossible"
+                                          context:&kPiPObserverContext];
         }
         @catch (__unused NSException *e)
         {
         }
-        sPiPObservationAdded = NO;
     }
+    sPiPObservationAdded  = NO;
+    sPiPObservedController = nil;
+}
+
++ (void)cleanupPiPResources
+{
+    [self removePiPObservation];
 
     if (currentPiPController && currentPiPController.pictureInPictureActive)
     {
@@ -181,19 +189,7 @@ static BOOL                          sPiPObservationAdded = NO;
         {
             [currentPlayerViewController dismissViewControllerAnimated:NO completion:nil];
         }
-        if (sPiPObservationAdded && currentPiPController)
-        {
-            @try
-            {
-                [currentPiPController removeObserver:[PluginAPIDelegate sharedDelegate]
-                                              forKeyPath:@"pictureInPicturePossible"
-                                                 context:&kPiPObserverContext];
-            }
-            @catch (__unused NSException *e)
-            {
-            }
-            sPiPObservationAdded = NO;
-        }
+        [PluginAPI removePiPObservation];
 
         if (currentPiPController && currentPiPController.pictureInPictureActive)
         {
@@ -289,7 +285,8 @@ static BOOL                          sPiPObservationAdded = NO;
                                        forKeyPath:@"pictureInPicturePossible"
                                           options:NSKeyValueObservingOptionNew
                                           context:&kPiPObserverContext];
-                sPiPObservationAdded = YES;
+                sPiPObservationAdded  = YES;
+                sPiPObservedController = currentPiPController;
             }
             @catch (NSException *exception)
             {
@@ -304,32 +301,7 @@ static BOOL                          sPiPObservationAdded = NO;
 
 + (UIViewController *)topViewController
 {
-    UIViewController *topController   = nil;
-    NSSet<UIScene *> *connectedScenes = [UIApplication sharedApplication].connectedScenes;
-    for (UIScene *scene in connectedScenes)
-    {
-        if ([scene isKindOfClass:[UIWindowScene class]])
-        {
-            UIWindowScene *windowScene = (UIWindowScene *) scene;
-            for (UIWindow *window in windowScene.windows)
-            {
-                if (window.isKeyWindow)
-                {
-                    topController = window.rootViewController;
-                    break;
-                }
-            }
-            if (topController)
-                break;
-        }
-    }
-
-    while (topController.presentedViewController)
-    {
-        topController = topController.presentedViewController;
-    }
-
-    return topController;
+    return [Utilities topViewController];
 }
 
 + (NSString *)showNotification:(NSString *)title

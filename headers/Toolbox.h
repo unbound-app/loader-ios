@@ -1,25 +1,25 @@
 #import <Foundation/Foundation.h>
+#import <SafariServices/SafariServices.h>
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
-#import <SafariServices/SafariServices.h>
 #import <objc/message.h>
 #import <spawn.h>
 #import <sys/utsname.h>
 
 #import "FileSystem.h"
+#import "MobileGestalt.h"
 #import "Settings.h"
 #import "Updater.h"
 #import "Utilities.h"
-#import "MobileGestalt.h"
 
-void      showToolboxSheet(void);
-void      reloadApp(UIViewController *viewController);
+void showToolboxSheet(void);
 
 @interface Toolbox : NSObject
 + (void)showToolboxMenu;
 @end
 
-@interface UnboundToolboxViewController : UIViewController <UITableViewDelegate, UITableViewDataSource, SFSafariViewControllerDelegate>
+@interface UnboundToolboxViewController
+    : UIViewController <UITableViewDelegate, UITableViewDataSource, SFSafariViewControllerDelegate>
 
 @property (nonatomic, strong) UITableView *tableView;
 
@@ -27,6 +27,6 @@ void      reloadApp(UIViewController *viewController);
 
 @end
 
-@interface                                                 UnboundToolboxViewController ()
+@interface                                             UnboundToolboxViewController ()
 @property (nonatomic, strong) NSArray<NSDictionary *> *menuSections;
 @end

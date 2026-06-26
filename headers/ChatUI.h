@@ -1,6 +1,8 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+#import "Discord.h"
+
 @interface ChatUI : NSObject
 
 + (void)setAvatarCornerRadius:(NSNumber *)radius;
@@ -20,19 +22,6 @@
 + (NSNumber *)getMessageBubbleCornerRadius;
 + (void)resetMessageBubbles;
 
-@end
++ (void)updateMessageCell:(DCDMessageTableViewCell *)cell;
 
-@interface DCDAvatarView : UIView
-@end
-
-@interface DCDMessageTableViewCell : UITableViewCell
-@property (nonatomic, strong) UIView *customBackgroundView;
-@property (nonatomic, strong) UIView *innerView;
-@end
-
-@interface DCDSeparatorTableViewCell : UITableViewCell
-@end
-
-@interface DCDThemeColor : NSObject
-+ (UIColor *)BACKGROUND_PRIMARY;
 @end

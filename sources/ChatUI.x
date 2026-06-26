@@ -1,5 +1,6 @@
 #import "ChatUI.h"
 #import "Logger.h"
+#import "Utilities.h"
 
 @implementation ChatUI
 
@@ -12,8 +13,6 @@ static NSString *messageBubbleDarkColor    = nil;
 static NSNumber *messageBubbleCornerRadius = nil;
 
 static const float defaultMessageBubbleRadius = 10.0f;
-static const float messageBubbleWidthOffset   = 10.0f;
-static const float messageBubbleLeadingOffset = -5.0f;
 
 static UIColor *messageCellLightColor   = nil;
 static UIColor *messageCellDarkColor    = nil;
@@ -56,24 +55,7 @@ static UIColor *messageCellDynamicColor = nil;
 + (void)updateAllAvatarViews
 {
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = nil;
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
-        {
-            if ([scene isKindOfClass:[UIWindowScene class]])
-            {
-                UIWindowScene *windowScene = (UIWindowScene *) scene;
-                for (UIWindow *window in windowScene.windows)
-                {
-                    if (window.isKeyWindow)
-                    {
-                        keyWindow = window;
-                        break;
-                    }
-                }
-                if (keyWindow)
-                    break;
-            }
-        }
+        UIWindow *keyWindow = [Utilities keyWindow];
 
         if (keyWindow)
         {
@@ -172,8 +154,7 @@ static UIColor *messageCellDynamicColor = nil;
 {
     if (!radius)
     {
-        [Logger error:LOG_CATEGORY_CHATUI
-               format:@"Message bubble corner radius cannot be nil"];
+        [Logger error:LOG_CATEGORY_CHATUI format:@"Message bubble corner radius cannot be nil"];
         return;
     }
 
@@ -186,8 +167,7 @@ static UIColor *messageCellDynamicColor = nil;
     }
 
     messageBubbleCornerRadius = radius;
-    [Logger info:LOG_CATEGORY_CHATUI
-          format:@"Message bubble corner radius set to: %@", radius];
+    [Logger info:LOG_CATEGORY_CHATUI format:@"Message bubble corner radius set to: %@", radius];
 
     [self updateMessageBubbleSettings];
 }
@@ -249,9 +229,9 @@ static UIColor *messageCellDynamicColor = nil;
     if (messageBubbleLightColor || messageBubbleDarkColor)
     {
         UIColor *customLightColor =
-            messageBubbleLightColor ? [self parseColor:messageBubbleLightColor] : nil;
+            messageBubbleLightColor ? [Utilities parseColor:messageBubbleLightColor] : nil;
         UIColor *customDarkColor =
-            messageBubbleDarkColor ? [self parseColor:messageBubbleDarkColor] : nil;
+            messageBubbleDarkColor ? [Utilities parseColor:messageBubbleDarkColor] : nil;
 
         messageCellLightColor =
             customLightColor ?: [UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:0.4];
@@ -270,68 +250,9 @@ static UIColor *messageCellDynamicColor = nil;
         }];
 }
 
-+ (UIColor *)parseColor:(NSString *)color
-{
-    if ([color hasPrefix:@"#"])
-    {
-        if (color.length == 7)
-        {
-            color = [color stringByAppendingString:@"FF"];
-        }
-
-        NSScanner *scanner = [NSScanner scannerWithString:color];
-        unsigned   res     = 0;
-
-        [scanner setScanLocation:1];
-        [scanner scanHexInt:&res];
-
-        CGFloat r = ((res & 0xFF000000) >> 24) / 255.0;
-        CGFloat g = ((res & 0x00FF0000) >> 16) / 255.0;
-        CGFloat b = ((res & 0x0000FF00) >> 8) / 255.0;
-        CGFloat a = (res & 0x000000FF) / 255.0;
-
-        return [UIColor colorWithRed:r green:g blue:b alpha:a];
-    }
-
-    if ([color hasPrefix:@"rgba"])
-    {
-        NSString *values     = [color substringWithRange:NSMakeRange(5, color.length - 6)];
-        NSArray  *components = [values componentsSeparatedByString:@","];
-
-        if (components.count == 4)
-        {
-            CGFloat r = [components[0] floatValue] / 255.0;
-            CGFloat g = [components[1] floatValue] / 255.0;
-            CGFloat b = [components[2] floatValue] / 255.0;
-            CGFloat a = [components[3] floatValue];
-
-            return [UIColor colorWithRed:r green:g blue:b alpha:a];
-        }
-    }
-
-    return nil;
-}
-
 + (void)updateAllMessageCells
 {
-    UIWindow *keyWindow = nil;
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
-    {
-        if ([scene isKindOfClass:[UIWindowScene class]])
-        {
-            UIWindowScene *windowScene = (UIWindowScene *) scene;
-            for (UIWindow *window in windowScene.windows)
-            {
-                if (window.isKeyWindow)
-                {
-                    keyWindow = window;
-                    break;
-                }
-            }
-            if (keyWindow)
-                break;
-        }
-    }
+    UIWindow *keyWindow = [Utilities keyWindow];
 
     if (keyWindow)
     {
@@ -356,6 +277,11 @@ static UIColor *messageCellDynamicColor = nil;
 {
     BOOL enabled = messageBubblesEnabled ? [messageBubblesEnabled boolValue] : NO;
 
+    // The bubble lives in the cell's dedicated `backgroundView` slot, NOT as a subview of
+    // contentView. UITableViewCell frames `backgroundView` automatically (full cell bounds, behind
+    // the content) and it does NOT participate in contentView's layout pass — so we never perturb
+    // Discord's RN-driven cell layout. Inserting a view into contentView (or hooking the cell's
+    // -layoutSubviews) corrupts that layout and yields a NaN frame that aborts CoreAnimation.
     if (!enabled)
     {
         if (cell.customBackgroundView)
@@ -369,21 +295,11 @@ static UIColor *messageCellDynamicColor = nil;
     {
         cell.customBackgroundView                     = [[UIView alloc] init];
         cell.customBackgroundView.layer.masksToBounds = YES;
-        [cell.contentView insertSubview:cell.customBackgroundView atIndex:0];
-
-        cell.customBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
-        [NSLayoutConstraint activateConstraints:@[
-            [cell.customBackgroundView.leadingAnchor
-                constraintEqualToAnchor:cell.contentView.leadingAnchor
-                               constant:messageBubbleLeadingOffset],
-            [cell.customBackgroundView.trailingAnchor
-                constraintEqualToAnchor:cell.contentView.trailingAnchor
-                               constant:-messageBubbleWidthOffset],
-            [cell.customBackgroundView.topAnchor
-                constraintEqualToAnchor:cell.contentView.topAnchor],
-            [cell.customBackgroundView.bottomAnchor
-                constraintEqualToAnchor:cell.contentView.bottomAnchor]
-        ]];
+        cell.backgroundView                           = cell.customBackgroundView;
+    }
+    else if (cell.backgroundView != cell.customBackgroundView)
+    {
+        cell.backgroundView = cell.customBackgroundView;
     }
 
     cell.customBackgroundView.hidden          = NO;
@@ -429,29 +345,16 @@ static UIColor *messageCellDynamicColor = nil;
 
     BOOL enabled = messageBubblesEnabled ? [messageBubblesEnabled boolValue] : NO;
 
-    if (enabled && !self.customBackgroundView)
+    if (enabled)
     {
-        self.customBackgroundView                     = [[UIView alloc] init];
-        self.customBackgroundView.layer.masksToBounds = YES;
-        [self.contentView insertSubview:self.customBackgroundView atIndex:0];
-
-        self.customBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
-        [NSLayoutConstraint activateConstraints:@[
-            [self.customBackgroundView.leadingAnchor
-                constraintEqualToAnchor:self.contentView.leadingAnchor
-                               constant:messageBubbleLeadingOffset],
-            [self.customBackgroundView.trailingAnchor
-                constraintEqualToAnchor:self.contentView.trailingAnchor
-                               constant:-messageBubbleWidthOffset],
-            [self.customBackgroundView.topAnchor
-                constraintEqualToAnchor:self.contentView.topAnchor],
-            [self.customBackgroundView.bottomAnchor
-                constraintEqualToAnchor:self.contentView.bottomAnchor]
-        ]];
+        [ChatUI updateMessageCell:self];
     }
-    else if (!enabled && self.customBackgroundView)
+    else if (self.customBackgroundView)
     {
-        [self.customBackgroundView removeFromSuperview];
+        if (self.backgroundView == self.customBackgroundView)
+        {
+            self.backgroundView = nil;
+        }
         self.customBackgroundView = nil;
     }
 }

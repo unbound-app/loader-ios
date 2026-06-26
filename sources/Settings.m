@@ -28,35 +28,29 @@ static NSString            *path = nil;
                                              error:&error];
 }
 
-+ (NSString *)getString:(NSString *)store key:(NSString *)key def:(NSString *)def
++ (id)rawValueForStore:(NSString *)store key:(NSString *)key
 {
     id payload = data[store];
-    if (!payload)
-        return def;
+    return payload ? [payload valueForKeyPath:key] : nil;
+}
 
-    id value = [payload valueForKeyPath:key];
++ (NSString *)getString:(NSString *)store key:(NSString *)key def:(NSString *)def
+{
+    id value = [Settings rawValueForStore:store key:key];
 
-    return value != nil ? value : def;
+    return value ?: def;
 }
 
 + (NSDictionary *)getDictionary:(NSString *)store key:(NSString *)key def:(NSDictionary *)def
 {
-    id payload = data[store];
-    if (!payload)
-        return def;
+    id value = [Settings rawValueForStore:store key:key];
 
-    id value = [payload valueForKeyPath:key];
-
-    return value != nil ? value : def;
+    return value ?: def;
 }
 
 + (BOOL)getBoolean:(NSString *)store key:(NSString *)key def:(BOOL)def
 {
-    id payload = data[store];
-    if (!payload)
-        return def;
-
-    id value = [payload valueForKeyPath:key];
+    id value = [Settings rawValueForStore:store key:key];
 
     if (value != nil && [value respondsToSelector:@selector(boolValue)])
     {
@@ -128,18 +122,8 @@ static NSString            *path = nil;
 
 + (NSString *)getSettings
 {
-    NSError *error;
-    NSData  *json = [NSJSONSerialization dataWithJSONObject:data
-                                                   options:NSJSONWritingPrettyPrinted
-                                                     error:&error];
-
-    if (error != nil)
-    {
-        return @"{}";
-    }
-    else
-    {
-        return [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
-    }
+    return [Utilities JSONStringFromObject:data
+                                   options:NSJSONWritingPrettyPrinted
+                                  fallback:@"{}"];
 }
 @end
