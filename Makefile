@@ -6,7 +6,8 @@ ARCHS := arm64 arm64e
 TARGET := iphone:clang:latest:15.0
 COMMIT_HASH := $(shell git rev-parse HEAD)
 COMMIT_SHORT_HASH := $(shell git rev-parse --short HEAD)
-COMMIT_SUBJECT := $(shell git log -1 --pretty=format:%s)
+# Strip quotes/backslashes so they can't break the -DCOMMIT_SUBJECT='@"..."' flag.
+COMMIT_SUBJECT := $(shell git log -1 --pretty=format:%s | tr -d '"'\''\\')
 COMMIT_BRANCH := $(shell git branch --show-current 2>/dev/null || echo detached)
 BUILD_TIMESTAMP := $(shell date "+%Y-%m-%d %H:%M:%S %Z")
 
