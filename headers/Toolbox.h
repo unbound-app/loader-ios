@@ -13,7 +13,6 @@
 #import "Utilities.h"
 
 void showToolboxSheet(void);
-void reloadApp(UIViewController *viewController);
 
 @interface Toolbox : NSObject
 + (void)showToolboxMenu;

@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-@class DCDMessageTableViewCell;
+#import "Discord.h"
 
 @interface ChatUI : NSObject
 
@@ -24,19 +24,4 @@
 
 + (void)updateMessageCell:(DCDMessageTableViewCell *)cell;
 
-@end
-
-@interface DCDAvatarView : UIView
-@end
-
-@interface DCDMessageTableViewCell : UITableViewCell
-@property (nonatomic, strong) UIView *customBackgroundView;
-@property (nonatomic, strong) UIView *innerView;
-@end
-
-@interface DCDSeparatorTableViewCell : UITableViewCell
-@end
-
-@interface DCDThemeColor : NSObject
-+ (UIColor *)BACKGROUND_PRIMARY;
 @end

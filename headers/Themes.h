@@ -1,11 +1,8 @@
 #import <objc/runtime.h>
 #import <substrate.h>
 
+#import "Discord.h"
 #import "Unbound.h"
-
-@interface DCDTheme : NSObject
-+ (NSInteger)themeIndex;
-@end
 
 @interface Themes : NSObject
 {

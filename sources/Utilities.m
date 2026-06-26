@@ -1,5 +1,7 @@
 #import "Utilities.h"
 
+#import "Discord.h"
+
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
 NSString *const TROLL_STORE_LITE_PATH = @"../_TrollStoreLite";
 
@@ -967,6 +969,26 @@ static NSString *bundle = nil;
     }
 
     return controller;
+}
+
+static __weak DCDBundleUpdaterManager *gBundleUpdater = nil;
+
++ (void)setBundleUpdater:(id)bundleUpdater
+{
+    gBundleUpdater = bundleUpdater;
+}
+
++ (void)reloadApp
+{
+    DCDBundleUpdaterManager *updater = gBundleUpdater;
+    if (![updater respondsToSelector:@selector(reload)])
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"BundleUpdaterManager not captured; cannot reload."];
+        return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{ [updater reload]; });
 }
 
 + (UIColor *)parseColor:(NSString *)color

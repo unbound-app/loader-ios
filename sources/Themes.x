@@ -1,5 +1,5 @@
-#import "Themes.h"
 #import "LoaderShared.h"
+#import "Themes.h"
 
 @implementation Themes
 static NSMutableDictionary<NSString *, NSValue *> *originalRawImplementations;
@@ -67,9 +67,10 @@ static NSString                                   *currentThemeId = nil;
                            return;
                        }
 
-                       NSMutableDictionary *manifest = [LoaderShared parseManifestAt:data
-                                                                              folder:folder
-                                                                            category:LOG_CATEGORY_THEMES];
+                       NSMutableDictionary *manifest =
+                           [LoaderShared parseManifestAt:data
+                                                  folder:folder
+                                                category:LOG_CATEGORY_THEMES];
                        if (!manifest)
                        {
                            return;

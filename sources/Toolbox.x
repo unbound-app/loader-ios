@@ -391,7 +391,7 @@ static void triggerHapticFeedback(void)
 {
     BOOL currentValue = [Utilities isRecoveryModeEnabled];
     [Settings set:@"unbound" key:@"recovery" value:@(!currentValue)];
-    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
+    [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 
 - (void)refetchBundle
@@ -400,7 +400,7 @@ static void triggerHapticFeedback(void)
         NSString *bundlePath = [Updater resolveBundlePath];
         [Updater downloadBundle:bundlePath];
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
+            [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
         });
     });
 }
@@ -411,7 +411,7 @@ static void triggerHapticFeedback(void)
     [Settings set:@"unbound" key:@"loader.update.force" value:nil];
 
     [[NSFileManager defaultManager] removeItemAtPath:[Updater resolveBundlePath] error:nil];
-    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
+    [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 
 - (void)switchBundleVersion
@@ -597,8 +597,8 @@ static void triggerHapticFeedback(void)
                                                                            dismissViewControllerAnimated:
                                                                                YES
                                                                                               completion:^{
-                                                                                                  reloadApp(
-                                                                                                      self);
+                                                                                                  [Utilities
+                                                                                                      reloadApp];
                                                                                               }];
                                                                    }]];
                                            }
@@ -634,37 +634,39 @@ static void triggerHapticFeedback(void)
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
-    [alert addAction:[UIAlertAction
-                         actionWithTitle:@"Download"
-                                   style:UIAlertActionStyleDefault
-                                 handler:^(UIAlertAction *action) {
-                                     UITextField *textField = alert.textFields.firstObject;
-                                     NSString    *urlString = textField.text;
+    [alert
+        addAction:[UIAlertAction
+                      actionWithTitle:@"Download"
+                                style:UIAlertActionStyleDefault
+                              handler:^(UIAlertAction *action) {
+                                  UITextField *textField = alert.textFields.firstObject;
+                                  NSString    *urlString = textField.text;
 
-                                     if (urlString.length > 0)
-                                     {
-                                         [Settings set:@"unbound"
-                                                   key:@"loader.update.url"
-                                                 value:urlString];
-                                         [Settings set:@"unbound"
-                                                   key:@"loader.update.force"
-                                                 value:@YES];
+                                  if (urlString.length > 0)
+                                  {
+                                      [Settings set:@"unbound"
+                                                key:@"loader.update.url"
+                                              value:urlString];
+                                      [Settings set:@"unbound"
+                                                key:@"loader.update.force"
+                                              value:@YES];
 
-                                         dispatch_async(
-                                             dispatch_get_global_queue(
-                                                 DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
-                                             ^{
-                                                 NSString *bundlePath = [Updater resolveBundlePath];
-                                                 [Updater downloadBundle:bundlePath];
-                                                 dispatch_async(dispatch_get_main_queue(), ^{
-                                                     [self dismissViewControllerAnimated:YES
-                                                                              completion:^{
-                                                                                  reloadApp(self);
-                                                                              }];
-                                                 });
-                                             });
-                                     }
-                                 }]];
+                                      dispatch_async(
+                                          dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,
+                                                                    0),
+                                          ^{
+                                              NSString *bundlePath = [Updater resolveBundlePath];
+                                              [Updater downloadBundle:bundlePath];
+                                              dispatch_async(dispatch_get_main_queue(), ^{
+                                                  [self
+                                                      dismissViewControllerAnimated:YES
+                                                                         completion:^{
+                                                                             [Utilities reloadApp];
+                                                                         }];
+                                              });
+                                          });
+                                  }
+                              }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -673,7 +675,7 @@ static void triggerHapticFeedback(void)
     [[NSFileManager defaultManager]
         removeItemAtPath:[NSString pathWithComponents:@[ FileSystem.documents, @"plugins" ]]
                    error:nil];
-    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
+    [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 
 - (void)wipeThemes
@@ -681,7 +683,7 @@ static void triggerHapticFeedback(void)
     [[NSFileManager defaultManager]
         removeItemAtPath:[NSString pathWithComponents:@[ FileSystem.documents, @"themes" ]]
                    error:nil];
-    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
+    [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 
 - (void)wipeFonts
@@ -689,7 +691,7 @@ static void triggerHapticFeedback(void)
     [[NSFileManager defaultManager]
         removeItemAtPath:[NSString pathWithComponents:@[ FileSystem.documents, @"fonts" ]]
                    error:nil];
-    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
+    [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 
 - (void)wipeIconPacks
@@ -697,13 +699,13 @@ static void triggerHapticFeedback(void)
     [[NSFileManager defaultManager]
         removeItemAtPath:[NSString pathWithComponents:@[ FileSystem.documents, @"icon-packs" ]]
                    error:nil];
-    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
+    [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 
 - (void)factoryReset
 {
     [[NSFileManager defaultManager] removeItemAtPath:FileSystem.documents error:nil];
-    [self dismissViewControllerAnimated:YES completion:^{ reloadApp(self); }];
+    [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 
 - (void)openAppFolder

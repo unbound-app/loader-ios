@@ -1,22 +1,22 @@
+#import <AVFoundation/AVFoundation.h>
 #import <CommonCrypto/CommonCrypto.h>
 #import <Security/Security.h>
-#import <AVFoundation/AVFoundation.h>
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
-#import <rootless.h>
-#import <sys/utsname.h>
 #import <mach-o/fat.h>
 #import <mach-o/loader.h>
+#import <rootless.h>
+#import <sys/utsname.h>
 
 #import "FileSystem.h"
-#import "Unbound.h"
 #import "Settings.h"
+#import "Unbound.h"
 
 #define CS_DEBUGGED 0x10000000
 int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 
-extern NSString * const TROLL_STORE_PATH;
-extern NSString * const TROLL_STORE_LITE_PATH;
+extern NSString *const TROLL_STORE_PATH;
+extern NSString *const TROLL_STORE_LITE_PATH;
 
 @interface Utilities : NSObject
 {
@@ -41,27 +41,21 @@ extern NSString * const TROLL_STORE_LITE_PATH;
       buttons:(NSArray<UIAlertAction *> *)buttons
       timeout:(NSInteger)timeout;
 
-+ (void)alert:(NSString *)message
-        title:(NSString *)title
-      timeout:(NSInteger)timeout;
++ (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout;
 
 + (void)alert:(NSString *)message
         title:(NSString *)title
       buttons:(NSArray<UIAlertAction *> *)buttons
       warning:(BOOL)warning;
 
-+ (void)alert:(NSString *)message
-        title:(NSString *)title
-      warning:(BOOL)warning;
++ (void)alert:(NSString *)message title:(NSString *)title warning:(BOOL)warning;
 
 + (void)alert:(NSString *)message
         title:(NSString *)title
       buttons:(NSArray<UIAlertAction *> *)buttons
           tts:(BOOL)tts;
 
-+ (void)alert:(NSString *)message
-        title:(NSString *)title
-          tts:(BOOL)tts;
++ (void)alert:(NSString *)message title:(NSString *)title tts:(BOOL)tts;
 
 + (void)alert:(NSString *)message
         title:(NSString *)title
@@ -69,10 +63,7 @@ extern NSString * const TROLL_STORE_LITE_PATH;
       warning:(BOOL)warning
           tts:(BOOL)tts;
 
-+ (void)alert:(NSString *)message
-        title:(NSString *)title
-      warning:(BOOL)warning
-          tts:(BOOL)tts;
++ (void)alert:(NSString *)message title:(NSString *)title warning:(BOOL)warning tts:(BOOL)tts;
 
 + (void)alert:(NSString *)message
         title:(NSString *)title
@@ -98,9 +89,7 @@ extern NSString * const TROLL_STORE_LITE_PATH;
       warning:(BOOL)warning
           tts:(BOOL)tts;
 
-+ (void)alertWarning:(NSString *)message
-               title:(NSString *)title
-             timeout:(NSInteger)timeout;
++ (void)alertWarning:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout;
 
 + (void)speakAlertContent:(NSString *)title message:(NSString *)message;
 
@@ -159,7 +148,12 @@ extern NSString * const TROLL_STORE_LITE_PATH;
 
 + (BOOL)isRecoveryModeEnabled;
 
+// Reloads the JS bundle via Discord's captured BundleUpdaterManager, registered from
+// the loader the moment RN constructs it (see Unbound.xm).
++ (void)setBundleUpdater:(id)bundleUpdater;
++ (void)reloadApp;
+
 @end
 
-#import "Utilities+DynamicIsland.h"
 #import "Utilities+CodeSignature.h"
+#import "Utilities+DynamicIsland.h"

@@ -5,7 +5,4 @@
 
 - (void)instance:(id)instance didInitializeRuntime:(facebook::jsi::Runtime &)runtime;
 
-// RN bridgeless reload (RCTHost conforms to RCTReloadListener).
-- (void)reload;
-
 @end

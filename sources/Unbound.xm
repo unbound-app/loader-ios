@@ -1,5 +1,6 @@
 #import <jsi/jsi.h>
 
+#import "Discord.h"
 #import "FileSystem.h"
 #import "Fonts.h"
 #import "JSI.h"
@@ -22,26 +23,6 @@ using namespace facebook;
 
 // Only read during bundle load and always null-checked.
 static jsi::Runtime *gRuntime = nullptr;
-
-static __weak RCTHost *gHost = nil;
-
-void reloadApp(UIViewController *viewController)
-{
-    [viewController
-        dismissViewControllerAnimated:NO
-                           completion:^{
-                               RCTHost *host = gHost;
-                               if (!host)
-                               {
-                                   [Logger error:LOG_CATEGORY_DEFAULT
-                                          format:@"Reload requested but RCTHost "
-                                                 @"not captured."];
-                                   return;
-                               }
-
-                               dispatch_async(dispatch_get_main_queue(), ^{ [host reload]; });
-                           }];
-}
 
 static void injectUnboundPreBundle(jsi::Runtime &runtime)
 {
@@ -173,9 +154,25 @@ static void enqueueUnboundBundle(RCTInstance *self)
 - (void)instance:(id)instance didInitializeRuntime:(facebook::jsi::Runtime &)runtime
 {
     gRuntime = &runtime;
-    gHost    = self;
     [Logger info:LOG_CATEGORY_DEFAULT format:@"RCTHost didInitializeRuntime; runtime captured."];
     %orig;
+}
+
+%end
+
+// Capture the live bundle-updater instance the moment RN constructs it, so reloadApp
+// can message the exact instance Discord's JS reload path uses.
+%hook DCDBundleUpdaterManager
+
+- (id)init
+{
+    id instance = %orig;
+    if (instance)
+    {
+        [Utilities setBundleUpdater:instance];
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"DCDBundleUpdaterManager captured."];
+    }
+    return instance;
 }
 
 %end

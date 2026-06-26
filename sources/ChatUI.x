@@ -154,8 +154,7 @@ static UIColor *messageCellDynamicColor = nil;
 {
     if (!radius)
     {
-        [Logger error:LOG_CATEGORY_CHATUI
-               format:@"Message bubble corner radius cannot be nil"];
+        [Logger error:LOG_CATEGORY_CHATUI format:@"Message bubble corner radius cannot be nil"];
         return;
     }
 
@@ -168,8 +167,7 @@ static UIColor *messageCellDynamicColor = nil;
     }
 
     messageBubbleCornerRadius = radius;
-    [Logger info:LOG_CATEGORY_CHATUI
-          format:@"Message bubble corner radius set to: %@", radius];
+    [Logger info:LOG_CATEGORY_CHATUI format:@"Message bubble corner radius set to: %@", radius];
 
     [self updateMessageBubbleSettings];
 }
