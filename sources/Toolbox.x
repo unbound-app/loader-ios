@@ -861,26 +861,27 @@ static void triggerHapticFeedback(void)
 {
     UINavigationController *navController = self.navigationController ?: (id) self;
 
-    [self dismissViewControllerAnimated:YES
-                            completion:^{
-                                UIWindow *storedWindow =
-                                    objc_getAssociatedObject(navController, "recoveryTopWindow");
-                                UIWindow *origKeyWindow = objc_getAssociatedObject(
-                                    navController, "recoveryOriginalKeyWindow");
+    [self
+        dismissViewControllerAnimated:YES
+                           completion:^{
+                               UIWindow *storedWindow =
+                                   objc_getAssociatedObject(navController, "recoveryTopWindow");
+                               UIWindow *origKeyWindow = objc_getAssociatedObject(
+                                   navController, "recoveryOriginalKeyWindow");
 
-                                if (storedWindow)
-                                {
-                                    storedWindow.hidden             = YES;
-                                    storedWindow.rootViewController = nil;
-                                }
+                               if (storedWindow)
+                               {
+                                   storedWindow.hidden             = YES;
+                                   storedWindow.rootViewController = nil;
+                               }
 
-                                [origKeyWindow makeKeyAndVisible];
+                               [origKeyWindow makeKeyAndVisible];
 
-                                objc_setAssociatedObject(navController, "recoveryTopWindow", nil,
-                                                         OBJC_ASSOCIATION_ASSIGN);
-                                objc_setAssociatedObject(navController, "recoveryOriginalKeyWindow",
-                                                         nil, OBJC_ASSOCIATION_ASSIGN);
-                            }];
+                               objc_setAssociatedObject(navController, "recoveryTopWindow", nil,
+                                                        OBJC_ASSOCIATION_ASSIGN);
+                               objc_setAssociatedObject(navController, "recoveryOriginalKeyWindow",
+                                                        nil, OBJC_ASSOCIATION_ASSIGN);
+                           }];
 }
 
 void showToolboxSheet(void)
@@ -942,42 +943,3 @@ void showToolboxSheet(void)
 }
 
 @end
-
-void reloadApp(UIViewController *viewController)
-{
-    [viewController
-        dismissViewControllerAnimated:NO
-                           completion:^{
-                               Class RCTBridge = NSClassFromString(@"RCTBridge");
-                               if (RCTBridge &&
-                                   [RCTBridge
-                                       respondsToSelector:NSSelectorFromString(@"currentBridge")])
-                               {
-                                   id (*msg)(id, SEL) = (id (*)(id, SEL)) objc_msgSend;
-                                   id bridge =
-                                       msg(RCTBridge, NSSelectorFromString(@"currentBridge"));
-                                   if (bridge)
-                                   {
-                                       SEL reloadSel = NSSelectorFromString(@"reload");
-                                       if ([bridge respondsToSelector:reloadSel])
-                                       {
-                                           ((void (*)(id, SEL)) objc_msgSend)(bridge, reloadSel);
-                                           return;
-                                       }
-                                       SEL requestReloadSel =
-                                           NSSelectorFromString(@"requestReload");
-                                       if ([bridge respondsToSelector:requestReloadSel])
-                                       {
-                                           ((void (*)(id, SEL)) objc_msgSend)(bridge,
-                                                                              requestReloadSel);
-                                           return;
-                                       }
-                                   }
-                               }
-
-                               UIApplication *app = [UIApplication sharedApplication];
-                               ((void (*)(id, SEL)) objc_msgSend)(app, @selector(suspend));
-                               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC),
-                                              dispatch_get_main_queue(), ^{ exit(0); });
-                           }];
-}
