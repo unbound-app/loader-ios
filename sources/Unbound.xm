@@ -2,179 +2,65 @@
 
 #import "FileSystem.h"
 #import "Fonts.h"
+#import "JSI.h"
+#import "LoaderShared.h"
 #import "Logger.h"
 #import "Plugins.h"
+#import "RCTHost.h"
 #import "RCTInstance.h"
 #import "Settings.h"
 #import "Themes.h"
 #import "Unbound.h"
+#import "UnboundNative.h"
 #import "Updater.h"
 #import "Utilities.h"
 
-// React Native new-architecture (bridgeless) loader path (RN 0.83.1). Hooks
-// RCTInstance to inject scripts over raw JSI and to feed the UnboundNative module
-// into RN's legacy-interop TurboModule path. All entry points are ObjC selectors
-// (resolved by the ObjC runtime) or jsi symbols (exported by hermes.framework);
-// the shipped Discord binary does NOT export the React C++ runtime/TurboModule
-// symbols, so we never call them directly.
-
-// Minimal interface for RCTHost (RN 0.83.1 bridgeless): only the RCTInstanceDelegate
-// callback we hook to capture the live jsi::Runtime&. Declared inline to avoid a new
-// header; the selector + reference type are all that's needed.
-@interface RCTHost : NSObject
-- (void)instance:(id)instance didInitializeRuntime:(facebook::jsi::Runtime &)runtime;
-@end
-
-#import <exception>
-#import <memory>
-#import <string>
-
 using namespace facebook;
-
-#pragma mark - JSI helpers
-
-namespace {
-
-// jsi::Buffer over NSData for the Hermes bytecode path; retains the NSData.
-class NSDataBuffer : public jsi::Buffer
-{
-public:
-    explicit NSDataBuffer(NSData *data) : data_(data) {}
-
-    size_t size() const override
-    {
-        return data_.length;
-    }
-
-    const uint8_t *data() const override
-    {
-        return static_cast<const uint8_t *>(data_.bytes);
-    }
-
-private:
-    NSData *data_;
-};
-
-// Evaluate JS source or Hermes bytecode. Must run inside a runtime-executor closure.
-void evaluateScript(jsi::Runtime &runtime, NSData *scriptData, NSString *tag)
-{
-    if (scriptData.length == 0)
-    {
-        return;
-    }
-
-    try
-    {
-        if ([Utilities isHermesBytecode:scriptData])
-        {
-            auto buffer   = std::make_shared<NSDataBuffer>(scriptData);
-            auto prepared = runtime.prepareJavaScript(buffer, std::string(tag.UTF8String));
-            runtime.evaluatePreparedJavaScript(prepared);
-        }
-        else
-        {
-            std::string source((const char *) scriptData.bytes, scriptData.length);
-            auto        buffer = std::make_shared<jsi::StringBuffer>(std::move(source));
-            runtime.evaluateJavaScript(buffer, std::string(tag.UTF8String));
-        }
-    }
-    catch (const jsi::JSError &e)
-    {
-        [Logger error:LOG_CATEGORY_DEFAULT
-               format:@"JSI eval of '%@' threw JSError: %s", tag, e.what()];
-    }
-    catch (const std::exception &e)
-    {
-        [Logger error:LOG_CATEGORY_DEFAULT
-               format:@"JSI eval of '%@' threw exception: %s", tag, e.what()];
-    }
-}
-
-} // namespace
 
 #pragma mark - Pre/post bundle injection
 
-// Live jsi::Runtime captured from -[RCTHost instance:didInitializeRuntime:] (the
-// RCTInstanceDelegate callback, RCTInstance.mm:461), which fires on the JS thread
-// BEFORE _loadJSBundle: (RCTInstance.mm:470). Valid from that callback until the
-// instance is invalidated; only read during bundle load (in _loadScriptFromSource:),
-// always null-checked. We capture it via an ObjC selector + jsi::Runtime& (both
-// available on the shipped binary) instead of ReactInstance::getUnbufferedRuntimeExecutor
-// (NOT exported — calling it crashes DYLD with "symbol not found in flat namespace").
+// Only read during bundle load and always null-checked.
 static jsi::Runtime *gRuntime = nullptr;
 
-// devtools / modules patch / preload globals. Evaluated SYNCHRONOUSLY on the live
-// runtime from _loadScriptFromSource: BEFORE %orig schedules Discord's bundle, so
-// the __d getter installed by modules.js (which lazily populates globalThis.modules)
-// is in place before Discord registers its Metro modules via __d(...). This mirrors
-// the old-arch path, which runs modules.js -> preload -> Discord's bundle inline in
-// strict order. evaluateScript runs directly on the JS thread (no executor); see R1
-// (the shipping target always uses the embedded local Hermes bundle => synchronous
-// _loadScriptFromSource: on the JS thread).
 static void injectUnboundPreBundle(jsi::Runtime &runtime)
 {
+    unbound::registerNativeInterop(runtime);
+
     if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO])
     {
         NSData *devtools = [Utilities getResource:@"devtools" data:true ext:@"js"];
         if (devtools.length)
         {
             [Logger info:LOG_CATEGORY_DEFAULT format:@"Executing DevTools bundle..."];
-            evaluateScript(runtime, devtools, @"unbound:devtools");
+            [JSI evaluate:devtools tag:@"unbound:devtools" runtime:runtime];
         }
     }
 
-    // Modules patch (__d / __c) — must precede Discord's bundle.
+    // Must precede Discord's bundle: installs the __d getter before Discord registers
+    // its Metro modules.
     {
         NSData *modules = [Utilities getResource:@"modules" data:true ext:@"js"];
         if (modules.length)
         {
             [Logger info:LOG_CATEGORY_DEFAULT format:@"Executing modules patch..."];
-            evaluateScript(runtime, modules, @"unbound:modules");
+            [JSI evaluate:modules tag:@"unbound:modules" runtime:runtime];
         }
     }
 
-    // Preload globals (settings / plugins / themes / fonts / loader).
     {
-        NSString *settings       = [Settings getSettings];
-        NSString *plugins        = [Plugins makeJSON];
-        NSString *themes         = [Themes makeJSON];
-        NSString *availableFonts = [Fonts makeAvailableJSON];
-        NSString *fonts          = [Fonts makeJSON];
-
-        NSString *origin  = [Utilities JSONString:[Utilities getCurrentDylibName]];
-        NSString *version = [Utilities JSONString:PACKAGE_VERSION];
-
-        NSString *preloadScript = [NSString
-            stringWithFormat:@"this.UNBOUND_SETTINGS = %@;\n"
-                             @"this.UNBOUND_PLUGINS = %@;\n"
-                             @"this.UNBOUND_THEMES = %@;\n"
-                             @"this.UNBOUND_FONTS = %@;\n"
-                             @"this.UNBOUND_AVAILABLE_FONTS = %@;\n\n"
-                             @"this.UNBOUND_LOADER = {\n"
-                             @"    origin: %@,\n"
-                             @"    version: %@,\n"
-                             @"};",
-                             settings, plugins, themes, fonts, availableFonts, origin, version];
-
-        NSData *preloadData = [preloadScript dataUsingEncoding:NSUTF8StringEncoding];
+        NSData *preloadData = [LoaderShared buildPreloadScriptData];
         [Logger info:LOG_CATEGORY_DEFAULT
               format:@"Pre-loading settings, plugins, fonts and themes..."];
-        evaluateScript(runtime, preloadData, @"unbound:preload");
+        [JSI evaluate:preloadData tag:@"unbound:preload" runtime:runtime];
     }
 }
 
-// Unbound's bundle is downloaded on a background queue during _loadJSBundle:, but
-// only ENQUEUED for execution after Discord's bundle has been scheduled (from the
-// _loadScriptFromSource: hook). Because the buffered runtime executor is FIFO and
-// Discord's bundle is enqueued first, this guarantees Unbound's bundle runs after
-// Discord's — so globalThis.modules (populated by Discord via the modules.js __d
-// patch) exists when Unbound initializes. A semaphore lets the post-Discord hook
-// wait for the (usually cached, fast) download to finish before enqueueing.
+// Unbound's bundle is enqueued only after Discord's has been scheduled, so that the
+// FIFO executor runs it second and globalThis.modules (populated by Discord) exists
+// when it initializes. The semaphore lets the post-Discord hook wait for the download.
 static NSData              *gUnboundBundle    = nil;
 static dispatch_semaphore_t gUnboundBundleSem = nil;
 
-// Kicks off the background download. Signals gUnboundBundleSem when gUnboundBundle
-// is ready (or left nil on failure, with a user-facing alert).
 static void prefetchUnboundBundle(void)
 {
     static dispatch_once_t once;
@@ -229,9 +115,7 @@ static void prefetchUnboundBundle(void)
     });
 }
 
-// Waits (off the JS thread) for the prefetch to finish, then enqueues Unbound's
-// bundle on the buffered executor. Called once, after Discord's bundle has been
-// scheduled. Runs the wait on a background queue so we never block the JS thread.
+// Waits on a background queue so the prefetch wait never blocks the JS thread.
 static void enqueueUnboundBundle(RCTInstance *self)
 {
     static dispatch_once_t once;
@@ -252,7 +136,7 @@ static void enqueueUnboundBundle(RCTInstance *self)
                   format:@"Scheduling Unbound's bundle for execution..."];
             [self callFunctionOnBufferedRuntimeExecutor:[bundle](jsi::Runtime &runtime) {
                 [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
-                evaluateScript(runtime, bundle, @"unbound");
+                [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
                 [Logger info:LOG_CATEGORY_DEFAULT
                       format:@"Unbound's bundle was successfully executed."];
             }];
@@ -262,11 +146,7 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
 #pragma mark - Hooks
 
-// Captures the live jsi::Runtime& on the JS thread before bundle load. RCTHost is
-// the RCTInstanceDelegate and implements instance:didInitializeRuntime: (RCTHost.mm:368),
-// invoked from RCTInstance.mm:461 inside the init closure, BEFORE _loadJSBundle:
-// (line 470). This is a plain ObjC selector receiving the runtime by reference — no
-// unexported C++ symbol involved.
+// Fires before bundle load, giving us the runtime to inject into later.
 %hook RCTHost
 
 - (void)instance:(id)instance didInitializeRuntime:(facebook::jsi::Runtime &)runtime
@@ -280,11 +160,6 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
 %hook RCTInstance
 
-// Injection driver. Pre-bundle scripts no longer run here (the runtime isn't yet
-// captured at this point on the buffered path); they're evaluated synchronously in
-// _loadScriptFromSource: once gRuntime is live. Here we only init state and start the
-// background download of Unbound's bundle. Final ordering on the JS thread:
-// modules.js -> preload -> Discord's bundle -> Unbound's bundle.
 - (void)_loadJSBundle:(NSURL *)sourceURL
 {
     [FileSystem init];
@@ -305,11 +180,8 @@ static void enqueueUnboundBundle(RCTInstance *self)
     %orig(sourceURL);
 }
 
-// Runs Discord's bundle (%orig schedules it on the runtime FIFO). We evaluate the
-// pre-bundle scripts SYNCHRONOUSLY on gRuntime BEFORE %orig, so the modules.js __d
-// getter is installed before Discord registers its Metro modules. Then we enqueue
-// Unbound's bundle after %orig, on the buffered executor (flushed after Discord's
-// bundle), so globalThis.modules is populated when Unbound runs.
+// Pre-bundle scripts run before %orig (which schedules Discord's bundle) so the
+// modules patch is in place first; Unbound's bundle is enqueued after, behind Discord's.
 - (void)_loadScriptFromSource:(id)source
 {
     if (gRuntime)
@@ -324,30 +196,6 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
     %orig(source);
     enqueueUnboundBundle(self);
-}
-
-// Native module. We cannot construct ObjCInteropTurboModule ourselves because the
-// shipped Discord binary does not export its constructor (inlined/stripped).
-// Instead we feed UnboundNative's class into RN's legacy-interop path: returning a
-// plain RCTBridgeModule class here makes RCTTurboModuleManager treat it as a legacy
-// module (_isLegacyModuleClass: is YES for non-TurboModule classes) and construct
-// the ObjCInteropTurboModule internally, with no JS changes. The C++ delegate path
-// (getTurboModule:jsInvoker:) returns nullptr for it by default, so provideTurboModule:
-// falls through to this class lookup.
-- (Class)getModuleClassFromName:(const char *)name
-{
-    if (name && strcmp(name, "UnboundNative") == 0)
-    {
-        Class cls = NSClassFromString(@"UnboundNative");
-        if (cls)
-        {
-            return cls;
-        }
-
-        [Logger error:LOG_CATEGORY_DEFAULT format:@"UnboundNative class not found"];
-    }
-
-    return %orig(name);
 }
 
 %end

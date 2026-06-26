@@ -17,7 +17,6 @@ int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 
 extern NSString * const TROLL_STORE_PATH;
 extern NSString * const TROLL_STORE_LITE_PATH;
-extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 @interface Utilities : NSObject
 {
@@ -29,7 +28,6 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (NSData *)getResource:(NSString *)file data:(BOOL)data ext:(NSString *)ext;
 + (NSString *)getResource:(NSString *)file ext:(NSString *)ext;
 
-+ (NSData *)getResource:(NSString *)file data:(BOOL)data;
 + (NSString *)getResource:(NSString *)file;
 
 + (void)alert:(NSString *)message
@@ -137,31 +135,31 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 + (NSString *)getDeviceModel;
 + (NSString *)getiOSVersionString;
-+ (BOOL)deviceHasDynamicIsland;
-+ (void)initializeDynamicIslandOverlay;
-+ (void)showDynamicIslandOverlay;
-+ (void)hideDynamicIslandOverlay;
-+ (void)showDevelopmentBuildBanner;
 
 + (BOOL)isLoadedWithElleKit;
 
-+ (NSArray<NSString *> *)getAvailableAppExtensions;
 + (BOOL)hasAppExtension:(NSString *)extensionName;
 
 + (NSString *)getCurrentDylibName;
 
-+ (NSDictionary *)getApplicationEntitlements;
-+ (NSDictionary *)getApplicationSignatureInfo;
-
-+ (NSString *)formatEntitlementsAsPlist:(NSDictionary *)entitlements;
-+ (BOOL)isVerifiedBuild;
-+ (BOOL)hasDiscordProductionEntitlements;
 + (BOOL)isJITAvailable;
 
 + (BOOL)isRNNewArchEnabled;
 
 + (NSString *)JSONString:(NSString *)str;
 
++ (NSString *)JSONStringFromObject:(id)object
+                           options:(NSJSONWritingOptions)opts
+                          fallback:(NSString *)fallback;
+
++ (UIColor *)parseColor:(NSString *)color;
+
++ (UIWindow *)keyWindow;
++ (UIViewController *)topViewController;
+
 + (BOOL)isRecoveryModeEnabled;
 
 @end
+
+#import "Utilities+DynamicIsland.h"
+#import "Utilities+CodeSignature.h"

@@ -1,6 +1,8 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+@class DCDMessageTableViewCell;
+
 @interface ChatUI : NSObject
 
 + (void)setAvatarCornerRadius:(NSNumber *)radius;
@@ -19,6 +21,8 @@
 + (NSString *)getMessageBubbleDarkColor;
 + (NSNumber *)getMessageBubbleCornerRadius;
 + (void)resetMessageBubbles;
+
++ (void)updateMessageCell:(DCDMessageTableViewCell *)cell;
 
 @end
 

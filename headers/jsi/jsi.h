@@ -477,22 +477,25 @@ class JSI_EXPORT Runtime : public ICast {
 
   virtual Value getProperty(const Object&, const PropNameID& name) = 0;
   virtual Value getProperty(const Object&, const String& name) = 0;
-  virtual Value getProperty(const Object&, const Value& name);
+  // Intentionally NON-virtual to match Discord's Hermes vtable, which lacks these
+  // slots. Making them virtual shifts createFunctionFromHostFunction and crashes
+  // host-function calls. Do not re-add `virtual` when re-syncing this header.
+  Value getProperty(const Object&, const Value& name);
   virtual bool hasProperty(const Object&, const PropNameID& name) = 0;
   virtual bool hasProperty(const Object&, const String& name) = 0;
-  virtual bool hasProperty(const Object&, const Value& name);
+  bool hasProperty(const Object&, const Value& name);
   virtual void setPropertyValue(
       const Object&,
       const PropNameID& name,
       const Value& value) = 0;
   virtual void
   setPropertyValue(const Object&, const String& name, const Value& value) = 0;
-  virtual void
+  void
   setPropertyValue(const Object&, const Value& name, const Value& value);
 
-  virtual void deleteProperty(const Object&, const PropNameID& name);
-  virtual void deleteProperty(const Object&, const String& name);
-  virtual void deleteProperty(const Object&, const Value& name);
+  void deleteProperty(const Object&, const PropNameID& name);
+  void deleteProperty(const Object&, const String& name);
+  void deleteProperty(const Object&, const Value& name);
 
   virtual bool isArray(const Object&) const = 0;
   virtual bool isArrayBuffer(const Object&) const = 0;

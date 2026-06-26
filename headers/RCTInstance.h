@@ -1,11 +1,6 @@
-// Private interface for RCTInstance (RN 0.83.1 bridgeless): only the members the
-// new-arch loader hooks/calls (_loadJSBundle:, callFunctionOnBufferedRuntimeExecutor:,
-// getModuleClassFromName:).
-
 #import <Foundation/Foundation.h>
-#import <jsi/jsi.h>
-
 #import <functional>
+#import <jsi/jsi.h>
 
 @interface RCTInstance : NSObject
 
@@ -14,7 +9,5 @@
 
 - (void)callFunctionOnBufferedRuntimeExecutor:
     (std::function<void(facebook::jsi::Runtime &)> &&)executor;
-
-- (Class)getModuleClassFromName:(const char *)name;
 
 @end

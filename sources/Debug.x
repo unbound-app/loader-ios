@@ -4,66 +4,43 @@
 
 static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *info)
 {
-    if ([domain isEqualToString:@"com.firebase.dynamicLinks"] && code == 1)
-    {
-        return YES;
-    }
+    // Domain -> set of unconditionally-ignored codes. Conditional codes
+    // (NSPOSIX 22, NSCocoa 256, _UIViewService 1) are handled separately below.
+    static NSDictionary<NSString *, NSSet<NSNumber *> *> *ignored = nil;
+    static dispatch_once_t                                onceToken;
+    dispatch_once(&onceToken, ^{
+        ignored = @{
+            @"com.firebase.dynamicLinks" : [NSSet setWithObjects:@1, nil],
+            @"com.apple.AppSSO.AuthorizationError" : [NSSet setWithObjects:@(-1000), nil],
+            @"RCTJavaScriptLoaderErrorDomain" : [NSSet setWithObjects:@1000, nil],
+            @"NSPOSIXErrorDomain" : [NSSet setWithObjects:@2, @17, @57, nil],
+            @"kCFErrorDomainCFNetwork" : [NSSet setWithObjects:@(-1004), nil],
+            @"BSActionErrorDomain" : [NSSet setWithObjects:@1, nil],
+            @"NSOSStatusErrorDomain" : [NSSet setWithObjects:@(-10813), nil],
+            @"NSCocoaErrorDomain" : [NSSet setWithObjects:@260, @516, @4864, @4, @4099, nil],
+            @"com.appsflyer.sdk.network" : [NSSet setWithObjects:@50, nil],
+            @"AVFoundationErrorDomain" : [NSSet setWithObjects:@(-11800), nil],
+            @"kAFAssistantErrorDomain" : [NSSet setWithObjects:@401, nil],
+            @"SDWebImageErrorDomain" : [NSSet setWithObjects:@1000, @2002, nil],
+            @"LLVideoPlayerCacheTask" : [NSSet setWithObjects:@(-999), nil],
+            @"NSURLErrorDomain" : [NSSet setWithObjects:@(-999), nil],
+        };
+    });
 
-    if ([domain isEqualToString:@"com.apple.AppSSO.AuthorizationError"] && (code == -1000))
-    {
-        return YES;
-    }
-
-    if ([domain isEqualToString:@"RCTJavaScriptLoaderErrorDomain"] && code == 1000)
+    NSSet<NSNumber *> *codes = ignored[domain];
+    if (codes && [codes containsObject:@(code)])
     {
         return YES;
     }
 
     if ([domain isEqualToString:@"NSPOSIXErrorDomain"])
     {
-        if (code == 2)
-            return YES;
-
-        if (code == 17)
-            return YES;
-
-        if (code == 57)
-            return YES;
-
         if (code == 22 && (!info || info.count == 0))
-            return YES;
-    }
-
-    if ([domain isEqualToString:@"kCFErrorDomainCFNetwork"] && code == -1004)
-    {
-        return YES;
-    }
-
-    if ([domain isEqualToString:@"BSActionErrorDomain"] && code == 1)
-    {
-        return YES;
-    }
-
-    if ([domain isEqualToString:@"NSOSStatusErrorDomain"])
-    {
-        if (code == -10813)
             return YES;
     }
 
     if ([domain isEqualToString:@"NSCocoaErrorDomain"])
     {
-        if (code == 260)
-            return YES;
-
-        if (code == 516)
-            return YES;
-
-        if (code == 4864)
-            return YES;
-
-        if (code == 4)
-            return YES;
-
         if (code == 256)
         {
             id   underlying = info[@"NSUnderlyingError"];
@@ -90,19 +67,6 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
             if (isPOSIX22 || isAppsFlyerPath || isAppsFlyerURL)
                 return YES;
         }
-
-        if (code == 4099)
-            return YES;
-    }
-
-    if ([domain isEqualToString:@"com.appsflyer.sdk.network"] && code == 50)
-    {
-        return YES;
-    }
-
-    if ([domain isEqualToString:@"AVFoundationErrorDomain"] && code == -11800)
-    {
-        return YES;
     }
 
     if ([domain isEqualToString:@"_UIViewServiceErrorDomain"] && code == 1)
@@ -112,30 +76,6 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
         {
             return YES;
         }
-    }
-
-    if ([domain isEqualToString:@"kAFAssistantErrorDomain"] && code == 401)
-    {
-        return YES;
-    }
-
-    if ([domain isEqualToString:@"SDWebImageErrorDomain"])
-    {
-        if (code == 1000)
-            return YES;
-
-        if (code == 2002)
-            return YES;
-    }
-
-    if ([domain isEqualToString:@"LLVideoPlayerCacheTask"] && code == -999)
-    {
-        return YES;
-    }
-
-    if ([domain isEqualToString:@"NSURLErrorDomain"] && code == -999)
-    {
-        return YES;
     }
 
     return NO;

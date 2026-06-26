@@ -1,4 +1,5 @@
 #import "Fonts.h"
+#import "LoaderShared.h"
 
 @implementation Fonts
 static NSMutableDictionary<NSString *, NSString *>            *overrides = nil;
@@ -6,35 +7,14 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
 
 + (NSString *)makeJSON
 {
-    NSError *error;
-    NSData  *data = [NSJSONSerialization dataWithJSONObject:fonts options:0 error:&error];
-
-    if (error != nil)
-    {
-        return @"[]";
-    }
-    else
-    {
-        return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    }
+    return [Utilities JSONStringFromObject:fonts options:0 fallback:@"[]"];
 };
 
 + (NSString *)makeAvailableJSON
 {
-    NSError *error;
-
     NSArray *availabeFonts = [Fonts getAvailableFonts];
 
-    NSData *data = [NSJSONSerialization dataWithJSONObject:availabeFonts options:0 error:&error];
-
-    if (error != nil)
-    {
-        return @"[]";
-    }
-    else
-    {
-        return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    }
+    return [Utilities JSONStringFromObject:availabeFonts options:0 fallback:@"[]"];
 };
 
 + (NSArray *)getAvailableFonts
@@ -57,29 +37,20 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
         overrides = [[NSMutableDictionary alloc] init];
     }
 
-    NSString *path = [NSString pathWithComponents:@[ FileSystem.documents, @"Fonts" ]];
-    [FileSystem createDirectory:path];
+    [LoaderShared scanAddonDirectory:@"Fonts"
+                            category:LOG_CATEGORY_FONTS
+                             handler:^(NSString *file, NSString *font) {
+                                 NSString *name = [Fonts getFontName:font];
 
-    NSArray *contents = [FileSystem readDirectory:path];
+                                 [Logger info:LOG_CATEGORY_FONTS
+                                       format:@"Registering font: %@", font];
 
-    for (NSString *file in contents)
-    {
-        [Logger info:LOG_CATEGORY_FONTS format:@"Attempting to load %@...", file];
-
-        @try
-        {
-            NSString *font = [NSString pathWithComponents:@[ path, file ]];
-            NSString *name = [Fonts getFontName:font];
-
-            [Logger info:LOG_CATEGORY_FONTS format:@"Registering font: %@", font];
-
-            [fonts addObject:@{@"name" : name, @"file" : file, @"path" : font}];
-        }
-        @catch (NSException *e)
-        {
-            [Logger error:LOG_CATEGORY_FONTS format:@"Failed to load %@ (%@)", file, e.reason];
-        }
-    }
+                                 [fonts addObject:@{
+                                     @"name" : name,
+                                     @"file" : file,
+                                     @"path" : font
+                                 }];
+                             }];
 
     @try
     {
@@ -149,13 +120,25 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
     NSURL *url = [NSURL fileURLWithPath:path];
 
     CGDataProviderRef provider = CGDataProviderCreateWithURL((__bridge CFURLRef) url);
-    CGFontRef         ref      = CGFontCreateWithDataProvider(provider);
+    if (!provider)
+    {
+        [Logger error:LOG_CATEGORY_FONTS format:@"Failed to create data provider for %@", path];
+        return;
+    }
 
+    CGFontRef ref = CGFontCreateWithDataProvider(provider);
     CGDataProviderRelease(provider);
-    CTFontManagerRegisterGraphicsFont(ref, nil);
-    CGFontRelease(ref);
 
+    if (!ref)
+    {
+        [Logger error:LOG_CATEGORY_FONTS format:@"Failed to create font from %@", path];
+        return;
+    }
+
+    CTFontManagerRegisterGraphicsFont(ref, nil);
     [Logger info:LOG_CATEGORY_FONTS format:@"Loaded font: %@.", [Fonts getFontNameByRef:ref]];
+
+    CGFontRelease(ref);
 }
 
 + (NSString *)getFontName:(NSString *)path
@@ -163,14 +146,32 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
     NSURL *url = [NSURL fileURLWithPath:path];
 
     CGDataProviderRef provider = CGDataProviderCreateWithURL((__bridge CFURLRef) url);
-    CGFontRef         ref      = CGFontCreateWithDataProvider(provider);
+    if (!provider)
+    {
+        return nil;
+    }
+
+    CGFontRef ref = CGFontCreateWithDataProvider(provider);
     CGDataProviderRelease(provider);
 
-    return [Fonts getFontNameByRef:ref];
+    if (!ref)
+    {
+        return nil;
+    }
+
+    NSString *name = [Fonts getFontNameByRef:ref];
+    CGFontRelease(ref);
+
+    return name;
 }
 
 + (NSString *)getFontNameByRef:(CGFontRef)ref
 {
+    if (!ref)
+    {
+        return nil;
+    }
+
     return CFBridgingRelease(CGFontCopyFullName(ref));
 }
 

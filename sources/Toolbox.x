@@ -859,7 +859,28 @@ static void triggerHapticFeedback(void)
 
 - (void)dismiss
 {
-    [self dismissViewControllerAnimated:YES completion:nil];
+    UINavigationController *navController = self.navigationController ?: (id) self;
+
+    [self dismissViewControllerAnimated:YES
+                            completion:^{
+                                UIWindow *storedWindow =
+                                    objc_getAssociatedObject(navController, "recoveryTopWindow");
+                                UIWindow *origKeyWindow = objc_getAssociatedObject(
+                                    navController, "recoveryOriginalKeyWindow");
+
+                                if (storedWindow)
+                                {
+                                    storedWindow.hidden             = YES;
+                                    storedWindow.rootViewController = nil;
+                                }
+
+                                [origKeyWindow makeKeyAndVisible];
+
+                                objc_setAssociatedObject(navController, "recoveryTopWindow", nil,
+                                                         OBJC_ASSOCIATION_ASSIGN);
+                                objc_setAssociatedObject(navController, "recoveryOriginalKeyWindow",
+                                                         nil, OBJC_ASSOCIATION_ASSIGN);
+                            }];
 }
 
 void showToolboxSheet(void)
@@ -918,34 +939,6 @@ void showToolboxSheet(void)
         objc_setAssociatedObject(navController, "recoveryOriginalKeyWindow", originalKeyWindow,
                                  OBJC_ASSOCIATION_ASSIGN);
     }
-
-    Method dismissMethod =
-        class_getInstanceMethod([UnboundToolboxViewController class], @selector(dismiss));
-    method_setImplementation(
-        dismissMethod, imp_implementationWithBlock(^(id _self) {
-            [_self
-                dismissViewControllerAnimated:YES
-                                   completion:^{
-                                       UIWindow *storedWindow = objc_getAssociatedObject(
-                                           navController, "recoveryTopWindow");
-                                       UIWindow *origKeyWindow = objc_getAssociatedObject(
-                                           navController, "recoveryOriginalKeyWindow");
-
-                                       if (storedWindow)
-                                       {
-                                           storedWindow.hidden             = YES;
-                                           storedWindow.rootViewController = nil;
-                                       }
-
-                                       [origKeyWindow makeKeyAndVisible];
-
-                                       objc_setAssociatedObject(navController, "recoveryTopWindow",
-                                                                nil, OBJC_ASSOCIATION_ASSIGN);
-                                       objc_setAssociatedObject(navController,
-                                                                "recoveryOriginalKeyWindow", nil,
-                                                                OBJC_ASSOCIATION_ASSIGN);
-                                   }];
-        }));
 }
 
 @end
