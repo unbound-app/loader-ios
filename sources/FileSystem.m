@@ -1,9 +1,40 @@
 #import "FileSystem.h"
 
+static const NSTimeInterval kMonitorDebounce = 0.250;
+
+static const unsigned long kFileVnodeMask =
+    DISPATCH_VNODE_ATTRIB | DISPATCH_VNODE_DELETE | DISPATCH_VNODE_EXTEND | DISPATCH_VNODE_LINK |
+    DISPATCH_VNODE_RENAME | DISPATCH_VNODE_REVOKE | DISPATCH_VNODE_WRITE;
+
+static const unsigned long kFileGoneMask =
+    DISPATCH_VNODE_DELETE | DISPATCH_VNODE_RENAME | DISPATCH_VNODE_REVOKE;
+
+static const unsigned long kDirVnodeMask =
+    DISPATCH_VNODE_WRITE | DISPATCH_VNODE_DELETE | DISPATCH_VNODE_RENAME;
+
+@implementation FileMonitor
+@end
+
+@implementation DirectoryWatcher
+@end
+
 @implementation FileSystem
-static NSMutableDictionary<NSString *, NSMutableDictionary *> *monitors  = nil;
-static NSFileManager                                          *manager   = nil;
-static NSString                                               *documents = nil;
+static NSMutableDictionary<NSString *, FileMonitor *>      *monitors    = nil;
+static NSMutableDictionary<NSString *, DirectoryWatcher *> *dirWatchers = nil;
+static NSFileManager                                       *manager     = nil;
+static NSString                                            *documents   = nil;
+
+// Serialises all mutation of monitors/dirWatchers and their sources, which is driven from several
+// queues (registration, directory event handlers, stopMonitoring:).
+static dispatch_queue_t monitorRegistryQueue(void)
+{
+    static dispatch_queue_t queue;
+    static dispatch_once_t  once;
+    dispatch_once(&once, ^{
+        queue = dispatch_queue_create("app.unbound.fs.monitors", DISPATCH_QUEUE_SERIAL);
+    });
+    return queue;
+}
 
 + (BOOL)exists:(NSString *)path
 {
@@ -90,86 +121,188 @@ static NSString                                               *documents = nil;
 
 + (void)monitor:(NSString *)filePath onChange:(void (^)())onChange autoRestart:(BOOL)autoRestart
 {
-    if ([monitors objectForKey:filePath])
-    {
-        return;
-    }
-
-    const char *path = [filePath fileSystemRepresentation];
-
-    int fdescriptor = open(path, O_EVTONLY);
-
-    if (fdescriptor < 0)
-    {
-        [Logger error:LOG_CATEGORY_FILESYSTEM
-               format:@"Failed to open %@ for monitoring (errno %d)", filePath, errno];
-        return;
-    }
-
-    dispatch_queue_t defaultQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-    dispatch_source_t source = dispatch_source_create(
-        DISPATCH_SOURCE_TYPE_VNODE, fdescriptor,
-        DISPATCH_VNODE_ATTRIB | DISPATCH_VNODE_DELETE | DISPATCH_VNODE_EXTEND |
-            DISPATCH_VNODE_LINK | DISPATCH_VNODE_RENAME | DISPATCH_VNODE_REVOKE |
-            DISPATCH_VNODE_WRITE,
-        defaultQueue);
-
-
-    NSMutableDictionary *monitor = [[NSMutableDictionary alloc] init];
-
-    monitor[@"cancel"] = ^{
-        dispatch_source_cancel(source);
-
-        [monitors removeObjectForKey:filePath];
-        [Logger debug:LOG_CATEGORY_FILESYSTEM format:@"monitor for %@ was destroyed", filePath];
-    };
-
-    monitor[@"debounce_timer"] = nil;
-
-    [monitors setValue:monitor forKey:filePath];
-
-    dispatch_source_set_event_handler(source, ^{
-        if (monitor[@"debounce_timer"] != nil)
+    dispatch_async(monitorRegistryQueue(), ^{
+        if (!monitors)
         {
-            dispatch_source_cancel(monitor[@"debounce_timer"]);
-            monitor[@"debounce_timer"] = nil;
+            monitors = [NSMutableDictionary dictionary];
+        }
+        if (!dirWatchers)
+        {
+            dirWatchers = [NSMutableDictionary dictionary];
+        }
+        if (monitors[filePath])
+        {
+            return;
         }
 
-        dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-        double           secondsToThrottle = 0.250f;
-        monitor[@"debounce_timer"]         = [Utilities createDebounceTimer:secondsToThrottle
-                                                              queue:queue
-                                                              block:^{ onChange(); }];
+        FileMonitor *monitor = [[FileMonitor alloc] init];
+        monitor.path         = filePath;
+        monitor.onChange     = onChange;
+        monitor.queue        = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+        monitors[filePath]   = monitor;
+
+        DirectoryWatcher *dir =
+            [FileSystem watcherForDirectory:monitor.path.stringByDeletingLastPathComponent
+                                      queue:monitor.queue];
+        [dir.files addObject:filePath];
+
+        // OK if this is a no-op now (file absent) - the directory watcher arms it once it appears.
+        [FileSystem armFileSource:monitor];
     });
-
-    dispatch_source_set_cancel_handler(source, ^(void) {
-        [Logger debug:LOG_CATEGORY_FILESYSTEM
-               format:@"event listener got cancelled for %@", filePath];
-        close(fdescriptor);
-
-        if (autoRestart)
-        {
-            [Logger debug:LOG_CATEGORY_FILESYSTEM format:@"Restarting file watcher."];
-            [FileSystem monitor:filePath onChange:onChange autoRestart:autoRestart];
-        }
-    });
-
-    dispatch_resume(source);
 }
 
 + (void)stopMonitoring:(NSString *)path
 {
-    if (!monitors)
+    dispatch_async(monitorRegistryQueue(), ^{
+        FileMonitor *monitor = monitors[path];
+        if (!monitor)
+        {
+            return;
+        }
+
+        if (monitor.fileSource)
+        {
+            dispatch_source_cancel(monitor.fileSource);
+        }
+        if (monitor.debounceTimer)
+        {
+            dispatch_source_cancel(monitor.debounceTimer);
+        }
+
+        [monitors removeObjectForKey:path];
+        [FileSystem releaseDirectoryWatcherFor:path.stringByDeletingLastPathComponent];
+
+        [Logger debug:LOG_CATEGORY_FILESYSTEM format:@"monitor for %@ was destroyed", path];
+    });
+}
+
+#pragma mark - Monitoring internals (run on monitorRegistryQueue)
+
+// Reuses the directory's existing watcher when one is present, creating it otherwise. The returned
+// watcher fans every event to all FileMonitors registered in its `files` set.
++ (DirectoryWatcher *)watcherForDirectory:(NSString *)dirPath queue:(dispatch_queue_t)queue
+{
+    DirectoryWatcher *existing = dirWatchers[dirPath];
+    if (existing)
+    {
+        return existing;
+    }
+
+    DirectoryWatcher *watcher = [[DirectoryWatcher alloc] init];
+    watcher.path              = dirPath;
+    watcher.files             = [NSMutableSet set];
+    dirWatchers[dirPath]      = watcher;
+
+    int fd = open(dirPath.fileSystemRepresentation, O_EVTONLY);
+    if (fd < 0)
+    {
+        [Logger error:LOG_CATEGORY_FILESYSTEM
+               format:@"Failed to open dir %@ for monitoring (errno %d)", dirPath, errno];
+        return watcher;
+    }
+
+    watcher.source = dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, fd, kDirVnodeMask, queue);
+
+    dispatch_source_set_event_handler(watcher.source, ^{
+        dispatch_sync(monitorRegistryQueue(), ^{ [FileSystem handleDirectoryEvent:dirPath]; });
+    });
+    dispatch_source_set_cancel_handler(watcher.source, ^{ close(fd); });
+
+    dispatch_resume(watcher.source);
+    return watcher;
+}
+
++ (void)handleDirectoryEvent:(NSString *)dirPath
+{
+    for (NSString *file in [dirWatchers[dirPath].files copy])
+    {
+        FileMonitor *monitor = monitors[file];
+        if (!monitor.fileSource)
+        {
+            [FileSystem armFileSource:monitor];
+        }
+        [FileSystem scheduleNotify:monitor];
+    }
+}
+
+// Drops the shared directory watcher once it no longer serves any files.
++ (void)releaseDirectoryWatcherFor:(NSString *)dirPath
+{
+    DirectoryWatcher *watcher = dirWatchers[dirPath];
+    [watcher.files removeObject:dirPath];
+
+    if (watcher.files.count == 0)
+    {
+        if (watcher.source)
+        {
+            dispatch_source_cancel(watcher.source);
+        }
+        [dirWatchers removeObjectForKey:dirPath];
+    }
+}
+
+// Opens a vnode source on the file's current inode. No-op if absent or already armed.
++ (void)armFileSource:(FileMonitor *)monitor
+{
+    if (!monitor || monitor.fileSource)
     {
         return;
     }
 
-    NSMutableDictionary *monitor = [monitors valueForKey:path];
-    void (^block)(void)          = monitor[@"cancel"];
-    if (block)
+    int fd = open(monitor.path.fileSystemRepresentation, O_EVTONLY);
+    if (fd < 0)
     {
-        block();
+        return;
     }
+
+    dispatch_source_t source =
+        dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, fd, kFileVnodeMask, monitor.queue);
+
+    dispatch_source_set_event_handler(source, ^{
+        unsigned long flags = dispatch_source_get_data(source);
+        dispatch_sync(monitorRegistryQueue(), ^{ [FileSystem scheduleNotify:monitor]; });
+
+        // Inode replaced/removed: drop this watch so the directory watcher re-arms us on the new
+        // one.
+        if (flags & kFileGoneMask)
+        {
+            dispatch_sync(monitorRegistryQueue(), ^{
+                if (monitor.fileSource == source)
+                {
+                    monitor.fileSource = nil;
+                }
+            });
+            dispatch_source_cancel(source);
+        }
+    });
+    dispatch_source_set_cancel_handler(source, ^{ close(fd); });
+
+    monitor.fileSource = source;
+    dispatch_resume(source);
+}
+
+// Coalesces bursts of events (an atomic write can fire several) into one debounced onChange.
++ (void)scheduleNotify:(FileMonitor *)monitor
+{
+    if (!monitor)
+    {
+        return;
+    }
+
+    if (monitor.debounceTimer)
+    {
+        dispatch_source_cancel(monitor.debounceTimer);
+    }
+
+    dispatch_block_t onChange = monitor.onChange;
+    monitor.debounceTimer     = [Utilities createDebounceTimer:kMonitorDebounce
+                                                     queue:monitor.queue
+                                                     block:^{
+                                                         if (onChange)
+                                                         {
+                                                             onChange();
+                                                         }
+                                                     }];
 }
 
 + (NSHTTPURLResponse *)download:(NSURL *)url path:(NSString *)path
@@ -181,12 +314,12 @@ static NSString                                               *documents = nil;
                            path:(NSString *)path
                     withHeaders:(NSDictionary *)headers
 {
-    static NSURLSession *bundleUrlSession = nil;
+    static NSURLSession   *bundleUrlSession = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
         config.timeoutIntervalForRequest  = 30.0;
-        bundleUrlSession = [NSURLSession sessionWithConfiguration:config];
+        bundleUrlSession                  = [NSURLSession sessionWithConfiguration:config];
     });
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);

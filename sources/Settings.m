@@ -1,5 +1,7 @@
 #import "Settings.h"
 
+NSString *const UnboundSettingsDidChangeNotification = @"UnboundSettingsDidChange";
+
 @implementation Settings
 static NSMutableDictionary *data = nil;
 static NSString            *path = nil;
@@ -10,7 +12,14 @@ static NSString            *path = nil;
 
     [Settings loadSettings];
 
-    [FileSystem monitor:path onChange:^{ [Settings loadSettings]; } autoRestart:YES];
+    [FileSystem monitor:path
+               onChange:^{
+                   [Settings loadSettings];
+                   [[NSNotificationCenter defaultCenter]
+                       postNotificationName:UnboundSettingsDidChangeNotification
+                                     object:nil];
+               }
+            autoRestart:YES];
 }
 
 + (void)loadSettings
@@ -122,8 +131,6 @@ static NSString            *path = nil;
 
 + (NSString *)getSettings
 {
-    return [Utilities JSONStringFromObject:data
-                                   options:NSJSONWritingPrettyPrinted
-                                  fallback:@"{}"];
+    return [Utilities JSONStringFromObject:data options:NSJSONWritingPrettyPrinted fallback:@"{}"];
 }
 @end

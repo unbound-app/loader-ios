@@ -63,6 +63,22 @@ The resulting `.deb` file will be in the `packages` folder.
 
 </details>
 
+## Live reload (HMR)
+
+When working on the [JavaScript client](https://github.com/unbound-app/client) you can have the
+app reload automatically whenever you rebuild the bundle, instead of relaunching by hand.
+
+1. Run the client's dev server (`bun scripts/dev` in the client repo). It serves the bundle and a
+   Server-Sent Events stream at `/__hot`.
+2. In Unbound's settings, set:
+   - `loader.update.url` to your dev server's bundle URL, e.g. `http://<your-LAN-ip>:3000/unbound.bundle`
+   - `loader.update.hmr` to `true`
+3. Launch Discord. The loader connects to `<origin>/__hot`; when you edit a file and the dev
+   server rebuilds, the app re-fetches the bundle and reloads automatically.
+
+`loader.update.hmr` is off by default, so this never runs for normal users. The HMR endpoint is
+derived from `loader.update.url`'s origin — no separate setting needed.
+
 ## Contributors
 
 [![Contributors](https://contrib.rocks/image?repo=unbound-app/loader-ios)](https://github.com/unbound-app/loader-ios/graphs/contributors)
