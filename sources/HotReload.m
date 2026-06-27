@@ -19,7 +19,7 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
 
 + (instancetype)shared
 {
-    static HotReload      *shared    = nil;
+    static HotReload      *shared = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{ shared = [[HotReload alloc] init]; });
     return shared;
@@ -105,7 +105,9 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
     delegateQueue.underlyingQueue             = _queue;
     delegateQueue.maxConcurrentOperationCount = 1;
 
-    _session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:delegateQueue];
+    _session = [NSURLSession sessionWithConfiguration:config
+                                             delegate:self
+                                        delegateQueue:delegateQueue];
 
     [Logger info:LOG_CATEGORY_UPDATER format:@"Hot-reload: enabled."];
     [self connect];
@@ -182,9 +184,9 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
         return;
     }
 
-    NSTimeInterval delay      = _reconnectDelay;
-    _reconnectDelay           = MIN(_reconnectDelay * 2.0, kReconnectMaxDelay);
-    uint64_t       generation = _generation;
+    NSTimeInterval delay = _reconnectDelay;
+    _reconnectDelay      = MIN(_reconnectDelay * 2.0, kReconnectMaxDelay);
+    uint64_t generation  = _generation;
 
     [Logger info:LOG_CATEGORY_UPDATER format:@"Hot-reload: reconnecting in %.0fs.", delay];
 
@@ -205,14 +207,16 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
 
     while (YES)
     {
-        NSRange range = [_buffer rangeOfData:separator options:0 range:NSMakeRange(0, _buffer.length)];
+        NSRange range = [_buffer rangeOfData:separator
+                                     options:0
+                                       range:NSMakeRange(0, _buffer.length)];
         if (range.location == NSNotFound)
         {
             break;
         }
 
         NSData   *eventData = [_buffer subdataWithRange:NSMakeRange(0, range.location)];
-        NSString *event     = [[NSString alloc] initWithData:eventData encoding:NSUTF8StringEncoding];
+        NSString *event = [[NSString alloc] initWithData:eventData encoding:NSUTF8StringEncoding];
 
         [_buffer replaceBytesInRange:NSMakeRange(0, range.location + range.length)
                            withBytes:NULL
@@ -294,7 +298,7 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
 #pragma mark - NSURLSessionDataDelegate
 
 - (void)URLSession:(NSURLSession *)session
-          dataTask:(NSURLSessionDataTask *)dataTask
+              dataTask:(NSURLSessionDataTask *)dataTask
     didReceiveResponse:(NSURLResponse *)response
      completionHandler:(void (^)(NSURLSessionResponseDisposition))completionHandler
 {
