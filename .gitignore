@@ -5,3 +5,4 @@ packages
 venv
 patcher-ios
 private_key.pem
+.claude/worktrees
