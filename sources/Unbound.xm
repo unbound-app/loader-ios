@@ -1,6 +1,7 @@
 #import <jsi/jsi.h>
 
 #import "Discord.h"
+#import "HotReload.h"
 #import "JSI.h"
 #import "LoaderShared.h"
 #import "RCTHost.h"
@@ -48,92 +49,104 @@ static void injectUnboundPreBundle(jsi::Runtime &runtime)
     }
 }
 
-// Unbound's bundle is enqueued only after Discord's has been scheduled, so that the
-// FIFO executor runs it second and globalThis.modules (populated by Discord) exists
-// when it initializes. The semaphore lets the post-Discord hook wait for the download.
+// Unbound's bundle is enqueued only after Discord's has been scheduled so the FIFO executor runs
+// it second, once globalThis.modules (populated by Discord) exists. The semaphore lets the
+// post-Discord hook wait for the download.
+//
+// These run once per bundle load, not once per process, so a reload (which re-fires the hooks)
+// re-fetches and re-evaluates the bundle. gPrefetchToken discards a download from a load that was
+// superseded by a newer one before it finished.
 static NSData              *gUnboundBundle    = nil;
 static dispatch_semaphore_t gUnboundBundleSem = nil;
+static uint64_t             gPrefetchToken    = 0;
 
 static void prefetchUnboundBundle(void)
 {
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        gUnboundBundleSem = dispatch_semaphore_create(0);
+    uint64_t token = ++gPrefetchToken;
 
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            NSString *bundlePath = [Updater resolveBundlePath];
+    gUnboundBundle    = nil;
+    gUnboundBundleSem = dispatch_semaphore_create(0);
 
-            @try
-            {
-                bundlePath = [Updater downloadBundle:bundlePath];
-            }
-            @catch (NSException *e)
-            {
-                [Logger error:LOG_CATEGORY_DEFAULT format:@"Bundle download failed. (%@)", e];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSString *bundlePath = [Updater resolveBundlePath];
 
-                if (![FileSystem exists:bundlePath])
-                {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [Utilities alert:@"Bundle failed to download, please report this "
-                                         @"to the developers."];
-                    });
-                }
-                else
-                {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [Utilities alert:@"Bundle failed to update, loading out of date bundle."];
-                    });
-                }
-            }
+        @try
+        {
+            bundlePath = [Updater downloadBundle:bundlePath];
+        }
+        @catch (NSException *e)
+        {
+            [Logger error:LOG_CATEGORY_DEFAULT format:@"Bundle download failed. (%@)", e];
 
-            if ([FileSystem exists:bundlePath])
-            {
-                NSData *bundle = [FileSystem readFile:bundlePath];
-                if (bundle.length)
-                {
-                    gUnboundBundle = bundle;
-                }
-            }
-
-            if (!gUnboundBundle)
+            if (![FileSystem exists:bundlePath])
             {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    [Utilities alert:@"Failed to load Unbound's bundle. Please report "
-                                     @"this to the developers."];
+                    [Utilities alert:@"Bundle failed to download, please report this "
+                                     @"to the developers."];
                 });
             }
+            else
+            {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [Utilities alert:@"Bundle failed to update, loading out of date bundle."];
+                });
+            }
+        }
 
-            dispatch_semaphore_signal(gUnboundBundleSem);
-        });
+        // A newer load started while we were downloading - let it win.
+        if (token != gPrefetchToken)
+        {
+            return;
+        }
+
+        if ([FileSystem exists:bundlePath])
+        {
+            NSData *bundle = [FileSystem readFile:bundlePath];
+            if (bundle.length)
+            {
+                gUnboundBundle = bundle;
+            }
+        }
+
+        if (!gUnboundBundle)
+        {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [Utilities alert:@"Failed to load Unbound's bundle. Please report "
+                                 @"this to the developers."];
+            });
+        }
+
+        dispatch_semaphore_signal(gUnboundBundleSem);
     });
 }
 
 // Waits on a background queue so the prefetch wait never blocks the JS thread.
 static void enqueueUnboundBundle(RCTInstance *self)
 {
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            if (gUnboundBundleSem)
-            {
-                dispatch_semaphore_wait(gUnboundBundleSem, DISPATCH_TIME_FOREVER);
-            }
+    // Snapshot this load's semaphore so a reload that swaps gUnboundBundleSem mid-wait
+    // can't make us wait on the wrong one.
+    dispatch_semaphore_t sem = gUnboundBundleSem;
 
-            NSData *bundle = gUnboundBundle;
-            if (bundle.length == 0)
-            {
-                return;
-            }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        if (sem)
+        {
+            dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+        }
 
+        NSData *bundle = gUnboundBundle;
+        if (bundle.length == 0)
+        {
+            return;
+        }
+
+        [Logger info:LOG_CATEGORY_DEFAULT
+              format:@"Scheduling Unbound's bundle for execution..."];
+        [self callFunctionOnBufferedRuntimeExecutor:[bundle](jsi::Runtime &runtime) {
+            [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
+            [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
             [Logger info:LOG_CATEGORY_DEFAULT
-                  format:@"Scheduling Unbound's bundle for execution..."];
-            [self callFunctionOnBufferedRuntimeExecutor:[bundle](jsi::Runtime &runtime) {
-                [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
-                [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
-                [Logger info:LOG_CATEGORY_DEFAULT
-                      format:@"Unbound's bundle was successfully executed."];
-            }];
-        });
+                  format:@"Unbound's bundle was successfully executed."];
+        }];
     });
 }
 
@@ -187,6 +200,10 @@ static void enqueueUnboundBundle(RCTInstance *self)
     [Fonts init];
 
     prefetchUnboundBundle();
+
+    // Opt-in dev live reload; no-op unless `loader.update.hmr` is enabled.
+    [HotReload observe];
+
     %orig(sourceURL);
 }
 

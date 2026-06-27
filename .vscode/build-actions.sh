@@ -34,7 +34,9 @@ case "$ACTION" in
 
     REMOTE_DEB="/tmp/$(basename "$DEB")"
 
-    sshpass -p alpine scp -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$DEB" "$SSH_TARGET:$REMOTE_DEB"
+    # -O forces the legacy SCP/rcp protocol: the vphone's dropbear has no sftp-server,
+    # which modern scp defaults to (fails with "/usr/libexec/sftp-server: No such file").
+    sshpass -p alpine scp -O -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$DEB" "$SSH_TARGET:$REMOTE_DEB"
     sshpass -p alpine ssh $SSH_OPTS "$SSH_TARGET" "echo 'alpine' | sudo -S dpkg -i '$REMOTE_DEB' && echo 'alpine' | sudo -S killall -9 Discord; uiopen --bundleid com.hammerandchisel.discord"
     ;;
   Package)
