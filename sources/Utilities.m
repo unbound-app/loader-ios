@@ -1,4 +1,5 @@
 #import "Utilities.h"
+#import "HermesBytecode.h"
 
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
 NSString *const TROLL_STORE_LITE_PATH = @"../_TrollStoreLite";
@@ -509,40 +510,39 @@ static NSString *bundle = nil;
 
 + (uint32_t)getHermesBytecodeVersion
 {
-    void *symbol = dlsym(RTLD_DEFAULT, "_ZN8facebook6hermes13HermesRuntime18getBytecodeVersionEv");
-    if (!symbol)
+    // Read the accepted version from Discord's shipped HBC bundle: it's compiled by
+    // the same hermesc as the bundled hermes.framework, so its header version is the
+    // version this runtime accepts. No runtime ABI involved. See HermesBytecode.h.
+    NSString *bundlePath   = [[NSBundle mainBundle] bundlePath];
+    NSString *jsBundlePath = [bundlePath stringByAppendingPathComponent:@"main.jsbundle"];
+
+    NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath:jsBundlePath];
+    if (!handle)
     {
-        const char *dlError = dlerror();
-        NSString   *errorMessage =
-            dlError ? [NSString stringWithUTF8String:dlError] : @"Unknown error";
         [Logger error:LOG_CATEGORY_UTILITIES
-               format:@"Failed to get bytecode version: %@", errorMessage];
+               format:@"Could not open %@ to read Hermes bytecode version", jsBundlePath];
         return 0;
     }
 
-    typedef uint32_t (*HermesBytecodeVersionFn)(void);
-    HermesBytecodeVersionFn getBytecodeVersion = (HermesBytecodeVersionFn) symbol;
+    NSData *prefix = [handle readDataOfLength:sizeof(HermesBytecodeFileHeaderPrefix)];
+    [handle closeFile];
 
-    return getBytecodeVersion ? getBytecodeVersion() : 0;
+    uint32_t version = HermesDataBytecodeVersion([prefix bytes], [prefix length]);
+    if (version == 0)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"%@ is not a Hermes bytecode bundle (read %lu bytes)", jsBundlePath,
+                      (unsigned long) [prefix length]];
+        return 0;
+    }
+
+    [Logger info:LOG_CATEGORY_UTILITIES format:@"Hermes bytecode version: %u", version];
+    return version;
 }
 
 + (BOOL)isHermesBytecode:(NSData *)data
 {
-    void *symbol = dlsym(RTLD_DEFAULT, "_ZN8facebook6hermes13HermesRuntime16isHermesBytecodeEPKhm");
-    if (!symbol)
-    {
-        const char *dlError = dlerror();
-        NSString   *errorMessage =
-            dlError ? [NSString stringWithUTF8String:dlError] : @"Unknown error";
-        [Logger error:LOG_CATEGORY_UTILITIES
-               format:@"Failed to check Hermes bytecode: %@", errorMessage];
-        return NO;
-    }
-
-    typedef BOOL (*HermesIsBytecodeFn)(const uint8_t *, size_t);
-    HermesIsBytecodeFn isHermesBytecode = (HermesIsBytecodeFn) symbol;
-
-    return isHermesBytecode ? isHermesBytecode((const uint8_t *) [data bytes], [data length]) : NO;
+    return HermesDataIsBytecode([data bytes], [data length]);
 }
 
 + (BOOL)isRNNewArchEnabled
