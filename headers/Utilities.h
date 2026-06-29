@@ -12,6 +12,7 @@
 #import "FileSystem.h"
 #import "Settings.h"
 #import "Unbound.h"
+#import "HermesBytecode.h"
 
 #define CS_DEBUGGED 0x10000000
 int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);

@@ -1,5 +1,4 @@
 #import "Utilities.h"
-#import "HermesBytecode.h"
 
 NSString *const TROLL_STORE_PATH      = @"../_TrollStore";
 NSString *const TROLL_STORE_LITE_PATH = @"../_TrollStoreLite";
