@@ -17,10 +17,11 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
             @"kCFErrorDomainCFNetwork" : [NSSet setWithObjects:@(-1004), nil],
             @"BSActionErrorDomain" : [NSSet setWithObjects:@1, nil],
             @"NSOSStatusErrorDomain" : [NSSet setWithObjects:@(-10813), nil],
-            @"NSCocoaErrorDomain" : [NSSet setWithObjects:@260, @516, @4864, @4, @4099, nil],
+            @"NSCocoaErrorDomain" : [NSSet setWithObjects:@260, @516, @4864, @4, @4099, @3840, nil],
             @"com.appsflyer.sdk.network" : [NSSet setWithObjects:@50, nil],
             @"AVFoundationErrorDomain" : [NSSet setWithObjects:@(-11800), nil],
-            @"kAFAssistantErrorDomain" : [NSSet setWithObjects:@401, nil],
+            @"kAFAssistantErrorDomain" : [NSSet setWithObjects:@400, @401, nil],
+            @"com.apple.CoreHaptics" : [NSSet setWithObjects:@4099, nil],
             @"SDWebImageErrorDomain" : [NSSet setWithObjects:@1000, @2002, nil],
             @"LLVideoPlayerCacheTask" : [NSSet setWithObjects:@(-999), nil],
             @"NSURLErrorDomain" : [NSSet setWithObjects:@(-999), nil],
@@ -101,16 +102,32 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
 }
 %end
 
+static BOOL shouldIgnoreException(NSString *name)
+{
+    static NSSet<NSString *> *ignoredNames = nil;
+    static dispatch_once_t    onceToken;
+    dispatch_once(&onceToken, ^{
+        ignoredNames = [NSSet setWithObjects:@"CHHapticErrorCodeServerInitFailedException", nil];
+    });
+    return [ignoredNames containsObject:name];
+}
+
 %hook NSException
 - (id)initWithName:(id)name reason:(id)reason userInfo:(id)userInfo
 {
-    [Logger error:LOG_CATEGORY_DEFAULT format:@"NSException %@: %@ %@", name, reason, userInfo];
+    if (!shouldIgnoreException(name))
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"NSException %@: %@ %@", name, reason, userInfo];
+    }
     return %orig;
 }
 
 + (id)exceptionWithName:(id)name reason:(id)reason userInfo:(id)userInfo
 {
-    [Logger error:LOG_CATEGORY_DEFAULT format:@"NSException %@: %@ %@", name, reason, userInfo];
+    if (!shouldIgnoreException(name))
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"NSException %@: %@ %@", name, reason, userInfo];
+    }
     return %orig;
 }
 %end
