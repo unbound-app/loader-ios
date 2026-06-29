@@ -47,25 +47,6 @@ static os_log_t getLoggerForCategory(const char *category)
     NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
     va_end(args);
 
-    NSString *categoryStr       = [NSString stringWithUTF8String:category];
-    BOOL      isDefaultCategory = [categoryStr isEqualToString:@"default"];
-
-    if (isDefaultCategory)
-    {
-        message = [NSString stringWithFormat:@"[Unbound] %@", message];
-    }
-    else
-    {
-        if (categoryStr.length > 0)
-        {
-            NSString *firstChar = [[categoryStr substringToIndex:1] uppercaseString];
-            NSString *restOfStr = categoryStr.length > 1 ? [categoryStr substringFromIndex:1] : @"";
-            categoryStr         = [firstChar stringByAppendingString:restOfStr];
-        }
-
-        message = [NSString stringWithFormat:@"[Unbound] [%@] %@", categoryStr, message];
-    }
-
     os_log_t logger = getLoggerForCategory(category);
 
     dispatch_async(_logQueue, ^{
