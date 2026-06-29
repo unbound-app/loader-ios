@@ -14,10 +14,10 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
             @"com.apple.AppSSO.AuthorizationError" : [NSSet setWithObjects:@(-1000), nil],
             @"RCTJavaScriptLoaderErrorDomain" : [NSSet setWithObjects:@1000, nil],
             @"NSPOSIXErrorDomain" : [NSSet setWithObjects:@2, @17, @57, nil],
-            @"kCFErrorDomainCFNetwork" : [NSSet setWithObjects:@(-1004), nil],
+            @"kCFErrorDomainCFNetwork" : [NSSet setWithObjects:@(-1005), @(-1004), nil],
             @"BSActionErrorDomain" : [NSSet setWithObjects:@1, nil],
             @"NSOSStatusErrorDomain" : [NSSet setWithObjects:@(-10813), nil],
-            @"NSCocoaErrorDomain" : [NSSet setWithObjects:@260, @516, @4864, @4, @4099, @3840, nil],
+            @"NSCocoaErrorDomain" : [NSSet setWithObjects:@258, @260, @516, @4864, @4, @4099, @3840, nil],
             @"com.appsflyer.sdk.network" : [NSSet setWithObjects:@50, nil],
             @"AVFoundationErrorDomain" : [NSSet setWithObjects:@(-11800), nil],
             @"kAFAssistantErrorDomain" : [NSSet setWithObjects:@400, @401, nil],
@@ -68,6 +68,14 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
             if (isPOSIX22 || isAppsFlyerPath || isAppsFlyerURL)
                 return YES;
         }
+    }
+
+    if ([domain isEqualToString:@"com.apple.Gestures"])
+    {
+        NSString *desc = info[NSLocalizedDescriptionKey];
+        if ((code == 7 && [desc isEqualToString:@"Custom"]) ||
+            (code == 0 && [desc isEqualToString:@"Excluded"]))
+            return YES;
     }
 
     if ([domain isEqualToString:@"_UIViewServiceErrorDomain"] && code == 1)
