@@ -34,6 +34,8 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 SHELL := /bin/bash
 
 before-all::
+	@$(MAKE) clean
+
 	@if [ ! -d "resources" ] || [ -z "$$(ls -A resources 2>/dev/null)" ]; then \
 		git submodule update --init --recursive || exit 1; \
 	fi
