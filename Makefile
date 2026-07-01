@@ -22,7 +22,7 @@ $(TWEAK_NAME)_CFLAGS = $(COMMON_FLAGS)
 $(TWEAK_NAME)_CCFLAGS = $(COMMON_FLAGS) -std=c++20
 # Resolve JSI/TurboModule symbols from Discord's React dylib at load time.
 $(TWEAK_NAME)_LDFLAGS = -undefined dynamic_lookup
-$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers UserNotifications Security SafariServices AVKit AVFoundation
+$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers UserNotifications Security SafariServices AVKit AVFoundation CoreHaptics
 
 BUNDLE_NAME = UnboundResources
 $(BUNDLE_NAME)_INSTALL_PATH = "/Library/Application\ Support/"
