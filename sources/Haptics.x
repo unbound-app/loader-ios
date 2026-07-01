@@ -15,74 +15,58 @@ static NSError *vphoneHapticsUnavailableError(void)
                             userInfo:@{NSLocalizedDescriptionKey : @"Unavailable on vphone"}];
 }
 
+%group VPhoneHaptics
+
 %hook CHHapticEngine
 - (instancetype)initAndReturnError:(NSError **)error
 {
-    if (isVPhone())
-    {
-        if (error)
-            *error = vphoneHapticsUnavailableError();
-        return nil;
-    }
-    return %orig;
+    if (error)
+        *error = vphoneHapticsUnavailableError();
+    return nil;
 }
 
 - (instancetype)initWithAudioSession:(AVAudioSession *)audioSession error:(NSError **)error
 {
-    if (isVPhone())
-    {
-        if (error)
-            *error = vphoneHapticsUnavailableError();
-        return nil;
-    }
-    return %orig;
+    if (error)
+        *error = vphoneHapticsUnavailableError();
+    return nil;
 }
 %end
 
 %hook UIFeedbackGenerator
 - (void)prepare
 {
-    if (isVPhone())
-        return;
-    %orig;
 }
 %end
 
 %hook UIImpactFeedbackGenerator
 - (void)impactOccurred
 {
-    if (isVPhone())
-        return;
-    %orig;
 }
 
 - (void)impactOccurredWithIntensity:(CGFloat)intensity
 {
-    if (isVPhone())
-        return;
-    %orig;
 }
 %end
 
 %hook UISelectionFeedbackGenerator
 - (void)selectionChanged
 {
-    if (isVPhone())
-        return;
-    %orig;
 }
 %end
 
 %hook UINotificationFeedbackGenerator
 - (void)notificationOccurred:(UINotificationFeedbackType)notificationType
 {
-    if (isVPhone())
-        return;
-    %orig;
 }
 %end
 
+%end // VPhoneHaptics
+
 %ctor
 {
-    %init();
+    if (isVPhone())
+    {
+        %init(VPhoneHaptics);
+    }
 }
