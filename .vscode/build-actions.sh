@@ -16,7 +16,9 @@ case "$ACTION" in
       exit 1
     fi
 
-    SSH_OPTS="-p 2222 -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    # Password-only auth: otherwise ssh-agent keys are tried first and can exhaust
+    # the openssh server's MaxAuthTries ("Too many authentication failures").
+    SSH_OPTS="-p 2222 -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o PreferredAuthentications=password"
     SSH_TARGET="mobile@127.0.0.1"
 
     if ! sshpass -p alpine ssh $SSH_OPTS "$SSH_TARGET" "exit" >/dev/null 2>&1; then
@@ -34,10 +36,14 @@ case "$ACTION" in
 
     REMOTE_DEB="/tmp/$(basename "$DEB")"
 
-    # -O forces the legacy SCP/rcp protocol: the vphone's dropbear has no sftp-server,
-    # which modern scp defaults to (fails with "/usr/libexec/sftp-server: No such file").
-    sshpass -p alpine scp -O -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$DEB" "$SSH_TARGET:$REMOTE_DEB"
-    sshpass -p alpine ssh $SSH_OPTS "$SSH_TARGET" "echo 'alpine' | sudo -S dpkg -i '$REMOTE_DEB' && echo 'alpine' | sudo -S killall -9 Discord; uiopen --bundleid com.hammerandchisel.discord"
+    # The vphone runs openssh-server (rootless JB, sftp-server under /var/jb), so
+    # default SFTP-mode scp works. Do NOT add -O: legacy mode needs a remote scp binary
+    # the device doesn't have ("bash: scp: command not found").
+    sshpass -p alpine scp -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o PreferredAuthentications=password "$DEB" "$SSH_TARGET:$REMOTE_DEB"
+    # -tt forces a pty so the channel closes when the command exits: the Sileo dpkg
+    # trigger can spawn children (uicache) that inherit the session's fds, and
+    # openssh otherwise waits on them -> the task hangs after "Processing triggers".
+    sshpass -p alpine ssh -tt $SSH_OPTS "$SSH_TARGET" "echo 'alpine' | sudo -S dpkg -i '$REMOTE_DEB' && echo 'alpine' | sudo -S killall -9 Discord; uiopen --bundleid com.hammerandchisel.discord </dev/null >/dev/null 2>&1"
     ;;
   Package)
     build_package

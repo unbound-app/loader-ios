@@ -1,6 +1,6 @@
 ---
 name: vphone
-description: Use when interacting with the virtual iPhone (vphone) over SSH — running commands on the device, copying files to/from it, reading or changing Unbound loader settings (e.g. loader.update.hmr), finding an app's data container, restarting Discord, or monitoring/catting Unbound logs (native os_log + JS/React Native console, timestamped). Covers the dropbear "no sftp-server"/scp -O gotcha, password sudo, and the host-side idevicesyslog log path on the jailbroken iOS VM.
+description: Use when interacting with the virtual iPhone (vphone) over SSH — running commands on the device, copying files to/from it, reading or changing Unbound loader settings (e.g. loader.update.hmr), finding an app's data container, restarting Discord, or monitoring/catting Unbound logs (native os_log + JS/React Native console, timestamped). Covers the openssh-server/SFTP scp setup (no `scp -O`), password sudo, and the host-side idevicesyslog log path on the jailbroken iOS VM.
 ---
 
 # vphone (Virtual iPhone over SSH)
@@ -13,7 +13,9 @@ Connection (defaults, override via env): `mobile@127.0.0.1:2222`, password `alpi
 
 ## Critical gotchas (why use the wrapper)
 
-- **No sftp-server.** dropbear lacks it, so plain `scp` fails with `/usr/libexec/sftp-server: No such file`. **Always use `scp -O`** (legacy rcp protocol). The wrapper does this.
+- **Password-only auth.** Pass `-o PubkeyAuthentication=no -o PreferredAuthentications=password` (the wrapper does): agent keys tried first can exhaust the server's MaxAuthTries → "Too many authentication failures".
+- **Sessions can hang after dpkg.** The Sileo trigger spawns children (uicache) that inherit the session fds; openssh waits on them. Use `ssh -tt` (force pty) for dpkg installs and redirect `uiopen`'s fds.
+- **openssh-server, not dropbear.** The device runs openssh-server (rootless JB, guest port 22 → host 2222 via usbmux). Default SFTP-mode `scp` works; **never use `scp -O`** — legacy mode needs a remote `scp` binary the device lacks (`bash: scp: command not found`). If `scp` fails with `/usr/libexec/sftp-server: No such file`, the tunnel is pointing at the old dropbear on guest port 22222 — re-forward to guest port 22.
 - **Password sudo.** Root needs `echo 'alpine' | sudo -S …`. The wrapper's `sudo` subcommand handles it.
 - **No python on device.** Don't edit JSON in place on the phone. Pull → edit host-side with `jq` → push back. The wrapper's `settings-set` does exactly this (with a `.bak` backup).
 - **Unbound settings live at** `…/Documents/Unbound/settings.json` in Discord's *Data* container, under the `unbound` store. Keys are dotted, e.g. `loader.update.hmr`, `loader.update.url`.
@@ -131,7 +133,7 @@ An MCP server exposing these same operations as tools lives in `.claude/mcp/vpho
 
 ## Common Mistakes
 
-- Using plain `scp` → sftp error. Use the wrapper (`push`/`pull`) or `scp -O`.
+- Using `scp -O` → `bash: scp: command not found` (no remote scp binary). Use the wrapper (`push`/`pull`) or plain SFTP-mode `scp`.
 - Editing `settings.json` with `sed` for anything non-trivial → risk corrupting the 38KB file (it also holds `unbound::cache`). Use `settings-set` (jq merge + backup).
 - Passing a bare string to `settings-set` → invalid JSON. Quote it: `'"value"'`.
 - Forgetting `sudo` — most device paths under `/var/mobile/Containers` need root to read.

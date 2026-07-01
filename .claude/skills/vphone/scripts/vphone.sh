@@ -2,10 +2,11 @@
 #
 # vphone.sh — thin wrapper around the virtual iPhone (vphone) reachable over SSH.
 #
-# The vphone is a jailbroken iOS VM running Discord + the Unbound loader. Its
-# dropbear sshd has NO sftp-server, so file copies MUST use `scp -O` (legacy
-# rcp protocol). `sudo` is password-based (`sudo -S`). There is no python on the
-# device, so JSON edits are done host-side and pushed back.
+# The vphone is a jailbroken iOS VM running Discord + the Unbound loader. It
+# runs openssh-server (rootless JB; guest port 22, tunneled to host 2222), so
+# default SFTP-mode scp works — do NOT use `scp -O` (no remote scp binary).
+# `sudo` is password-based (`sudo -S`). There is no python on the device, so
+# JSON edits are done host-side and pushed back.
 #
 # Connection (overridable via env):
 #   VPHONE_HOST=127.0.0.1  VPHONE_PORT=2222  VPHONE_USER=mobile  VPHONE_PASS=alpine
@@ -14,8 +15,8 @@
 #   vphone.sh ping                          # check reachability
 #   vphone.sh ssh   <cmd...>                # run a command (no sudo)
 #   vphone.sh sudo  <cmd...>                # run a command as root
-#   vphone.sh push  <local> <remote>        # copy host -> device (scp -O)
-#   vphone.sh pull  <remote> <local>        # copy device -> host (scp -O)
+#   vphone.sh push  <local> <remote>        # copy host -> device (scp/sftp)
+#   vphone.sh pull  <remote> <local>        # copy device -> host (scp/sftp)
 #   vphone.sh app-data <bundleid>           # print app Data container path
 #   vphone.sh unbound-dir                   # print the Unbound directory path
 #   vphone.sh settings-path                 # print Unbound settings.json path
@@ -31,7 +32,8 @@ VPHONE_USER="${VPHONE_USER:-mobile}"
 VPHONE_PASS="${VPHONE_PASS:-alpine}"
 DISCORD_BID="com.hammerandchisel.discord"
 
-SSH_BASE=(-p "$VPHONE_PORT" -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+# Password-only auth: agent keys tried first can exhaust the server's MaxAuthTries.
+SSH_BASE=(-p "$VPHONE_PORT" -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o PreferredAuthentications=password)
 TARGET="${VPHONE_USER}@${VPHONE_HOST}"
 
 need_sshpass() {
@@ -39,8 +41,8 @@ need_sshpass() {
 }
 
 _ssh()  { need_sshpass; sshpass -p "$VPHONE_PASS" ssh "${SSH_BASE[@]}" "$TARGET" "$@"; }
-# scp -O forces legacy protocol; modern scp defaults to sftp which dropbear lacks.
-_scp()  { need_sshpass; sshpass -p "$VPHONE_PASS" scp -O -P "$VPHONE_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$@"; }
+# SFTP-mode scp (the default); openssh-server on the device provides sftp-server.
+_scp()  { need_sshpass; sshpass -p "$VPHONE_PASS" scp -P "$VPHONE_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o PreferredAuthentications=password "$@"; }
 _sudo() { need_sshpass; sshpass -p "$VPHONE_PASS" ssh "${SSH_BASE[@]}" "$TARGET" "echo '$VPHONE_PASS' | sudo -S sh -c \"$*\" 2>/dev/null"; }
 
 app_data() {
