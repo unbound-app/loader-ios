@@ -52,7 +52,13 @@ static dispatch_queue_t monitorRegistryQueue(void)
 
 + (void)writeFile:(NSString *)path contents:(NSData *)contents
 {
-    [manager createFileAtPath:path contents:contents attributes:nil];
+    // NSDataWritingAtomic writes to a temp file and renames it into place, so a kill mid-write
+    // (jetsam, crash) can't leave a half-written settings.json or bundle behind.
+    NSError *error;
+    if (![contents writeToFile:path options:NSDataWritingAtomic error:&error])
+    {
+        [Logger error:LOG_CATEGORY_FILESYSTEM format:@"Atomic write to %@ failed. (%@)", path, error];
+    }
 }
 
 + (id)delete:(NSString *)path

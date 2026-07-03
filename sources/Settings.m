@@ -2,9 +2,24 @@
 
 NSString *const UnboundSettingsDidChangeNotification = @"UnboundSettingsDidChange";
 
+static const NSTimeInterval kSettingsSaveDebounce = 0.3;
+
 @implementation Settings
-static NSMutableDictionary *data = nil;
-static NSString            *path = nil;
+static NSMutableDictionary *data      = nil;
+static NSString            *path      = nil;
+static dispatch_source_t    saveTimer = nil;
+
+// `data` is read on whatever thread calls the JSI-exposed getters and written from the toolbox
+// UI (main thread) and the settings.json file-watcher (a background queue via FileSystem
+// monitor:). NSRecursiveLock (rather than a serial queue) lets methods that call each other
+// (set: -> scheduleSave, loadSettings -> reset) reacquire on the same thread without deadlocking.
+static NSRecursiveLock *settingsLock(void)
+{
+    static NSRecursiveLock *lock = nil;
+    static dispatch_once_t  onceToken;
+    dispatch_once(&onceToken, ^{ lock = [[NSRecursiveLock alloc] init]; });
+    return lock;
+}
 
 + (void)init
 {
@@ -24,23 +39,72 @@ static NSString            *path = nil;
 
 + (void)loadSettings
 {
+    [settingsLock() lock];
+    @try
+    {
+        if (![FileSystem exists:path])
+        {
+            [Settings reset];
+        }
+
+        NSData *settings = [FileSystem readFile:path];
+
+        NSError            *error;
+        NSMutableDictionary *parsed = [NSJSONSerialization JSONObjectWithData:settings
+                                                                       options:NSJSONReadingMutableContainers
+                                                                         error:&error];
+
+        if (error || ![parsed isKindOfClass:[NSMutableDictionary class]])
+        {
+            [Logger error:LOG_CATEGORY_SETTINGS
+                   format:@"settings.json is corrupt, backing it up and resetting. (%@)", error];
+            [Settings backupCorruptSettingsFile];
+            [Settings reset];
+            parsed = [NSMutableDictionary dictionary];
+        }
+
+        data = parsed;
+    }
+    @finally
+    {
+        [settingsLock() unlock];
+    }
+}
+
+// Preserves the unreadable file instead of silently discarding it, so a corrupt settings.json
+// never just erases the user's configuration without a trace.
++ (void)backupCorruptSettingsFile
+{
     if (![FileSystem exists:path])
     {
-        [Settings reset];
+        return;
     }
 
-    NSData *settings = [FileSystem readFile:path];
+    NSString *backupPath =
+        [NSString stringWithFormat:@"%@.corrupt-%lld", path, (long long) [[NSDate date] timeIntervalSince1970]];
 
     NSError *error;
-    data = [NSJSONSerialization JSONObjectWithData:settings
-                                           options:NSJSONReadingMutableContainers
-                                             error:&error];
+    [[NSFileManager defaultManager] copyItemAtPath:path toPath:backupPath error:&error];
+
+    if (error)
+    {
+        [Logger error:LOG_CATEGORY_SETTINGS
+               format:@"Failed to back up corrupt settings.json. (%@)", error];
+    }
+    else
+    {
+        [Logger error:LOG_CATEGORY_SETTINGS format:@"Backed up corrupt settings.json to %@", backupPath];
+    }
 }
 
 + (id)rawValueForStore:(NSString *)store key:(NSString *)key
 {
+    [settingsLock() lock];
     id payload = data[store];
-    return payload ? [payload valueForKeyPath:key] : nil;
+    id value   = payload ? [payload valueForKeyPath:key] : nil;
+    [settingsLock() unlock];
+
+    return value;
 }
 
 + (NSString *)getString:(NSString *)store key:(NSString *)key def:(NSString *)def
@@ -71,6 +135,7 @@ static NSString            *path = nil;
 
 + (void)set:(NSString *)store key:(NSString *)key value:(id)value
 {
+    [settingsLock() lock];
     @try
     {
         if (!data)
@@ -105,11 +170,15 @@ static NSString            *path = nil;
             res = res[key];
         }
 
-        [Settings save];
+        [Settings scheduleSave];
     }
     @catch (NSException *e)
     {
         [Logger error:LOG_CATEGORY_SETTINGS format:@"Settings set failed. %@", e];
+    }
+    @finally
+    {
+        [settingsLock() unlock];
     }
 }
 
@@ -120,17 +189,41 @@ static NSString            *path = nil;
     [FileSystem writeFile:path contents:[payload dataUsingEncoding:NSUTF8StringEncoding]];
 }
 
+// `data` is already updated synchronously by the time this is scheduled, so every in-process
+// reader (including the preload script built from getSettings) sees the change immediately -
+// only the disk write is debounced, coalescing bursts of rapid toggles into one write.
++ (void)scheduleSave
+{
+    [settingsLock() lock];
+
+    if (saveTimer)
+    {
+        dispatch_source_cancel(saveTimer);
+    }
+
+    saveTimer = [Utilities createDebounceTimer:kSettingsSaveDebounce
+                                          queue:dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)
+                                          block:^{ [Settings save]; }];
+
+    [settingsLock() unlock];
+}
+
 + (void)save
 {
-    NSString *payload = [Settings getSettings];
-
-    NSData *contents = [payload dataUsingEncoding:NSUTF8StringEncoding];
+    [settingsLock() lock];
+    NSString *payload  = [Settings getSettings];
+    NSData   *contents = [payload dataUsingEncoding:NSUTF8StringEncoding];
+    [settingsLock() unlock];
 
     [FileSystem writeFile:path contents:contents];
 }
 
 + (NSString *)getSettings
 {
-    return [Utilities JSONStringFromObject:data options:NSJSONWritingPrettyPrinted fallback:@"{}"];
+    [settingsLock() lock];
+    NSString *json = [Utilities JSONStringFromObject:data options:NSJSONWritingPrettyPrinted fallback:@"{}"];
+    [settingsLock() unlock];
+
+    return json;
 }
 @end

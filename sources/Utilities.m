@@ -60,32 +60,12 @@ static NSString *bundle = nil;
 
 + (void)alert:(NSString *)message
 {
-    [self presentAlert:message
-                 title:@"Unbound"
-               buttons:@[
-                   [UIAlertAction actionWithTitle:@"Okay"
-                                            style:UIAlertActionStyleDefault
-                                          handler:nil],
-                   [self createDiscordInviteButton]
-               ]
-               timeout:0
-               warning:NO
-                   tts:NO];
+    [self presentAlert:message title:@"Unbound" buttons:nil timeout:0 warning:NO tts:NO];
 }
 
 + (void)alert:(NSString *)message title:(NSString *)title
 {
-    [self presentAlert:message
-                 title:title
-               buttons:@[
-                   [UIAlertAction actionWithTitle:@"Okay"
-                                            style:UIAlertActionStyleDefault
-                                          handler:nil],
-                   [self createDiscordInviteButton]
-               ]
-               timeout:0
-               warning:NO
-                   tts:NO];
+    [self presentAlert:message title:title buttons:nil timeout:0 warning:NO tts:NO];
 }
 
 + (void)alert:(NSString *)message
@@ -105,17 +85,7 @@ static NSString *bundle = nil;
 
 + (void)alert:(NSString *)message title:(NSString *)title timeout:(NSInteger)timeout
 {
-    [self presentAlert:message
-                 title:title
-               buttons:@[
-                   [UIAlertAction actionWithTitle:@"Okay"
-                                            style:UIAlertActionStyleDefault
-                                          handler:nil],
-                   [self createDiscordInviteButton]
-               ]
-               timeout:timeout
-               warning:NO
-                   tts:NO];
+    [self presentAlert:message title:title buttons:nil timeout:timeout warning:NO tts:NO];
 }
 
 + (void)alert:(NSString *)message
@@ -132,17 +102,7 @@ static NSString *bundle = nil;
       timeout:(NSInteger)timeout
       warning:(BOOL)warning
 {
-    [self presentAlert:message
-                 title:title
-               buttons:@[
-                   [UIAlertAction actionWithTitle:@"Okay"
-                                            style:UIAlertActionStyleDefault
-                                          handler:nil],
-                   [self createDiscordInviteButton]
-               ]
-               timeout:timeout
-               warning:warning
-                   tts:NO];
+    [self presentAlert:message title:title buttons:nil timeout:timeout warning:warning tts:NO];
 }
 
 + (void)alert:(NSString *)message
@@ -151,17 +111,7 @@ static NSString *bundle = nil;
       warning:(BOOL)warning
           tts:(BOOL)tts
 {
-    [self presentAlert:message
-                 title:title
-               buttons:@[
-                   [UIAlertAction actionWithTitle:@"Okay"
-                                            style:UIAlertActionStyleDefault
-                                          handler:nil],
-                   [self createDiscordInviteButton]
-               ]
-               timeout:timeout
-               warning:warning
-                   tts:tts];
+    [self presentAlert:message title:title buttons:nil timeout:timeout warning:warning tts:tts];
 }
 
 + (void)alert:(NSString *)message title:(NSString *)title warning:(BOOL)warning
@@ -736,6 +686,16 @@ static NSString *bundle = nil;
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
 }
 
+// The team's virtualized jailbreak test device. Several places (Haptics.x, Toolbox.x) need to
+// special-case behavior there, so this lives here as the single source of truth.
++ (BOOL)isVPhone
+{
+    static BOOL            result;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ result = [[Utilities getDeviceModel] isEqualToString:@"iPhone99,11"]; });
+    return result;
+}
+
 + (NSString *)getiOSVersionString
 {
     UIDevice *device = [UIDevice currentDevice];
@@ -988,6 +948,21 @@ static __weak DCDBundleUpdaterManager *gBundleUpdater = nil;
     dispatch_async(dispatch_get_main_queue(), ^{ [updater reload]; });
 }
 
+// parseColor: runs on every themed color lookup (Themes.x swizzles DCDThemeColor's whole method
+// list through it), so the "extract the (...) args" regex is compiled once and reused rather than
+// recompiled on every rgb()/rgba() call.
+static NSRegularExpression *colorArgsRegex(void)
+{
+    static NSRegularExpression *regex = nil;
+    static dispatch_once_t      onceToken;
+    dispatch_once(&onceToken, ^{
+        regex = [NSRegularExpression regularExpressionWithPattern:@"\\((.*)\\)"
+                                                            options:NSRegularExpressionCaseInsensitive
+                                                              error:nil];
+    });
+    return regex;
+}
+
 + (UIColor *)parseColor:(NSString *)color
 {
     if ([color hasPrefix:@"#"])
@@ -1013,10 +988,7 @@ static __weak DCDBundleUpdaterManager *gBundleUpdater = nil;
 
     if ([color hasPrefix:@"rgba"])
     {
-        NSRegularExpression *regex =
-            [NSRegularExpression regularExpressionWithPattern:@"\\((.*)\\)"
-                                                      options:NSRegularExpressionCaseInsensitive
-                                                        error:nil];
+        NSRegularExpression *regex = colorArgsRegex();
 
         NSArray  *matches = [regex matchesInString:color
                                            options:0
@@ -1056,10 +1028,7 @@ static __weak DCDBundleUpdaterManager *gBundleUpdater = nil;
 
     if ([color hasPrefix:@"rgb"])
     {
-        NSRegularExpression *regex =
-            [NSRegularExpression regularExpressionWithPattern:@"\\((.*)\\)"
-                                                      options:NSRegularExpressionCaseInsensitive
-                                                        error:nil];
+        NSRegularExpression *regex = colorArgsRegex();
 
         NSArray  *matches = [regex matchesInString:color
                                            options:0

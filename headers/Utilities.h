@@ -126,6 +126,7 @@ extern NSString *const TROLL_STORE_LITE_PATH;
 
 + (NSString *)getDeviceModel;
 + (NSString *)getiOSVersionString;
++ (BOOL)isVPhone;
 
 + (BOOL)isLoadedWithElleKit;
 

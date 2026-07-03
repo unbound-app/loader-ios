@@ -1,13 +1,5 @@
 #import "Haptics.h"
 
-static BOOL isVPhone(void)
-{
-    static BOOL            result;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ result = [[Utilities getDeviceModel] isEqualToString:@"iPhone99,11"]; });
-    return result;
-}
-
 static NSError *vphoneHapticsUnavailableError(void)
 {
     return [NSError errorWithDomain:@"com.apple.CoreHaptics"
@@ -65,7 +57,7 @@ static NSError *vphoneHapticsUnavailableError(void)
 
 %ctor
 {
-    if (isVPhone())
+    if ([Utilities isVPhone])
     {
         %init(VPhoneHaptics);
     }
