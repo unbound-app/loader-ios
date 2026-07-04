@@ -70,14 +70,19 @@ static UIWindowScene *activeWindowScene(void)
 // instead of just under the button - a window that's physically only 52x52 can't do that.
 static UIWindow *vphoneToolboxButtonWindow = nil;
 
-static void ensureVPhoneToolboxButton(void)
+static void ensureVPhoneToolboxButton(UIWindow *keyWindow)
 {
     if (![Utilities isVPhone] || vphoneToolboxButtonWindow)
     {
         return;
     }
 
-    UIWindowScene *activeScene = activeWindowScene();
+    // Don't scan connectedScenes for a UISceneActivationStateForegroundActive scene here: during
+    // launch becomeKeyWindow can fire before the scene's activation state has flipped, and since
+    // it typically only fires once for the main window, that scan losing the race meant the
+    // button never got a second chance to appear. keyWindow.windowScene is already set by the
+    // time a window becomes key, race-free.
+    UIWindowScene *activeScene = keyWindow.windowScene ?: activeWindowScene();
     if (!activeScene)
     {
         return;
@@ -128,7 +133,7 @@ static void ensureVPhoneToolboxButton(void)
 {
     %orig;
     addSettingsGestureToWindow(self);
-    ensureVPhoneToolboxButton();
+    ensureVPhoneToolboxButton(self);
 }
 
 - (void)motionBegan:(UIEventSubtype)motion withEvent:(UIEvent *)event
