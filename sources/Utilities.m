@@ -686,8 +686,6 @@ static NSString *bundle = nil;
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
 }
 
-// The team's virtualized jailbreak test device. Several places (Haptics.x, Toolbox.x) need to
-// special-case behavior there, so this lives here as the single source of truth.
 + (BOOL)isVPhone
 {
     static BOOL            result;

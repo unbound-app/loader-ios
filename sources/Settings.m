@@ -47,23 +47,38 @@ static NSRecursiveLock *settingsLock(void)
             [Settings reset];
         }
 
-        NSData *settings = [FileSystem readFile:path];
+        NSMutableDictionary *parsed = nil;
 
-        NSError            *error;
-        NSMutableDictionary *parsed = [NSJSONSerialization JSONObjectWithData:settings
-                                                                       options:NSJSONReadingMutableContainers
-                                                                         error:&error];
-
-        if (error || ![parsed isKindOfClass:[NSMutableDictionary class]])
+        @try
         {
+            NSData *settings = [FileSystem readFile:path];
+
+            NSError *error;
+            parsed = [NSJSONSerialization JSONObjectWithData:settings
+                                                      options:NSJSONReadingMutableContainers
+                                                        error:&error];
+
+            if (error || ![parsed isKindOfClass:[NSMutableDictionary class]])
+            {
+                [Logger error:LOG_CATEGORY_SETTINGS
+                       format:@"settings.json is corrupt, backing it up and resetting. (%@)", error];
+                [Settings backupCorruptSettingsFile];
+                [Settings reset];
+                parsed = nil;
+            }
+        }
+        @catch (NSException *e)
+        {
+            // readFile: throws if the file is missing or unreadable (e.g. reset's own write
+            // above silently failed) - same recovery as corrupt JSON, just with nothing to
+            // back up.
             [Logger error:LOG_CATEGORY_SETTINGS
-                   format:@"settings.json is corrupt, backing it up and resetting. (%@)", error];
+                   format:@"Failed to read settings.json, resetting. (%@)", e.reason];
             [Settings backupCorruptSettingsFile];
             [Settings reset];
-            parsed = [NSMutableDictionary dictionary];
         }
 
-        data = parsed;
+        data = parsed ?: [NSMutableDictionary dictionary];
     }
     @finally
     {

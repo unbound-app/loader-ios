@@ -46,6 +46,19 @@ static void triggerHapticFeedback(void)
     [feedbackGenerator impactOccurred];
 }
 
+static UIWindowScene *activeWindowScene(void)
+{
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes)
+    {
+        if (scene.activationState == UISceneActivationStateForegroundActive &&
+            [scene isKindOfClass:[UIWindowScene class]])
+        {
+            return (UIWindowScene *) scene;
+        }
+    }
+    return nil;
+}
+
 // The vphone can't synthesize the shake motion or a simultaneous 3-finger touch that the two
 // gestures above rely on, so it needs a plain single-tap way in. A small always-on-top button,
 // shown only on the vphone, calls the exact same entry point as the gestures.
@@ -64,17 +77,7 @@ static void ensureVPhoneToolboxButton(void)
         return;
     }
 
-    UIWindowScene *activeScene = nil;
-    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes)
-    {
-        if (scene.activationState == UISceneActivationStateForegroundActive &&
-            [scene isKindOfClass:[UIWindowScene class]])
-        {
-            activeScene = (UIWindowScene *) scene;
-            break;
-        }
-    }
-
+    UIWindowScene *activeScene = activeWindowScene();
     if (!activeScene)
     {
         return;
@@ -971,17 +974,7 @@ void showToolboxSheet(void)
                                                       action:@selector(dismiss)];
     settingsVC.navigationItem.rightBarButtonItem = doneButton;
 
-    UIWindowScene *activeScene = nil;
-    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes)
-    {
-        if (scene.activationState == UISceneActivationStateForegroundActive &&
-            [scene isKindOfClass:[UIWindowScene class]])
-        {
-            activeScene = (UIWindowScene *) scene;
-            break;
-        }
-    }
-
+    UIWindowScene *activeScene = activeWindowScene();
     if (!activeScene)
         return;
 

@@ -164,10 +164,18 @@ static UIView *islandOverlayView = nil;
         return;
     }
 
+    UIWindow *keyWindow = [self keyWindow];
+    if (!keyWindow)
+    {
+        [Logger error:LOG_CATEGORY_UTILITIES
+               format:@"Failed to find key window for Dynamic Island overlay"];
+        return;
+    }
+
     CGFloat width  = 126.0;
     CGFloat height = 37.33;
 
-    CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+    CGFloat screenWidth = keyWindow.bounds.size.width;
     CGFloat x           = (screenWidth - width) / 2;
     CGFloat y           = 11.0;
 
@@ -206,28 +214,10 @@ static UIView *islandOverlayView = nil;
 
     [islandOverlayView addSubview:logoView];
 
-    UIWindow *keyWindow = nil;
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
-    {
-        if (scene.activationState == UISceneActivationStateForegroundActive)
-        {
-            keyWindow = ((UIWindowScene *) scene).windows.firstObject;
-            break;
-        }
-    }
-
-    if (keyWindow)
-    {
-        [keyWindow addSubview:islandOverlayView];
-        [keyWindow bringSubviewToFront:islandOverlayView];
-        [Logger info:LOG_CATEGORY_UTILITIES
-              format:@"Successfully added Dynamic Island overlay to key window"];
-    }
-    else
-    {
-        [Logger error:LOG_CATEGORY_UTILITIES
-               format:@"Failed to find key window for Dynamic Island overlay"];
-    }
+    [keyWindow addSubview:islandOverlayView];
+    [keyWindow bringSubviewToFront:islandOverlayView];
+    [Logger info:LOG_CATEGORY_UTILITIES
+          format:@"Successfully added Dynamic Island overlay to key window"];
 }
 
 + (void)initializeDynamicIslandOverlay
@@ -292,24 +282,13 @@ static UIView *islandOverlayView = nil;
         return;
     }
 
-    UIWindow *window = nil;
-
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)
-    {
-        if (scene.activationState == UISceneActivationStateForegroundActive)
-        {
-            UIWindowScene *windowScene = (UIWindowScene *) scene;
-            window                     = windowScene.windows.firstObject;
-            break;
-        }
-    }
-
+    UIWindow *window = [self keyWindow];
     if (!window)
     {
         return;
     }
 
-    CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+    CGFloat screenWidth = window.bounds.size.width;
     CGFloat height      = 52.0;
     CGFloat yPosition   = window.safeAreaInsets.top;
 
