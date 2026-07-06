@@ -1,4 +1,5 @@
 #import "Toolbox.h"
+#import "DevOverlay.h"
 
 @implementation Toolbox
 
@@ -60,80 +61,15 @@ static UIWindowScene *activeWindowScene(void)
 }
 
 // The vphone can't synthesize the shake motion or a simultaneous 3-finger touch that the two
-// gestures above rely on, so it needs a plain single-tap way in. A small always-on-top button,
-// shown only on the vphone, calls the exact same entry point as the gestures.
-//
-// The window is deliberately kept exactly button-sized (not full-screen): a scene-attached
-// UIWindow ignores a custom .frame set before it's ever been shown (it snaps to the screen
-// bounds), so the frame is applied AFTER `hidden = NO` and followed by a forced layout pass. A
-// full-screen click-through window was tried first and ended up swallowing touches everywhere
-// instead of just under the button - a window that's physically only 52x52 can't do that.
-static UIWindow *vphoneToolboxButtonWindow = nil;
-
-static void ensureVPhoneToolboxButton(UIWindow *keyWindow)
-{
-    if (![Utilities isVPhone] || vphoneToolboxButtonWindow)
-    {
-        return;
-    }
-
-    // Don't scan connectedScenes for a UISceneActivationStateForegroundActive scene here: during
-    // launch becomeKeyWindow can fire before the scene's activation state has flipped, and since
-    // it typically only fires once for the main window, that scan losing the race meant the
-    // button never got a second chance to appear. keyWindow.windowScene is already set by the
-    // time a window becomes key, race-free.
-    UIWindowScene *activeScene = keyWindow.windowScene ?: activeWindowScene();
-    if (!activeScene)
-    {
-        return;
-    }
-
-    UIWindow *buttonWindow       = [[UIWindow alloc] initWithWindowScene:activeScene];
-    buttonWindow.windowLevel     = UIWindowLevelAlert - 1;
-    buttonWindow.backgroundColor = [UIColor clearColor];
-
-    UIViewController *rootVC        = [UIViewController new];
-    rootVC.view.backgroundColor     = [UIColor clearColor];
-    buttonWindow.rootViewController = rootVC;
-
-    buttonWindow.hidden = NO;
-
-    const CGFloat side   = 52;
-    CGRect        bounds = activeScene.screen.bounds;
-    buttonWindow.frame   = CGRectMake(bounds.size.width - side - 16, bounds.size.height - side - 96,
-                                      side, side);
-    [buttonWindow layoutIfNeeded];
-
-    UIButton *button           = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.frame               = rootVC.view.bounds;
-    button.autoresizingMask    = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    button.backgroundColor     = [[UIColor systemGrayColor] colorWithAlphaComponent:0.35];
-    button.tintColor           = UIColor.whiteColor;
-    button.layer.cornerRadius  = side / 2.0;
-    button.layer.masksToBounds = YES;
-
-    UIImageSymbolConfiguration *symbolConfig =
-        [UIImageSymbolConfiguration configurationWithPointSize:22
-                                                        weight:UIImageSymbolWeightRegular];
-    [button setImage:[UIImage systemImageNamed:@"wrench.and.screwdriver.fill"
-                              withConfiguration:symbolConfig]
-             forState:UIControlStateNormal];
-
-    [button addTarget:[Toolbox class]
-                  action:@selector(showToolboxMenu)
-        forControlEvents:UIControlEventTouchUpInside];
-
-    [rootVC.view addSubview:button];
-
-    vphoneToolboxButtonWindow = buttonWindow;
-}
-
+// gestures above rely on, so it needs a plain single-tap way in. DevOverlay owns the actual
+// floating button/window (it's grown into a full dev-tools menu, not just a toolbox trigger),
+// keyed off the same becomeKeyWindow hook that installs the gestures.
 %hook UIWindow
 - (void)becomeKeyWindow
 {
     %orig;
     addSettingsGestureToWindow(self);
-    ensureVPhoneToolboxButton(self);
+    [DevOverlay ensureOverlayForWindow:self];
 }
 
 - (void)motionBegan:(UIEventSubtype)motion withEvent:(UIEvent *)event
