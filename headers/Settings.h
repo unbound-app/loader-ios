@@ -20,6 +20,7 @@ extern NSString *const UnboundSettingsDidChangeNotification;
 + (BOOL)getBoolean:(NSString *)store key:(NSString *)key def:(BOOL)def;
 + (void)set:(NSString *)store key:(NSString *)key value:(id)value;
 + (NSString *)getSettings;
++ (BOOL)loadFromJSONString:(NSString *)json error:(NSError **)error;
 + (void)loadSettings;
 + (void)reset;
 + (void)init;

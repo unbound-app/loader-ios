@@ -241,4 +241,51 @@ static NSRecursiveLock *settingsLock(void)
 
     return json;
 }
+
+// Replaces the whole in-memory store from raw JSON (e.g. a dev settings editor) and persists it
+// immediately - unlike set:, which only ever touches one key, this can't go through the debounced
+// scheduleSave path since a bad edit should fail loudly rather than silently overwrite good data
+// on the next timer tick.
++ (BOOL)loadFromJSONString:(NSString *)json error:(NSError **)error
+{
+    NSData *jsonData = [json dataUsingEncoding:NSUTF8StringEncoding];
+    if (!jsonData)
+    {
+        if (error)
+        {
+            *error = [NSError errorWithDomain:@"Settings"
+                                          code:1
+                                      userInfo:@{NSLocalizedDescriptionKey : @"Not valid UTF-8"}];
+        }
+        return NO;
+    }
+
+    NSError *jsonError;
+    id parsed = [NSJSONSerialization JSONObjectWithData:jsonData
+                                                 options:NSJSONReadingMutableContainers
+                                                   error:&jsonError];
+    if (jsonError || ![parsed isKindOfClass:[NSMutableDictionary class]])
+    {
+        if (error)
+        {
+            *error = jsonError ?: [NSError errorWithDomain:@"Settings"
+                                                        code:2
+                                                    userInfo:@{
+                                                        NSLocalizedDescriptionKey :
+                                                            @"Root must be a JSON object"
+                                                    }];
+        }
+        return NO;
+    }
+
+    [settingsLock() lock];
+    data = parsed;
+    [settingsLock() unlock];
+
+    [Settings save];
+    [[NSNotificationCenter defaultCenter] postNotificationName:UnboundSettingsDidChangeNotification
+                                                         object:nil];
+
+    return YES;
+}
 @end

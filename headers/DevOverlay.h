@@ -3,6 +3,7 @@
 
 #import "ChatUI.h"
 #import "PluginAPI.h"
+#import "Settings.h"
 #import "Toolbox.h"
 #import "Utilities.h"
 

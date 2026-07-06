@@ -39,6 +39,210 @@
 }
 @end
 
+// A near-full-screen card for editing settings.json's raw JSON directly, matching the Unbound
+// Toolbox card's visual language (blur, continuous corners, backdrop tap-to-dismiss).
+@interface DevOverlaySettingsEditorViewController : UIViewController <UIGestureRecognizerDelegate>
+@property (nonatomic, strong) UIView *cardView;
+@property (nonatomic, strong) UITextView *textView;
+@property (nonatomic, strong) UILabel *errorLabel;
+@end
+
+@implementation DevOverlaySettingsEditorViewController
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    [self setupCard];
+}
+
+- (void)setupCard
+{
+    self.view.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.45];
+
+    // shouldReceiveTouch rejects touches over the card outright - see the identical pattern (and
+    // the reason for it) on UnboundToolboxViewController.
+    UITapGestureRecognizer *backdropTap =
+        [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cancelTapped)];
+    backdropTap.delegate = self;
+    [self.view addGestureRecognizer:backdropTap];
+
+    UIVisualEffectView *card = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    card.layer.cornerRadius                        = 28;
+    card.layer.cornerCurve                         = kCACornerCurveContinuous;
+    card.layer.masksToBounds                       = YES;
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:card];
+    self.cardView = card;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [card.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor
+                                        constant:8],
+        [card.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor
+                                           constant:-8],
+    ]];
+
+    UILabel *titleLabel                                  = [[UILabel alloc] init];
+    titleLabel.text                                      = @"Edit Settings JSON";
+    titleLabel.font       = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
+    titleLabel.textColor  = UIColor.labelColor;
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+
+    UIButton *closeButton = [self addCircleButtonWithSystemImage:@"xmark"
+                                                            action:@selector(cancelTapped)
+                                                            toView:card.contentView];
+
+    UIButton *saveButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [saveButton setTitle:@"Save" forState:UIControlStateNormal];
+    saveButton.titleLabel.font                          = [UIFont systemFontOfSize:16
+                                                            weight:UIFontWeightSemibold];
+    saveButton.tintColor                                = UIColor.systemBlueColor;
+    saveButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [saveButton addTarget:self
+                  action:@selector(saveTapped)
+        forControlEvents:UIControlEventTouchUpInside];
+
+    UIView *divider                                  = [[UIView alloc] init];
+    divider.backgroundColor                          = [UIColor.labelColor colorWithAlphaComponent:0.08];
+    divider.translatesAutoresizingMaskIntoConstraints = NO;
+
+    self.errorLabel               = [[UILabel alloc] init];
+    self.errorLabel.textColor     = UIColor.systemRedColor;
+    self.errorLabel.font          = [UIFont systemFontOfSize:12];
+    self.errorLabel.numberOfLines = 2;
+    self.errorLabel.hidden        = YES;
+    self.errorLabel.translatesAutoresizingMaskIntoConstraints = NO;
+
+    self.textView                             = [[UITextView alloc] init];
+    self.textView.backgroundColor             = UIColor.clearColor;
+    self.textView.font = [UIFont monospacedSystemFontOfSize:13 weight:UIFontWeightRegular];
+    self.textView.textColor                   = UIColor.labelColor;
+    self.textView.autocorrectionType          = UITextAutocorrectionTypeNo;
+    self.textView.autocapitalizationType      = UITextAutocapitalizationTypeNone;
+    self.textView.smartQuotesType             = UITextSmartQuotesTypeNo;
+    self.textView.smartDashesType             = UITextSmartDashesTypeNo;
+    self.textView.keyboardType                = UIKeyboardTypeASCIICapable;
+    self.textView.text                        = [Settings getSettings];
+    self.textView.translatesAutoresizingMaskIntoConstraints = NO;
+
+    [card.contentView addSubview:titleLabel];
+    [card.contentView addSubview:saveButton];
+    [card.contentView addSubview:divider];
+    [card.contentView addSubview:self.errorLabel];
+    [card.contentView addSubview:self.textView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [closeButton.centerYAnchor constraintEqualToAnchor:titleLabel.centerYAnchor],
+        [saveButton.trailingAnchor constraintEqualToAnchor:closeButton.leadingAnchor constant:-8],
+        [saveButton.centerYAnchor constraintEqualToAnchor:titleLabel.centerYAnchor],
+
+        [titleLabel.leadingAnchor constraintEqualToAnchor:card.contentView.leadingAnchor
+                                                  constant:20],
+
+        [divider.leadingAnchor constraintEqualToAnchor:card.contentView.leadingAnchor],
+        [divider.trailingAnchor constraintEqualToAnchor:card.contentView.trailingAnchor],
+        [divider.topAnchor constraintEqualToAnchor:closeButton.bottomAnchor constant:12],
+        [divider.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
+
+        [self.errorLabel.leadingAnchor constraintEqualToAnchor:card.contentView.leadingAnchor
+                                                       constant:20],
+        [self.errorLabel.trailingAnchor constraintEqualToAnchor:card.contentView.trailingAnchor
+                                                        constant:-20],
+        [self.errorLabel.topAnchor constraintEqualToAnchor:divider.bottomAnchor constant:8],
+
+        [self.textView.topAnchor constraintEqualToAnchor:self.errorLabel.bottomAnchor constant:4],
+        [self.textView.leadingAnchor constraintEqualToAnchor:card.contentView.leadingAnchor
+                                                      constant:12],
+        [self.textView.trailingAnchor constraintEqualToAnchor:card.contentView.trailingAnchor
+                                                       constant:-12],
+        [self.textView.bottomAnchor constraintEqualToAnchor:card.contentView.bottomAnchor
+                                                     constant:-12],
+    ]];
+}
+
+// Matches DevOverlay's own button pattern: blur as a sibling backdrop, not nested inside the
+// button, so UIButtonTypeSystem's internal content management can't bury the icon.
+- (UIButton *)addCircleButtonWithSystemImage:(NSString *)imageName
+                                       action:(SEL)action
+                                       toView:(UIView *)container
+{
+    UIView *backdrop                                   = [[UIView alloc] init];
+    backdrop.translatesAutoresizingMaskIntoConstraints = NO;
+    backdrop.layer.cornerRadius                        = 18;
+    backdrop.layer.cornerCurve                         = kCACornerCurveContinuous;
+    backdrop.layer.masksToBounds                       = YES;
+    backdrop.userInteractionEnabled                    = NO;
+
+    UIVisualEffectView *blur = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    blur.translatesAutoresizingMaskIntoConstraints = NO;
+    [backdrop addSubview:blur];
+
+    UIButton *button                                 = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.tintColor                                 = UIColor.labelColor;
+    button.backgroundColor                           = UIColor.clearColor;
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+
+    UIImageSymbolConfiguration *cfg =
+        [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightBold];
+    [button setImage:[UIImage systemImageNamed:imageName withConfiguration:cfg]
+             forState:UIControlStateNormal];
+    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+
+    [container addSubview:backdrop];
+    [container addSubview:button];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [blur.topAnchor constraintEqualToAnchor:backdrop.topAnchor],
+        [blur.leadingAnchor constraintEqualToAnchor:backdrop.leadingAnchor],
+        [blur.trailingAnchor constraintEqualToAnchor:backdrop.trailingAnchor],
+        [blur.bottomAnchor constraintEqualToAnchor:backdrop.bottomAnchor],
+
+        [backdrop.topAnchor constraintEqualToAnchor:container.topAnchor constant:12],
+        [backdrop.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-12],
+        [backdrop.widthAnchor constraintEqualToConstant:36],
+        [backdrop.heightAnchor constraintEqualToConstant:36],
+
+        [button.topAnchor constraintEqualToAnchor:backdrop.topAnchor],
+        [button.leadingAnchor constraintEqualToAnchor:backdrop.leadingAnchor],
+        [button.trailingAnchor constraintEqualToAnchor:backdrop.trailingAnchor],
+        [button.bottomAnchor constraintEqualToAnchor:backdrop.bottomAnchor],
+    ]];
+
+    return button;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+       shouldReceiveTouch:(UITouch *)touch
+{
+    CGPoint point = [touch locationInView:self.view];
+    return !CGRectContainsPoint(self.cardView.frame, point);
+}
+
+- (void)cancelTapped
+{
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)saveTapped
+{
+    [self.view endEditing:YES];
+
+    NSError *error;
+    if (![Settings loadFromJSONString:self.textView.text error:&error])
+    {
+        self.errorLabel.text   = error.localizedDescription ?: @"Invalid JSON";
+        self.errorLabel.hidden = NO;
+        return;
+    }
+
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+@end
+
 // Floating button exposing native-module features with no on-device trigger otherwise (message
 // bubbles, avatar radius, notifications). Shown on vphone always, and on any DEBUG build.
 //
@@ -316,7 +520,7 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
 
     NSArray<UIView *> *rows = @[
         [self bubbleToggleRow], [self avatarRadiusCycleRow], [self notificationTestRow],
-        [self openToolboxRow]
+        [self reloadBundleRow], [self editSettingsRow], [self openToolboxRow]
     ];
     for (UIView *row in rows)
     {
@@ -506,6 +710,41 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
                         action:^{
                             [Toolbox showToolboxMenu];
                         }];
+}
+
++ (DevOverlayRowButton *)reloadBundleRow
+{
+    return [self rowWithTitle:@"Reload Bundle"
+                   systemImage:@"arrow.triangle.2.circlepath"
+                          isOn:NO
+                dismissesOnTap:YES
+                        action:^{
+                            [Utilities reloadApp];
+                        }];
+}
+
++ (DevOverlayRowButton *)editSettingsRow
+{
+    return [self rowWithTitle:@"Edit Settings JSON"
+                   systemImage:@"doc.text"
+                          isOn:NO
+                dismissesOnTap:YES
+                        action:^{
+                            [self presentSettingsEditor];
+                        }];
+}
+
++ (void)presentSettingsEditor
+{
+    UIViewController *presenter = [Utilities topViewController];
+    if (!presenter)
+        return;
+
+    DevOverlaySettingsEditorViewController *editor =
+        [[DevOverlaySettingsEditorViewController alloc] init];
+    editor.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    editor.modalTransitionStyle   = UIModalTransitionStyleCrossDissolve;
+    [presenter presentViewController:editor animated:YES completion:nil];
 }
 
 #pragma mark - Development build banner
