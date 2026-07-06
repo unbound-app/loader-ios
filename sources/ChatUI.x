@@ -455,14 +455,29 @@ static UIColor *messageCellDynamicColor = nil;
 
 + (void)updateMessageCellFrame:(DCDMessageTableViewCell *)cell
 {
+    [self updateMessageCellFrame:cell retriesRemaining:3];
+}
+
++ (void)updateMessageCellFrame:(DCDMessageTableViewCell *)cell retriesRemaining:(int)retriesRemaining
+{
     if (!cell.customBackgroundView || cell.customBackgroundView.hidden)
         return;
 
     CGRect frame = [self contentBubbleFrameForCell:cell];
     if (CGRectIsNull(frame) || CGRectIsEmpty(frame))
     {
-        // Unrecognized message shape - fall back to the whole cell over a stale/zero frame.
-        frame = cell.contentView.bounds;
+        if (retriesRemaining > 0)
+        {
+            __weak DCDMessageTableViewCell *weakCell = cell;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                DCDMessageTableViewCell *strongCell = weakCell;
+                if (strongCell)
+                {
+                    [self updateMessageCellFrame:strongCell retriesRemaining:retriesRemaining - 1];
+                }
+            });
+        }
+        return;
     }
 
     cell.customBackgroundView.frame = frame;
