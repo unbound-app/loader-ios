@@ -16,6 +16,7 @@ Connection (defaults, override via env): `mobile@127.0.0.1:2222`, password `alpi
 - **Password-only auth.** Pass `-o PubkeyAuthentication=no -o PreferredAuthentications=password` (the wrapper does): agent keys tried first can exhaust the server's MaxAuthTries → "Too many authentication failures".
 - **Sessions can hang after dpkg.** The Sileo trigger spawns children (uicache) that inherit the session fds; openssh waits on them. Use `ssh -tt` (force pty) for dpkg installs and redirect `uiopen`'s fds.
 - **openssh-server, not dropbear.** The device runs openssh-server (rootless JB, guest port 22 → host 2222 via usbmux). Default SFTP-mode `scp` works; **never use `scp -O`** — legacy mode needs a remote `scp` binary the device lacks (`bash: scp: command not found`). If `scp` fails with `/usr/libexec/sftp-server: No such file`, the tunnel is pointing at the old dropbear on guest port 22222 — re-forward to guest port 22.
+- **The port forward is not persistent.** `127.0.0.1:2222` only exists while an `iproxy 2222:22 -u <udid>` process is alive — it's a local usbmux forward, not a service on the VM, so it doesn't survive a host reboot and can drop independently of the VM's own uptime (symptom: `ping`/any command suddenly says `Connection refused` or `UNREACHABLE` after previously working). Every `vphone.sh` subcommand now auto-repairs this before touching the device: it checks whether `2222` is open, and if not, resolves the vphone's UDID over usbmux (same `ProductType iPhone99,11` match `vphone-logs.sh` uses — never a paired real iPhone) and starts `iproxy` itself. This only works if usbmuxd still sees the device (`idevice_id -l` lists it); if the VM is off/unpaired, repair fails with a clear message instead of hanging. Run `$S tunnel` to force/check the repair explicitly, or `$S ping` for a quick end-to-end check.
 - **Password sudo.** Root needs `echo 'alpine' | sudo -S …`. The wrapper's `sudo` subcommand handles it.
 - **No python on device.** Don't edit JSON in place on the phone. Pull → edit host-side with `jq` → push back. The wrapper's `settings-set` does exactly this (with a `.bak` backup).
 - **Unbound settings live at** `…/Documents/Unbound/settings.json` in Discord's *Data* container, under the `unbound` store. Keys are dotted, e.g. `loader.update.hmr`, `loader.update.url`.
@@ -54,6 +55,7 @@ Run from the loader repo root. `S=.claude/skills/vphone/scripts/vphone.sh`
 | Goal | Command |
 |------|---------|
 | Check reachable | `$S ping` |
+| Force/check the usbmux port forward | `$S tunnel` |
 | Run a command | `$S ssh <cmd…>` |
 | Run as root | `$S sudo <cmd…>` |
 | Copy to device | `$S push <local> <remote>` |

@@ -8,11 +8,23 @@
 # `sudo` is password-based (`sudo -S`). There is no python on the device, so
 # JSON edits are done host-side and pushed back.
 #
+# Port 2222 is a LOCAL forward over usbmux (`iproxy 2222:22 -u <udid>`), not a
+# persistent host service — it does not survive a host reboot, and the VM/host
+# occasionally drops it independently of the VM's own state. Every command
+# below auto-repairs the forward before talking to the device: if 127.0.0.1:2222
+# isn't accepting connections, it resolves the vphone's UDID over usbmux (by
+# ProductType, same safeguard as vphone-logs.sh — NEVER falls back to a
+# real paired iPhone) and starts `iproxy` in the background. This requires
+# usbmuxd to already see the device (`idevice_id -l`); if the VM itself is
+# off/unpaired, repair will fail and say so.
+#
 # Connection (overridable via env):
 #   VPHONE_HOST=127.0.0.1  VPHONE_PORT=2222  VPHONE_USER=mobile  VPHONE_PASS=alpine
+#   VPHONE_UDID (skip auto-resolution)  VPHONE_PRODUCT=iPhone99,11 (ProductType to match)
 #
 # Usage:
-#   vphone.sh ping                          # check reachability
+#   vphone.sh ping                          # check reachability (auto-repairs the tunnel first)
+#   vphone.sh tunnel                        # explicitly (re)establish the usbmux port forward
 #   vphone.sh ssh   <cmd...>                # run a command (no sudo)
 #   vphone.sh sudo  <cmd...>                # run a command as root
 #   vphone.sh push  <local> <remote>        # copy host -> device (scp/sftp)
@@ -30,7 +42,56 @@ VPHONE_HOST="${VPHONE_HOST:-127.0.0.1}"
 VPHONE_PORT="${VPHONE_PORT:-2222}"
 VPHONE_USER="${VPHONE_USER:-mobile}"
 VPHONE_PASS="${VPHONE_PASS:-alpine}"
+VPHONE_PRODUCT="${VPHONE_PRODUCT:-iPhone99,11}"
 DISCORD_BID="com.hammerandchisel.discord"
+IPROXY_LOG="${TMPDIR:-/tmp}/vphone-iproxy.log"
+
+# Cheap, dependency-free TCP probe (no nc/lsof needed) — succeeds iff something
+# is accepting connections on $VPHONE_HOST:$VPHONE_PORT right now.
+port_open() {
+  ( exec 3<>"/dev/tcp/${VPHONE_HOST}/${VPHONE_PORT}" ) 2>/dev/null
+}
+
+# Resolve the vphone's UDID over usbmux by ProductType — mirrors vphone-logs.sh's
+# resolve_udid so both scripts pick the same device and never silently target a
+# real iPhone that happens to be paired too.
+resolve_udid() {
+  if [ -n "${VPHONE_UDID:-}" ]; then echo "$VPHONE_UDID"; return 0; fi
+  command -v idevice_id >/dev/null 2>&1 || { echo "idevice_id not found (brew install libimobiledevice)" >&2; return 1; }
+  command -v ideviceinfo >/dev/null 2>&1 || { echo "ideviceinfo not found (brew install libimobiledevice)" >&2; return 1; }
+  local match=""
+  while IFS= read -r udid; do
+    [ -n "$udid" ] || continue
+    if [ "$(ideviceinfo -u "$udid" -k ProductType 2>/dev/null || true)" = "$VPHONE_PRODUCT" ]; then
+      [ -z "$match" ] && match="$udid" || { echo "multiple vphone candidates; set VPHONE_UDID" >&2; return 1; }
+    fi
+  done < <(idevice_id -l 2>/dev/null)
+  [ -n "$match" ] || { echo "vphone ($VPHONE_PRODUCT) not found over usbmux; set VPHONE_UDID" >&2; return 1; }
+  echo "$match"
+}
+
+# Idempotent: no-ops if the port is already forwarded. Only applies to the
+# local usbmux loopback forward, not a custom/remote VPHONE_HOST.
+ensure_tunnel() {
+  [ "$VPHONE_HOST" = "127.0.0.1" ] || return 0
+  port_open && return 0
+
+  command -v iproxy >/dev/null 2>&1 || { echo "iproxy not found (brew install libimobiledevice) — cannot auto-forward the vphone port" >&2; return 1; }
+  local udid; udid="$(resolve_udid)" || return 1
+
+  echo "vphone port $VPHONE_PORT unreachable — starting iproxy $VPHONE_PORT:22 for $udid" >&2
+  nohup iproxy "${VPHONE_PORT}:22" -u "$udid" >"$IPROXY_LOG" 2>&1 &
+  disown
+
+  local i
+  for i in $(seq 1 20); do
+    port_open && return 0
+    sleep 0.25
+  done
+
+  echo "iproxy started but $VPHONE_HOST:$VPHONE_PORT never opened — check $IPROXY_LOG" >&2
+  return 1
+}
 
 # Password-only auth: agent keys tried first can exhaust the server's MaxAuthTries.
 SSH_BASE=(-p "$VPHONE_PORT" -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o PreferredAuthentications=password)
@@ -61,9 +122,19 @@ settings_path() {
   _sudo "find /var/mobile/Containers/Data/Application -maxdepth 5 -path '*Documents/Unbound/settings.json'" | head -n1
 }
 
+# Auto-repair the usbmux forward before any command that actually talks to the
+# device. Bare/unknown invocations fall through to the usage text below untouched.
+case "${1:-}" in
+  ping|tunnel|ssh|sudo|push|pull|app-data|unbound-dir|settings-path|settings-get|settings-set|restart)
+    ensure_tunnel || true ;;
+esac
+
 case "${1:-}" in
   ping)
     if _ssh "exit" >/dev/null 2>&1; then echo "vphone reachable ($TARGET:$VPHONE_PORT)"; else echo "vphone UNREACHABLE ($TARGET:$VPHONE_PORT)" >&2; exit 1; fi ;;
+
+  tunnel)
+    if port_open; then echo "tunnel OK ($VPHONE_HOST:$VPHONE_PORT -> device:22)"; else echo "tunnel FAILED — see $IPROXY_LOG" >&2; exit 1; fi ;;
 
   ssh)   shift; _ssh "$@" ;;
   sudo)  shift; _sudo "$*" ;;
