@@ -1,10 +1,7 @@
 #import "DevOverlay.h"
 
-// A tap outside the pill should dismiss it and otherwise fall through untouched to Discord below;
-// a tap inside the pill or on the button should behave normally. hitTest returns nil (i.e. "let
-// the touch fall through") whenever the default UIView hit-test would've resolved to this view
-// itself rather than an actual subview (the button, or the pill's own rows while it's showing) -
-// and fires outsideTapHandler first so the pill gets a chance to close.
+// Passes touches through to whatever's below unless they land on a real subview (the button or
+// an open pill's rows); fires outsideTapHandler first so an open pill gets a chance to close.
 @interface DevOverlayPassthroughView : UIView
 @property (nonatomic, copy) void (^outsideTapHandler)(void);
 @end
@@ -21,17 +18,15 @@
 }
 @end
 
-// A single pill row: icon + title + optional checkmark, tap-handled via a plain block rather than
-// target/action boilerplate at every call site.
+// A single pill row: icon + title + optional checkmark, tap-handled via a plain block.
 @interface DevOverlayRowButton : UIButton
 @property (nonatomic, copy) void (^rowAction)(void);
 @property (nonatomic, assign) BOOL dismissesOnTap;
 @end
 
 @implementation DevOverlayRowButton
-// The row's actual content (icon/label/checkmark) is a non-interactive UIStackView, not a
-// button-managed image/title, so UIButton's own automatic highlight styling has nothing to dim -
-// this is what gives taps their press feedback back.
+// Content is a plain UIStackView, not a button-managed image/title, so there's nothing for
+// UIButton's automatic highlight to dim without this.
 - (void)setHighlighted:(BOOL)highlighted
 {
     [super setHighlighted:highlighted];
@@ -44,27 +39,20 @@
 }
 @end
 
-// A floating button exposing native-module features that have no on-device way to trigger
-// without writing a JS plugin first (message bubbles, avatar radius, notifications). Shown on
-// vphone always, and on any DEBUG build regardless of device. Tapping it shows a custom pill of
-// rows anchored to the button.
+// Floating button exposing native-module features with no on-device trigger otherwise (message
+// bubbles, avatar radius, notifications). Shown on vphone always, and on any DEBUG build.
 //
-// This is a hand-rolled pill rather than a native UIMenu/UIContextMenuInteraction on purpose:
-// Discord's own long-press context menus (reactions, message actions, etc.) are themselves built
-// on UIContextMenuInteraction, and iOS's presentation/layout state for that system appears to be
-// shared across interactions - using our own UIMenu here was leaving Discord's own menus rendered
-// small and pinned to the top-left afterwards. A fully custom view has no such shared state, and
-// as a bonus gives full control over which rows dismiss the pill on tap and which don't (no
-// iOS-16-only `keepsMenuPresented` workaround needed).
+// The pill is hand-rolled rather than a native UIMenu: UIMenu shared presentation state with
+// Discord's own UIContextMenuInteraction-based menus and left them rendered small and pinned to
+// the top-left afterwards. A plain view sidesteps that, and gives per-row control over dismissal.
 @implementation DevOverlay
 
 static UIWindow *devOverlayWindow = nil;
 static UIButton *devOverlayButton = nil;
 static UIView   *devOverlayPill   = nil;
 
-// Never intentionally made key (nothing here calls makeKeyWindow on our own window), but as a
-// defensive measure every row's action re-asserts Discord's real window as key before running,
-// in case showing our overlay window ever knocks it out of key status behind the scenes.
+// Re-asserted as key before every row action, in case our overlay window knocks it out of key
+// status behind the scenes.
 static UIWindow *discordKeyWindow = nil;
 
 static NSArray<NSNumber *> *avatarRadiusPresets = nil;
@@ -102,8 +90,7 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
         return;
     }
 
-    // The very first call is guaranteed to be Discord's own window: our overlay doesn't exist
-    // yet at this point, and this method is a no-op on every later becomeKeyWindow call.
+    // The first call is always Discord's own window - this method no-ops on every later one.
     discordKeyWindow = keyWindow;
 
     UIWindowScene *activeScene = keyWindow.windowScene ?: [self activeWindowScene];
@@ -126,10 +113,8 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
 
     overlayWindow.hidden = NO;
 
-    // A scene-attached UIWindow ignores a custom .frame set before it's ever been shown (it snaps
-    // to the screen bounds), so the real frame is applied AFTER `hidden = NO` and followed by a
-    // forced layout pass. Collapsed (button-only) to start - see growOverlayWindow/
-    // shrinkOverlayWindow for why this grows to full-screen only while the pill is open.
+    // A scene-attached UIWindow snaps to the screen bounds until shown, so the real frame is set
+    // after `hidden = NO`. Collapsed (button-only) to start; see growOverlayWindow.
     overlayWindow.frame = [self collapsedFrameForScreenBounds:activeScene.screen.bounds];
     [overlayWindow layoutIfNeeded];
 
@@ -138,10 +123,8 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     CGRect        buttonFrame =
         CGRectMake(bounds.size.width - side - 16, bounds.size.height - side - 96, side, side);
 
-    // The blur lives BEHIND the button as a separate sibling view, not nested inside it: modern
-    // UIButtonTypeSystem manages its own content (image/title) through an internal view hierarchy
-    // that reshuffles on state changes, and a manually-inserted subview could end up reordered on
-    // top of the icon by that internal management.
+    // Blur lives behind the button as a sibling, not nested inside it: UIButtonTypeSystem
+    // reshuffles its own content subviews on state changes and could bury a nested one.
     UIView *backdrop = [[UIView alloc] initWithFrame:buttonFrame];
     backdrop.autoresizingMask =
         UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
@@ -180,9 +163,8 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     devOverlayButton = button;
 }
 
-// The button's frame is anchored to the window's bottom-right corner via autoresizing margins
-// (FlexibleLeftMargin/FlexibleTopMargin), and both frames below share that same screen corner -
-// so growing/shrinking the window moves neither the button nor its backdrop on screen.
+// Both this and the expanded (full-screen) frame share the same bottom-right corner, and the
+// button is pinned to it via autoresizing margins, so growing/shrinking never moves the button.
 + (CGRect)collapsedFrameForScreenBounds:(CGRect)screenBounds
 {
     const CGFloat width  = 76;
@@ -191,10 +173,8 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
                        height);
 }
 
-// The window only covers a small corner most of the time (kept intentionally tiny - see the
-// class comment on why a large persistent overlay window is worth avoiding). It's grown to full
-// screen for exactly as long as the pill is showing, which is also the only time an outside tap
-// needs to be catchable anywhere on screen to dismiss it.
+// Full-screen only while the pill is open, so an outside tap anywhere can dismiss it; collapsed
+// the rest of the time to keep the window's footprint minimal.
 + (void)growOverlayWindow
 {
     UIWindowScene *scene = devOverlayWindow.windowScene;
@@ -283,8 +263,7 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
         }];
 }
 
-// Rebuilds the pill in place (fresh checkmarks/labels) after a row that stays open is tapped - no
-// animation, this is a same-frame content refresh, not a show/hide transition.
+// Rebuilds the pill in place (fresh checkmarks/labels) with no show/hide animation.
 + (void)refreshPill
 {
     if (!devOverlayPill)
@@ -320,8 +299,7 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     container.layer.cornerCurve   = kCACornerCurveContinuous;
     container.layer.masksToBounds = YES;
 
-    // Rows are inset from the pill's edges (rather than spanning edge-to-edge) so each row's own
-    // rounded highlight never touches - and gets clipped by - the pill's rounded outer corners.
+    // Inset from the pill's edges so each row's rounded highlight isn't clipped by the container's.
     UIStackView *stack                                 = [[UIStackView alloc] init];
     stack.axis                                         = UILayoutConstraintAxisVertical;
     stack.spacing                                       = 2;
@@ -431,8 +409,7 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     });
 }
 
-// Finds the preset closest to a value (used both to show the current one as selected and to
-// figure out what "next" means when cycling).
+// Closest preset to a value - marks the current one and anchors what "next" means when cycling.
 + (NSUInteger)indexOfClosestPreset:(NSArray<NSNumber *> *)presets toValue:(float)value
 {
     NSUInteger bestIndex = 0;

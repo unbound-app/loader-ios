@@ -60,10 +60,7 @@ static UIWindowScene *activeWindowScene(void)
     return nil;
 }
 
-// The vphone can't synthesize the shake motion or a simultaneous 3-finger touch that the two
-// gestures above rely on, so it needs a plain single-tap way in. DevOverlay owns the actual
-// floating button/window (it's grown into a full dev-tools menu, not just a toolbox trigger),
-// keyed off the same becomeKeyWindow hook that installs the gestures.
+// The vphone can't synthesize shake or a 3-finger touch, so DevOverlay gives it a tappable button.
 %hook UIWindow
 - (void)becomeKeyWindow
 {

@@ -8,15 +8,9 @@
 # `sudo` is password-based (`sudo -S`). There is no python on the device, so
 # JSON edits are done host-side and pushed back.
 #
-# Port 2222 is a LOCAL forward over usbmux (`iproxy 2222:22 -u <udid>`), not a
-# persistent host service — it does not survive a host reboot, and the VM/host
-# occasionally drops it independently of the VM's own state. Every command
-# below auto-repairs the forward before talking to the device: if 127.0.0.1:2222
-# isn't accepting connections, it resolves the vphone's UDID over usbmux (by
-# ProductType, same safeguard as vphone-logs.sh — NEVER falls back to a
-# real paired iPhone) and starts `iproxy` in the background. This requires
-# usbmuxd to already see the device (`idevice_id -l`); if the VM itself is
-# off/unpaired, repair will fail and say so.
+# Port 2222 is a non-persistent usbmux forward (`iproxy 2222:22 -u <udid>`) that can drop on its
+# own; every command below auto-repairs it first via ensure_tunnel (resolves the UDID by
+# ProductType, same as vphone-logs.sh — never falls back to a paired real iPhone).
 #
 # Connection (overridable via env):
 #   VPHONE_HOST=127.0.0.1  VPHONE_PORT=2222  VPHONE_USER=mobile  VPHONE_PASS=alpine

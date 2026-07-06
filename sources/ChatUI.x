@@ -273,11 +273,8 @@ static UIColor *messageCellDynamicColor = nil;
     }
 }
 
-// The row is [avatar column][content column], both children of a shared row container; the
-// content column is in turn [username/timestamp header][text+attachment body][trailing spacer].
-// Only the body is what should sit under the bubble (see contentBubbleFrameForCell). Avatars used
-// elsewhere (replies, embeds, mentions) are much smaller than the ~40pt row avatar, so picking
-// the largest DCDAvatarView in the cell reliably lands on the row's own avatar.
+// Reply/embed/mention avatars are much smaller than the ~40pt row avatar, so the largest one
+// found reliably lands on the row's own avatar (see contentBubbleFrameForCell for the row shape).
 + (UIView *)findLargestAvatarView:(UIView *)view
 {
     UIView *best     = nil;
@@ -306,10 +303,8 @@ static UIColor *messageCellDynamicColor = nil;
     return best;
 }
 
-// Attachments/embeds/mosaics report their real rendered pixel size, so the body's frame already
-// hugs them tightly. Text (and text-rendered jumbo emoji) is laid out in a container kept at the
-// full column width to support line-wrapping, so the body's frame stays column-wide even for a
-// single short word - this tells the two cases apart so we know when a text remeasure is needed.
+// Distinguishes media (already sized to its real rendered pixels) from a text body (kept at full
+// column width for line-wrapping, so it needs remeasuring even for a single short word).
 + (BOOL)viewHasMediaDescendant:(UIView *)view
 {
     static NSSet<NSString *> *mediaClasses = nil;
@@ -354,10 +349,8 @@ static UIColor *messageCellDynamicColor = nil;
     return nil;
 }
 
-// Text/jumbo-emoji containers are kept at the full column width for line-wrapping purposes even
-// though the rendered glyphs are much narrower, so the body's raw frame is a poor fit there.
-// Remeasure the actual text run and use that instead - but only when there's no attachment/embed
-// in the body, since those genuinely need the full column width.
+// Remeasures the actual text run instead of the full-width container, unless there's an
+// attachment/embed in the body (which genuinely needs the full column width).
 + (CGRect)tightenTextFrame:(CGRect)bodyFrame forBody:(UIView *)contentBody
 {
     if ([self viewHasMediaDescendant:contentBody])
@@ -388,9 +381,8 @@ static UIColor *messageCellDynamicColor = nil;
     if (!avatarView)
         return CGRectNull;
 
-    // Walk up from the avatar until we find the row container: the ancestor whose sibling (the
-    // content column) is much wider than the avatar column. The number of wrapper levels between
-    // the avatar and its column varies, so this is walked rather than assumed at a fixed depth.
+    // Walk up until a sibling (the content column) is much wider than the avatar column - the
+    // wrapper depth between the avatar and its column varies, so this isn't a fixed offset.
     UIView *node          = avatarView;
     UIView *contentColumn = nil;
     for (int level = 0; level < 6 && node.superview; level++)
@@ -412,9 +404,7 @@ static UIColor *messageCellDynamicColor = nil;
     if (!contentColumn)
         return CGRectNull;
 
-    // The content column is [header?, body, trailing zero-height spacer] - the spacer is always
-    // last, and the body (text/attachments) is always the entry right before it, whether or not
-    // the header is present.
+    // [header?, body, trailing zero-height spacer] - body is always right before the spacer.
     NSArray<UIView *> *children = contentColumn.subviews;
     if (children.count == 0)
         return CGRectNull;
@@ -432,11 +422,9 @@ static UIColor *messageCellDynamicColor = nil;
 {
     BOOL enabled = messageBubblesEnabled ? [messageBubblesEnabled boolValue] : NO;
 
-    // The bubble lives in the cell's dedicated `backgroundView` slot, NOT as a subview of
-    // contentView, so it never participates in contentView's layout pass and can't corrupt
-    // Discord's RN-driven cell layout. We still size/position it ourselves (see
-    // -layoutSubviews below) to match only the message body, rather than relying on
-    // UITableViewCell's automatic full-cell-bounds framing.
+    // Lives in `backgroundView`, not a contentView subview, so it can't corrupt Discord's RN
+    // layout - sized/positioned ourselves in -layoutSubviews below instead of the automatic
+    // full-cell-bounds framing UITableViewCell would otherwise give it.
     if (!enabled)
     {
         if (cell.customBackgroundView)
@@ -473,8 +461,7 @@ static UIColor *messageCellDynamicColor = nil;
     CGRect frame = [self contentBubbleFrameForCell:cell];
     if (CGRectIsNull(frame) || CGRectIsEmpty(frame))
     {
-        // Couldn't find the expected hierarchy (e.g. a message shape we don't recognize) -
-        // fall back to the whole cell rather than leaving the bubble in a stale/zero frame.
+        // Unrecognized message shape - fall back to the whole cell over a stale/zero frame.
         frame = cell.contentView.bounds;
     }
 
@@ -536,10 +523,8 @@ static UIColor *messageCellDynamicColor = nil;
     dispatch_async(dispatch_get_main_queue(), ^{ [ChatUI updateMessageCell:self]; });
 }
 
-// Runs after %orig, i.e. after Discord's own (RN/Fabric-driven) layout pass has already
-// positioned every subview - we only read those final frames and reposition our own
-// `customBackgroundView`, which lives outside contentView's hierarchy, so this can't feed back
-// into Discord's layout.
+// Runs after %orig has positioned every subview; only reads those frames and repositions our own
+// backgroundView, which can't feed back into Discord's layout.
 - (void)layoutSubviews
 {
     %orig;
