@@ -2,7 +2,7 @@
 
 #import "Utilities.h"
 
-// Dynamic Island overlay and the development-build banner.
+// Dynamic Island overlay.
 extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 @interface Utilities (DynamicIsland)
@@ -11,7 +11,6 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 + (void)initializeDynamicIslandOverlay;
 + (void)showDynamicIslandOverlay;
 + (void)hideDynamicIslandOverlay;
-+ (void)showDevelopmentBuildBanner;
 
 @end
 

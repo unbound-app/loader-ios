@@ -9,5 +9,6 @@
 @interface DevOverlay : NSObject
 
 + (void)ensureOverlayForWindow:(UIWindow *)keyWindow;
++ (void)showDevelopmentBuildBanner;
 
 @end

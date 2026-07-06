@@ -315,7 +315,7 @@ static void enqueueUnboundBundle(RCTInstance *self)
                        [Utilities initializeDynamicIslandOverlay];
                        // TODO: uncomment before initial release
                        // #ifdef DEBUG
-                       [Utilities showDevelopmentBuildBanner];
+                       [DevOverlay showDevelopmentBuildBanner];
                        // #endif
                    });
 }

@@ -3,6 +3,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 
+#import "DevOverlay.h"
 #import "FileSystem.h"
 #import "Fonts.h"
 #import "Logger.h"
