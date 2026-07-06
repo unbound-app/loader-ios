@@ -32,6 +32,11 @@
 			"*.github/workflows/*.yml",
 		]
 	},
+	"github.copilot.chat.commitMessageGeneration.instructions": [
+		{
+			"file": ".github/instructions/commit-messages.instructions.md"
+		}
+	],
 	"editor.formatOnSave": true,
 	"markdown.validate.enabled": true
 }
