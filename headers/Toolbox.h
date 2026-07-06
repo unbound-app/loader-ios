@@ -19,9 +19,11 @@ void showToolboxSheet(void);
 @end
 
 @interface UnboundToolboxViewController
-    : UIViewController <UITableViewDelegate, UITableViewDataSource, SFSafariViewControllerDelegate>
+    : UIViewController <UITableViewDelegate, UITableViewDataSource, SFSafariViewControllerDelegate,
+                         UIGestureRecognizerDelegate>
 
 @property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, strong) UIView *cardView;
 
 - (void)dismiss;
 

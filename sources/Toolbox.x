@@ -129,31 +129,153 @@ static UIWindowScene *activeWindowScene(void)
 - (void)viewDidLoad
 {
     [super viewDidLoad];
-    [self setupTableView];
     [self setupMenuItems];
+    [self setupCardAndTableView];
 }
 
-- (void)setupTableView
+// A near-full-screen rounded, blurred card over a dimmed backdrop - tapping the backdrop (not
+// the card) dismisses it, matching DevOverlay's pill.
+- (void)setupCardAndTableView
 {
-    self.title                = @"Unbound Toolbox";
-    self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
+    self.view.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.45];
 
-    self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds
+    // shouldReceiveTouch rejects touches over the card outright, rather than recognizing the tap
+    // everywhere and checking after the fact - UITapGestureRecognizer.cancelsTouchesInView
+    // defaults to YES, so by the time a post-hoc check runs, it's already cancelled touch
+    // delivery to the card's own rows/buttons underneath.
+    UITapGestureRecognizer *backdropTap =
+        [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(backdropTapped:)];
+    backdropTap.delegate = self;
+    [self.view addGestureRecognizer:backdropTap];
+
+    UIVisualEffectView *card = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    card.layer.cornerRadius                        = 28;
+    card.layer.cornerCurve                         = kCACornerCurveContinuous;
+    card.layer.masksToBounds                       = YES;
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:card];
+    self.cardView = card;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [card.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor
+                                        constant:8],
+        [card.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor
+                                           constant:-8],
+    ]];
+
+    UILabel *titleLabel                                    = [[UILabel alloc] init];
+    titleLabel.text                                        = @"Unbound Toolbox";
+    titleLabel.font                                        = [UIFont systemFontOfSize:20
+                                                    weight:UIFontWeightBold];
+    titleLabel.textColor                                   = UIColor.labelColor;
+    titleLabel.translatesAutoresizingMaskIntoConstraints    = NO;
+
+    UIButton *closeButton = [self addCloseButtonToView:card.contentView];
+
+    UIView *divider                                     = [[UIView alloc] init];
+    divider.backgroundColor                             = [UIColor.labelColor colorWithAlphaComponent:0.08];
+    divider.translatesAutoresizingMaskIntoConstraints    = NO;
+
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero
                                                   style:UITableViewStyleInsetGrouped];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     self.tableView.delegate                                  = self;
     self.tableView.dataSource                                = self;
-    self.tableView.separatorInset                            = UIEdgeInsetsMake(0, 16, 0, 16);
-    self.tableView.layoutMargins                             = UIEdgeInsetsMake(0, 16, 0, 16);
-    self.tableView.cellLayoutMarginsFollowReadableWidth      = NO;
-    [self.view addSubview:self.tableView];
+    self.tableView.backgroundColor                           = UIColor.clearColor;
+    self.tableView.separatorColor = [UIColor.labelColor colorWithAlphaComponent:0.08];
+    self.tableView.separatorInset                            = UIEdgeInsetsMake(0, 20, 0, 20);
+
+    [card.contentView addSubview:titleLabel];
+    [card.contentView addSubview:divider];
+    [card.contentView addSubview:self.tableView];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+        [closeButton.topAnchor constraintEqualToAnchor:card.contentView.topAnchor constant:12],
+        [closeButton.trailingAnchor constraintEqualToAnchor:card.contentView.trailingAnchor
+                                                     constant:-12],
+        [closeButton.widthAnchor constraintEqualToConstant:36],
+        [closeButton.heightAnchor constraintEqualToConstant:36],
+
+        [titleLabel.leadingAnchor constraintEqualToAnchor:card.contentView.leadingAnchor
+                                                  constant:20],
+        [titleLabel.centerYAnchor constraintEqualToAnchor:closeButton.centerYAnchor],
+
+        [divider.leadingAnchor constraintEqualToAnchor:card.contentView.leadingAnchor],
+        [divider.trailingAnchor constraintEqualToAnchor:card.contentView.trailingAnchor],
+        [divider.topAnchor constraintEqualToAnchor:closeButton.bottomAnchor constant:12],
+        [divider.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
+
+        [self.tableView.topAnchor constraintEqualToAnchor:divider.bottomAnchor],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:card.contentView.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:card.contentView.trailingAnchor],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:card.contentView.bottomAnchor],
     ]];
+}
+
+// The blur lives behind the button as a separate sibling, not nested inside it: modern
+// UIButtonTypeSystem reshuffles its own content subviews on state changes and can bury a nested
+// one - the same fix as DevOverlay's wrench button, which had this exact bug.
+- (UIButton *)addCloseButtonToView:(UIView *)container
+{
+    UIView *backdrop                                = [[UIView alloc] init];
+    backdrop.translatesAutoresizingMaskIntoConstraints = NO;
+    backdrop.layer.cornerRadius                     = 18;
+    backdrop.layer.cornerCurve                      = kCACornerCurveContinuous;
+    backdrop.layer.masksToBounds                    = YES;
+    backdrop.userInteractionEnabled                 = NO;
+
+    UIVisualEffectView *blur = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    blur.translatesAutoresizingMaskIntoConstraints = NO;
+    [backdrop addSubview:blur];
+
+    UIButton *button                                 = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.tintColor                                 = UIColor.labelColor;
+    button.backgroundColor                           = UIColor.clearColor;
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+
+    UIImageSymbolConfiguration *cfg =
+        [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightBold];
+    [button setImage:[UIImage systemImageNamed:@"xmark" withConfiguration:cfg]
+             forState:UIControlStateNormal];
+    [button addTarget:self action:@selector(dismiss) forControlEvents:UIControlEventTouchUpInside];
+
+    [container addSubview:backdrop];
+    [container addSubview:button];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [blur.topAnchor constraintEqualToAnchor:backdrop.topAnchor],
+        [blur.leadingAnchor constraintEqualToAnchor:backdrop.leadingAnchor],
+        [blur.trailingAnchor constraintEqualToAnchor:backdrop.trailingAnchor],
+        [blur.bottomAnchor constraintEqualToAnchor:backdrop.bottomAnchor],
+
+        [backdrop.topAnchor constraintEqualToAnchor:container.topAnchor constant:12],
+        [backdrop.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-12],
+        [backdrop.widthAnchor constraintEqualToConstant:36],
+        [backdrop.heightAnchor constraintEqualToConstant:36],
+
+        [button.topAnchor constraintEqualToAnchor:backdrop.topAnchor],
+        [button.leadingAnchor constraintEqualToAnchor:backdrop.leadingAnchor],
+        [button.trailingAnchor constraintEqualToAnchor:backdrop.trailingAnchor],
+        [button.bottomAnchor constraintEqualToAnchor:backdrop.bottomAnchor],
+    ]];
+
+    return button;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+       shouldReceiveTouch:(UITouch *)touch
+{
+    CGPoint point = [touch locationInView:self.view];
+    return !CGRectContainsPoint(self.cardView.frame, point);
+}
+
+- (void)backdropTapped:(UITapGestureRecognizer *)gesture
+{
+    [self dismiss];
 }
 
 - (void)setupMenuItems
@@ -184,15 +306,6 @@ static UIWindowScene *activeWindowScene(void)
     }
 
     self.menuSections = @[
-        @{
-            @"title" : @"",
-            @"items" : @[ @{
-                @"title" : [Utilities isRecoveryModeEnabled] ? @"Disable Recovery Mode"
-                                                             : @"Enable Recovery Mode",
-                @"icon" : @"shield",
-                @"selector" : NSStringFromSelector(@selector(toggleRecoveryMode))
-            } ]
-        },
         @{
             @"title" : @"Bundle",
             @"items" : @[
@@ -252,6 +365,12 @@ static UIWindowScene *activeWindowScene(void)
             @"title" : @"Utilities",
             @"items" : @[
                 @{
+                    @"title" : [Utilities isRecoveryModeEnabled] ? @"Disable Recovery Mode"
+                                                                 : @"Enable Recovery Mode",
+                    @"icon" : @"shield",
+                    @"selector" : NSStringFromSelector(@selector(toggleRecoveryMode))
+                },
+                @{
                     @"title" : @"Factory Reset",
                     @"icon" : @"trash.fill",
                     @"destructive" : @YES,
@@ -296,26 +415,33 @@ static UIWindowScene *activeWindowScene(void)
     {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
                                       reuseIdentifier:@"Cell"];
+        cell.backgroundColor = [UIColor.labelColor colorWithAlphaComponent:0.05];
+
+        UIView *selectedBackground       = [[UIView alloc] init];
+        selectedBackground.backgroundColor = [UIColor.labelColor colorWithAlphaComponent:0.12];
+        cell.selectedBackgroundView        = selectedBackground;
     }
 
     cell.accessoryView = nil;
 
     NSDictionary *item = self.menuSections[indexPath.section][@"items"][indexPath.row];
 
+    BOOL isDestructive = [item[@"destructive"] boolValue];
+    UIColor *tint      = isDestructive ? UIColor.systemRedColor : UIColor.labelColor;
+
     UIImageSymbolConfiguration *symbolConfig =
-        [UIImageSymbolConfiguration configurationWithPointSize:22
-                                                        weight:UIImageSymbolWeightRegular];
+        [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightMedium];
     UIImage *icon = [UIImage systemImageNamed:item[@"icon"] withConfiguration:symbolConfig];
-    UIColor *iconTint =
-        [item[@"destructive"] boolValue] ? UIColor.systemRedColor : UIColor.systemBlueColor;
 
     UIListContentConfiguration *content                  = [cell defaultContentConfiguration];
     content.text                                         = item[@"title"];
+    content.textProperties.font                          = [UIFont systemFontOfSize:15];
+    content.textProperties.color                         = tint;
     content.image                                        = icon;
-    content.imageProperties.tintColor                    = iconTint;
+    content.imageProperties.tintColor                    = tint;
     content.imageProperties.preferredSymbolConfiguration = symbolConfig;
-    content.imageProperties.reservedLayoutSize           = CGSizeMake(28, 28);
-    content.imageToTextPadding                           = 16;
+    content.imageProperties.reservedLayoutSize           = CGSizeMake(24, 24);
+    content.imageToTextPadding                           = 14;
     cell.contentConfiguration                            = content;
 
     if ([item[@"isSwitch"] boolValue])
@@ -366,7 +492,7 @@ static UIWindowScene *activeWindowScene(void)
       willDisplayCell:(UITableViewCell *)cell
     forRowAtIndexPath:(NSIndexPath *)indexPath
 {
-    UIEdgeInsets uniformInsets           = UIEdgeInsetsMake(0, 16, 0, 16);
+    UIEdgeInsets uniformInsets           = UIEdgeInsetsMake(0, 20, 0, 20);
     cell.separatorInset                  = uniformInsets;
     cell.layoutMargins                   = uniformInsets;
     cell.preservesSuperviewLayoutMargins = NO;
@@ -873,44 +999,33 @@ static UIWindowScene *activeWindowScene(void)
 
 - (void)dismiss
 {
-    UINavigationController *navController = self.navigationController ?: (id) self;
+    [self dismissViewControllerAnimated:YES
+                              completion:^{
+                                  UIWindow *storedWindow =
+                                      objc_getAssociatedObject(self, "recoveryTopWindow");
+                                  UIWindow *origKeyWindow =
+                                      objc_getAssociatedObject(self, "recoveryOriginalKeyWindow");
 
-    [self
-        dismissViewControllerAnimated:YES
-                           completion:^{
-                               UIWindow *storedWindow =
-                                   objc_getAssociatedObject(navController, "recoveryTopWindow");
-                               UIWindow *origKeyWindow = objc_getAssociatedObject(
-                                   navController, "recoveryOriginalKeyWindow");
+                                  if (storedWindow)
+                                  {
+                                      storedWindow.hidden             = YES;
+                                      storedWindow.rootViewController = nil;
+                                  }
 
-                               if (storedWindow)
-                               {
-                                   storedWindow.hidden             = YES;
-                                   storedWindow.rootViewController = nil;
-                               }
+                                  [origKeyWindow makeKeyAndVisible];
 
-                               [origKeyWindow makeKeyAndVisible];
-
-                               objc_setAssociatedObject(navController, "recoveryTopWindow", nil,
-                                                        OBJC_ASSOCIATION_ASSIGN);
-                               objc_setAssociatedObject(navController, "recoveryOriginalKeyWindow",
-                                                        nil, OBJC_ASSOCIATION_ASSIGN);
-                           }];
+                                  objc_setAssociatedObject(self, "recoveryTopWindow", nil,
+                                                           OBJC_ASSOCIATION_ASSIGN);
+                                  objc_setAssociatedObject(self, "recoveryOriginalKeyWindow", nil,
+                                                           OBJC_ASSOCIATION_ASSIGN);
+                              }];
 }
 
 void showToolboxSheet(void)
 {
     UnboundToolboxViewController *settingsVC = [[UnboundToolboxViewController alloc] init];
-
-    UINavigationController *navController =
-        [[UINavigationController alloc] initWithRootViewController:settingsVC];
-    navController.modalPresentationStyle = UIModalPresentationFormSheet;
-
-    UIBarButtonItem *doneButton =
-        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-                                                      target:settingsVC
-                                                      action:@selector(dismiss)];
-    settingsVC.navigationItem.rightBarButtonItem = doneButton;
+    settingsVC.modalPresentationStyle        = UIModalPresentationOverFullScreen;
+    settingsVC.modalTransitionStyle          = UIModalTransitionStyleCrossDissolve;
 
     UIWindowScene *activeScene = activeWindowScene();
     if (!activeScene)
@@ -935,13 +1050,13 @@ void showToolboxSheet(void)
     topWindow.rootViewController = rootVC;
     [topWindow makeKeyAndVisible];
 
-    [rootVC presentViewController:navController animated:YES completion:nil];
+    [rootVC presentViewController:settingsVC animated:YES completion:nil];
 
-    objc_setAssociatedObject(navController, "recoveryTopWindow", topWindow,
+    objc_setAssociatedObject(settingsVC, "recoveryTopWindow", topWindow,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (originalKeyWindow)
     {
-        objc_setAssociatedObject(navController, "recoveryOriginalKeyWindow", originalKeyWindow,
+        objc_setAssociatedObject(settingsVC, "recoveryOriginalKeyWindow", originalKeyWindow,
                                  OBJC_ASSOCIATION_ASSIGN);
     }
 }
