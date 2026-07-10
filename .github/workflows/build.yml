@@ -428,3 +428,69 @@ jobs:
           default_author: github_actions
           message: "chore: update app-repo.json"
           add: app-repo.json
+
+  apt-repo:
+    if: inputs.caller_workflow != 'ci' && inputs.release == true
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    needs: [build-tweak, release-app]
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Download deb artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: rootless package
+          path: apt-repo/repo/debs
+
+      - name: Update depiction version
+        run: |
+          DEB_FILE=$(ls apt-repo/repo/debs/*.deb)
+          VERSION=$(dpkg-deb -f "$DEB_FILE" Version)
+          PACKAGE_ID=$(dpkg-deb -f "$DEB_FILE" Package)
+
+          INFO_XML="apt-repo/repo/depictions/web/$PACKAGE_ID/info.xml"
+          if [ -f "$INFO_XML" ]; then
+            sed -i "s|<version>.*</version>|<version>$VERSION</version>|" "$INFO_XML"
+          else
+            echo "Warning: no web depiction at $INFO_XML for $PACKAGE_ID"
+          fi
+
+      - name: Install apt-ftparchive & compressors
+        run: sudo apt-get update && sudo apt-get install -y apt-utils xz-utils zstd bzip2 lz4 gzip gnupg
+
+      - name: Import GPG key
+        if: ${{ secrets.GPG_KEY != '' }}
+        env:
+          GPG_KEY: ${{ secrets.GPG_KEY }}
+        run: |
+          echo "$GPG_KEY" | gpg --import
+          echo "GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format LONG | grep sec | cut -d'/' -f2 | cut -d' ' -f1)" >> $GITHUB_ENV
+
+      - name: Update repository
+        working-directory: apt-repo
+        env:
+          GPG_KEY_ID: ${{ env.GPG_KEY_ID }}
+        run: |
+          chmod +x update-repo.sh
+          ./update-repo.sh
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apt-repo/repo
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

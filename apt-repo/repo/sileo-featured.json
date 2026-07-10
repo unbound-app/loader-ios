@@ -1,0 +1,13 @@
+{
+	"class": "FeaturedBannersView",
+	"itemSize": "{263, 148}",
+	"itemCornerRadius": 10,
+	"banners": [
+		{
+			"url": "https://repo.unbound.rip/assets/repo/Banners/RepoHeader.png",
+			"title": "Unbound",
+			"package": "app.unbound.ios",
+			"hideShadow": false
+		}
+	]
+}
