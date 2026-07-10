@@ -441,6 +441,8 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    env:
+      GPG_KEY: ${{ secrets.GPG_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -468,9 +470,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y apt-utils xz-utils zstd bzip2 lz4 gzip gnupg
 
       - name: Import GPG key
-        if: ${{ secrets.GPG_KEY != '' }}
-        env:
-          GPG_KEY: ${{ secrets.GPG_KEY }}
+        if: ${{ env.GPG_KEY != '' }}
         run: |
           echo "$GPG_KEY" | gpg --import
           echo "GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format LONG | grep sec | cut -d'/' -f2 | cut -d' ' -f1)" >> $GITHUB_ENV
