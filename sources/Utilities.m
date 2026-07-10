@@ -459,9 +459,6 @@ static NSString *bundle = nil;
 
 + (uint32_t)getHermesBytecodeVersion
 {
-    // Read the accepted version from Discord's shipped HBC bundle: it's compiled by
-    // the same hermesc as the bundled hermes.framework, so its header version is the
-    // version this runtime accepts. No runtime ABI involved. See HermesBytecode.h.
     NSString *bundlePath   = [[NSBundle mainBundle] bundlePath];
     NSString *jsBundlePath = [bundlePath stringByAppendingPathComponent:@"main.jsbundle"];
 
@@ -747,8 +744,6 @@ static NSString *bundle = nil;
     return nil;
 }
 
-// Adapted from
-// https://github.com/LiveContainer/LiveContainer/blob/cd534bde4856dd998e48cd76681b8b2cfaf49229/LiveContainer/LCBootstrap.m#L72-L98
 + (BOOL)isJITAvailable
 {
 #if TARGET_OS_MACCATALYST || TARGET_OS_SIMULATOR
@@ -946,9 +941,6 @@ static __weak DCDBundleUpdaterManager *gBundleUpdater = nil;
     dispatch_async(dispatch_get_main_queue(), ^{ [updater reload]; });
 }
 
-// parseColor: runs on every themed color lookup (Themes.x swizzles DCDThemeColor's whole method
-// list through it), so the "extract the (...) args" regex is compiled once and reused rather than
-// recompiled on every rgb()/rgba() call.
 static NSRegularExpression *colorArgsRegex(void)
 {
     static NSRegularExpression *regex = nil;

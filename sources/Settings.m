@@ -9,10 +9,6 @@ static NSMutableDictionary *data      = nil;
 static NSString            *path      = nil;
 static dispatch_source_t    saveTimer = nil;
 
-// `data` is read on whatever thread calls the JSI-exposed getters and written from the toolbox
-// UI (main thread) and the settings.json file-watcher (a background queue via FileSystem
-// monitor:). NSRecursiveLock (rather than a serial queue) lets methods that call each other
-// (set: -> scheduleSave, loadSettings -> reset) reacquire on the same thread without deadlocking.
 static NSRecursiveLock *settingsLock(void)
 {
     static NSRecursiveLock *lock = nil;
@@ -69,9 +65,6 @@ static NSRecursiveLock *settingsLock(void)
         }
         @catch (NSException *e)
         {
-            // readFile: throws if the file is missing or unreadable (e.g. reset's own write
-            // above silently failed) - same recovery as corrupt JSON, just with nothing to
-            // back up.
             [Logger error:LOG_CATEGORY_SETTINGS
                    format:@"Failed to read settings.json, resetting. (%@)", e.reason];
             [Settings backupCorruptSettingsFile];
@@ -86,8 +79,6 @@ static NSRecursiveLock *settingsLock(void)
     }
 }
 
-// Preserves the unreadable file instead of silently discarding it, so a corrupt settings.json
-// never just erases the user's configuration without a trace.
 + (void)backupCorruptSettingsFile
 {
     if (![FileSystem exists:path])
@@ -204,9 +195,6 @@ static NSRecursiveLock *settingsLock(void)
     [FileSystem writeFile:path contents:[payload dataUsingEncoding:NSUTF8StringEncoding]];
 }
 
-// `data` is already updated synchronously by the time this is scheduled, so every in-process
-// reader (including the preload script built from getSettings) sees the change immediately -
-// only the disk write is debounced, coalescing bursts of rapid toggles into one write.
 + (void)scheduleSave
 {
     [settingsLock() lock];
@@ -242,10 +230,6 @@ static NSRecursiveLock *settingsLock(void)
     return json;
 }
 
-// Replaces the whole in-memory store from raw JSON (e.g. a dev settings editor) and persists it
-// immediately - unlike set:, which only ever touches one key, this can't go through the debounced
-// scheduleSave path since a bad edit should fail loudly rather than silently overwrite good data
-// on the next timer tick.
 + (BOOL)loadFromJSONString:(NSString *)json error:(NSError **)error
 {
     NSData *jsonData = [json dataUsingEncoding:NSUTF8StringEncoding];

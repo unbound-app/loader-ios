@@ -53,7 +53,7 @@ static NSError *vphoneHapticsUnavailableError(void)
 }
 %end
 
-%end // VPhoneHaptics
+%end
 
 %ctor
 {

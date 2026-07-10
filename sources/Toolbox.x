@@ -60,7 +60,6 @@ static UIWindowScene *activeWindowScene(void)
     return nil;
 }
 
-// The vphone can't synthesize shake or a 3-finger touch, so DevOverlay gives it a tappable button.
 %hook UIWindow
 - (void)becomeKeyWindow
 {
@@ -133,16 +132,10 @@ static UIWindowScene *activeWindowScene(void)
     [self setupCardAndTableView];
 }
 
-// A near-full-screen rounded, blurred card over a dimmed backdrop - tapping the backdrop (not
-// the card) dismisses it, matching DevOverlay's pill.
 - (void)setupCardAndTableView
 {
     self.view.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.45];
 
-    // shouldReceiveTouch rejects touches over the card outright, rather than recognizing the tap
-    // everywhere and checking after the fact - UITapGestureRecognizer.cancelsTouchesInView
-    // defaults to YES, so by the time a post-hoc check runs, it's already cancelled touch
-    // delivery to the card's own rows/buttons underneath.
     UITapGestureRecognizer *backdropTap =
         [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(backdropTapped:)];
     backdropTap.delegate = self;
@@ -215,9 +208,6 @@ static UIWindowScene *activeWindowScene(void)
     ]];
 }
 
-// The blur lives behind the button as a separate sibling, not nested inside it: modern
-// UIButtonTypeSystem reshuffles its own content subviews on state changes and can bury a nested
-// one - the same fix as DevOverlay's wrench button, which had this exact bug.
 - (UIButton *)addCloseButtonToView:(UIView *)container
 {
     UIView *backdrop                                = [[UIView alloc] init];
@@ -936,8 +926,6 @@ static UIWindowScene *activeWindowScene(void)
     [self presentViewController:safari animated:YES completion:nil];
 }
 
-// Finds the switch cell for a given settings key, independent of which section/row it currently
-// lives in - so reordering menuSections can't silently flip the wrong switch.
 - (UISwitch *)switchForSettingKey:(NSString *)key
 {
     for (UITableViewCell *cell in self.tableView.visibleCells)

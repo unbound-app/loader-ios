@@ -1,6 +1,5 @@
 #import "Utilities+CodeSignature.h"
 
-// Private Mach-O / code-signature parsing helpers used only by this category.
 @interface Utilities (CodeSignaturePrivate)
 + (NSDictionary *)readEntitlementsFrom64BitBinary:(FILE *)file;
 + (NSDictionary *)extractEntitlements:(FILE *)file offset:(uint32_t)offset;
@@ -171,7 +170,7 @@
     blobHeader.length = CFSwapInt32BigToHost(blobHeader.length);
 
     if (blobHeader.magic != 0xfade7171)
-        return nil; // CSMAGIC_EMBEDDED_ENTITLEMENTS
+        return nil;
 
     uint32_t       entitlementsLength = blobHeader.length - 8;
     NSMutableData *entitlementsData   = [NSMutableData dataWithLength:entitlementsLength];

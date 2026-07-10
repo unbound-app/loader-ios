@@ -15,7 +15,6 @@ std::string nsStringToStd(NSString *value)
     return utf8 ? std::string(utf8) : std::string();
 }
 
-// jsi::Buffer over NSData for the Hermes bytecode path; retains the NSData.
 class NSDataBuffer : public jsi::Buffer
 {
 public:
@@ -35,7 +34,7 @@ private:
     NSData *data_;
 };
 
-} // namespace
+}
 
 @implementation JSI
 

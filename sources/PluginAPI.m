@@ -114,9 +114,6 @@ static AVPlayerLayer                *currentPlayerLayer          = nil;
 static UIView                       *currentHostView             = nil;
 static char                          kPiPObserverContext;
 static BOOL                          sPiPObservationAdded = NO;
-// The exact controller the observer was registered on; removal must target this, not
-// the live currentPiPController, which may point at a newer one — leaving the old
-// controller observed when it deallocates crashes.
 static AVPictureInPictureController *sPiPObservedController = nil;
 
 + (void)removePiPObservation

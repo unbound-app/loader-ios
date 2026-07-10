@@ -1,8 +1,5 @@
 #import "Unbound.h"
 
-// A vnode watch on a single file's inode. In-place writes fire its event directly; an
-// atomic/replacing write (write-temp + rename, or delete + recreate) swaps the inode, so the
-// source goes silent and is re-armed by the parent DirectoryWatcher on the new inode.
 @interface FileMonitor : NSObject
 @property (copy) NSString           *path;
 @property (copy) dispatch_block_t    onChange;
@@ -11,9 +8,6 @@
 @property (strong) dispatch_queue_t  queue;
 @end
 
-// A single vnode watch shared by every FileMonitor living in the same parent directory. The kernel
-// event doesn't name the changed file, so it fans out to all monitors under the directory; this is
-// the only signal that catches inode-swapping writes the per-file source can't see.
 @interface DirectoryWatcher : NSObject
 @property (copy) NSString                   *path;
 @property (strong) dispatch_source_t         source;

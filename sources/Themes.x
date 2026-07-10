@@ -202,10 +202,6 @@ static NSString                                   *currentThemeId = nil;
         {
             Method method = methods[i];
 
-            // DCDThemeColor is expected to be a pure set of `+ (UIColor *)someColor` getters. Only
-            // wrap methods matching that shape (self + _cmd only, object return type) so a future
-            // unrelated class method (e.g. a void setup or BOOL check) doesn't get its return value
-            // reinterpreted as a UIColor by the block below.
             if (method_getNumberOfArguments(method) != 2)
             {
                 continue;

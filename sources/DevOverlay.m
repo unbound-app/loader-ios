@@ -1,7 +1,5 @@
 #import "DevOverlay.h"
 
-// Passes touches through to whatever's below unless they land on a real subview (the button or
-// an open pill's rows); fires outsideTapHandler first so an open pill gets a chance to close.
 @interface DevOverlayPassthroughView : UIView
 @property (nonatomic, copy) void (^outsideTapHandler)(void);
 @end
@@ -18,15 +16,12 @@
 }
 @end
 
-// A single pill row: icon + title + optional checkmark, tap-handled via a plain block.
 @interface DevOverlayRowButton : UIButton
 @property (nonatomic, copy) void (^rowAction)(void);
 @property (nonatomic, assign) BOOL dismissesOnTap;
 @end
 
 @implementation DevOverlayRowButton
-// Content is a plain UIStackView, not a button-managed image/title, so there's nothing for
-// UIButton's automatic highlight to dim without this.
 - (void)setHighlighted:(BOOL)highlighted
 {
     [super setHighlighted:highlighted];
@@ -39,8 +34,6 @@
 }
 @end
 
-// A near-full-screen card for editing settings.json's raw JSON directly, matching the Unbound
-// Toolbox card's visual language (blur, continuous corners, backdrop tap-to-dismiss).
 @interface DevOverlaySettingsEditorViewController : UIViewController <UIGestureRecognizerDelegate>
 @property (nonatomic, strong) UIView *cardView;
 @property (nonatomic, strong) UITextView *textView;
@@ -59,8 +52,6 @@
 {
     self.view.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.45];
 
-    // shouldReceiveTouch rejects touches over the card outright - see the identical pattern (and
-    // the reason for it) on UnboundToolboxViewController.
     UITapGestureRecognizer *backdropTap =
         [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cancelTapped)];
     backdropTap.delegate = self;
@@ -162,8 +153,6 @@
     ]];
 }
 
-// Matches DevOverlay's own button pattern: blur as a sibling backdrop, not nested inside the
-// button, so UIButtonTypeSystem's internal content management can't bury the icon.
 - (UIButton *)addCircleButtonWithSystemImage:(NSString *)imageName
                                        action:(SEL)action
                                        toView:(UIView *)container
@@ -243,20 +232,12 @@
 
 @end
 
-// Floating button exposing native-module features with no on-device trigger otherwise (message
-// bubbles, avatar radius, notifications). Shown on vphone always, and on any DEBUG build.
-//
-// The pill is hand-rolled rather than a native UIMenu: UIMenu shared presentation state with
-// Discord's own UIContextMenuInteraction-based menus and left them rendered small and pinned to
-// the top-left afterwards. A plain view sidesteps that, and gives per-row control over dismissal.
 @implementation DevOverlay
 
 static UIWindow *devOverlayWindow = nil;
 static UIButton *devOverlayButton = nil;
 static UIView   *devOverlayPill   = nil;
 
-// Re-asserted as key before every row action, in case our overlay window knocks it out of key
-// status behind the scenes.
 static UIWindow *discordKeyWindow = nil;
 
 static NSArray<NSNumber *> *avatarRadiusPresets = nil;
@@ -294,7 +275,6 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
         return;
     }
 
-    // The first call is always Discord's own window - this method no-ops on every later one.
     discordKeyWindow = keyWindow;
 
     UIWindowScene *activeScene = keyWindow.windowScene ?: [self activeWindowScene];
@@ -317,8 +297,6 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
 
     overlayWindow.hidden = NO;
 
-    // A scene-attached UIWindow snaps to the screen bounds until shown, so the real frame is set
-    // after `hidden = NO`. Collapsed (button-only) to start; see growOverlayWindow.
     overlayWindow.frame = [self collapsedFrameForScreenBounds:activeScene.screen.bounds];
     [overlayWindow layoutIfNeeded];
 
@@ -327,8 +305,6 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     CGRect        buttonFrame =
         CGRectMake(bounds.size.width - side - 16, bounds.size.height - side - 96, side, side);
 
-    // Blur lives behind the button as a sibling, not nested inside it: UIButtonTypeSystem
-    // reshuffles its own content subviews on state changes and could bury a nested one.
     UIView *backdrop = [[UIView alloc] initWithFrame:buttonFrame];
     backdrop.autoresizingMask =
         UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
@@ -367,8 +343,6 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     devOverlayButton = button;
 }
 
-// Both this and the expanded (full-screen) frame share the same bottom-right corner, and the
-// button is pinned to it via autoresizing margins, so growing/shrinking never moves the button.
 + (CGRect)collapsedFrameForScreenBounds:(CGRect)screenBounds
 {
     const CGFloat width  = 76;
@@ -377,8 +351,6 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
                        height);
 }
 
-// Full-screen only while the pill is open, so an outside tap anywhere can dismiss it; collapsed
-// the rest of the time to keep the window's footprint minimal.
 + (void)growOverlayWindow
 {
     UIWindowScene *scene = devOverlayWindow.windowScene;
@@ -467,7 +439,6 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
         }];
 }
 
-// Rebuilds the pill in place (fresh checkmarks/labels) with no show/hide animation.
 + (void)refreshPill
 {
     if (!devOverlayPill)
@@ -503,7 +474,6 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     container.layer.cornerCurve   = kCACornerCurveContinuous;
     container.layer.masksToBounds = YES;
 
-    // Inset from the pill's edges so each row's rounded highlight isn't clipped by the container's.
     UIStackView *stack                                 = [[UIStackView alloc] init];
     stack.axis                                         = UILayoutConstraintAxisVertical;
     stack.spacing                                       = 2;
@@ -613,7 +583,6 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     });
 }
 
-// Closest preset to a value - marks the current one and anchors what "next" means when cycling.
 + (NSUInteger)indexOfClosestPreset:(NSArray<NSNumber *> *)presets toValue:(float)value
 {
     NSUInteger bestIndex = 0;
@@ -644,10 +613,9 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
                         }];
 }
 
-// Cycle: Default (circular) -> 0pt -> 8pt -> 16pt -> 20pt -> Default -> ...
 + (DevOverlayRowButton *)avatarRadiusCycleRow
 {
-    float    current   = [ChatUI getCurrentAvatarRadius];  // -1 == default/circular
+    float    current   = [ChatUI getCurrentAvatarRadius];
     BOOL     isDefault = current < 0;
     NSString *label    = isDefault ? @"Avatar Radius: Circular"
                                     : [NSString stringWithFormat:@"Avatar Radius: %.0fpt", current];

@@ -2,7 +2,6 @@
 
 const CGFloat DYNAMIC_ISLAND_TOP_INSET = 59.0;
 
-// File-static overlay view, owned exclusively by the Dynamic Island methods.
 static UIView *islandOverlayView = nil;
 
 @implementation Utilities (DynamicIsland)

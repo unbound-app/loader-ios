@@ -13,7 +13,6 @@ using namespace facebook;
 
 #pragma mark - Pre/post bundle injection
 
-// Only read during bundle load and always null-checked.
 static jsi::Runtime *gRuntime = nullptr;
 
 static void injectUnboundPreBundle(jsi::Runtime &runtime)
@@ -30,8 +29,6 @@ static void injectUnboundPreBundle(jsi::Runtime &runtime)
         }
     }
 
-    // Must precede Discord's bundle: installs the __d getter before Discord registers
-    // its Metro modules.
     {
         NSData *modules = [Utilities getResource:@"modules" data:true ext:@"js"];
         if (modules.length)
@@ -49,13 +46,6 @@ static void injectUnboundPreBundle(jsi::Runtime &runtime)
     }
 }
 
-// Unbound's bundle is enqueued only after Discord's has been scheduled so the FIFO executor runs
-// it second, once globalThis.modules (populated by Discord) exists. The semaphore lets the
-// post-Discord hook wait for the download.
-//
-// These run once per bundle load, not once per process, so a reload (which re-fires the hooks)
-// re-fetches and re-evaluates the bundle. gPrefetchToken discards a download from a load that was
-// superseded by a newer one before it finished.
 static NSData              *gUnboundBundle    = nil;
 static dispatch_semaphore_t gUnboundBundleSem = nil;
 static uint64_t             gPrefetchToken    = 0;
@@ -93,7 +83,6 @@ static void prefetchUnboundBundle(void)
             }
         }
 
-        // A newer load started while we were downloading - let it win.
         if (token != gPrefetchToken)
         {
             return;
@@ -120,11 +109,8 @@ static void prefetchUnboundBundle(void)
     });
 }
 
-// Waits on a background queue so the prefetch wait never blocks the JS thread.
 static void enqueueUnboundBundle(RCTInstance *self)
 {
-    // Snapshot this load's semaphore so a reload that swaps gUnboundBundleSem mid-wait
-    // can't make us wait on the wrong one.
     dispatch_semaphore_t sem = gUnboundBundleSem;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -152,7 +138,6 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
 #pragma mark - Hooks
 
-// Fires before bundle load, giving us the runtime to inject into later.
 %hook RCTHost
 
 - (void)instance:(id)instance didInitializeRuntime:(facebook::jsi::Runtime &)runtime
@@ -164,8 +149,6 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
 %end
 
-// Capture the live bundle-updater instance the moment RN constructs it, so reloadApp
-// can message the exact instance Discord's JS reload path uses.
 %hook DCDBundleUpdaterManager
 
 - (id)init
@@ -201,14 +184,11 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
     prefetchUnboundBundle();
 
-    // Opt-in dev live reload; no-op unless `loader.update.hmr` is enabled.
     [HotReload observe];
 
     %orig(sourceURL);
 }
 
-// Pre-bundle scripts run before %orig (which schedules Discord's bundle) so the
-// modules patch is in place first; Unbound's bundle is enqueued after, behind Discord's.
 - (void)_loadScriptFromSource:(id)source
 {
     if (gRuntime)
@@ -241,7 +221,6 @@ static void enqueueUnboundBundle(RCTInstance *self)
 #ifndef DEBUG
     dispatch_after(
         dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            // TODO: remove before initial release
             [Utilities alert:@"This is a development build that is not designed for end users. "
                              @"Please do not use it and refrain from reporting any issues."
                        title:@"⚠️ DEVELOPMENT BUILD"
@@ -313,9 +292,6 @@ static void enqueueUnboundBundle(RCTInstance *self)
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
                    ^{
                        [Utilities initializeDynamicIslandOverlay];
-                       // TODO: uncomment before initial release
-                       // #ifdef DEBUG
                        [DevOverlay showDevelopmentBuildBanner];
-                       // #endif
                    });
 }

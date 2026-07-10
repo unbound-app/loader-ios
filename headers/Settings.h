@@ -1,6 +1,5 @@
 #import "Unbound.h"
 
-// Posted whenever settings.json changes so features can react to a live setting toggle.
 #ifdef __cplusplus
 extern "C" {
 #endif

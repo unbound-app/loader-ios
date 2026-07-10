@@ -28,8 +28,6 @@
 }
 %end
 
-// fix file access by using asCopy, adapted from
-// https://github.com/khanhduytran0/LiveContainer/blob/main/TweakLoader/DocumentPicker.m
 %hook UIDocumentPickerViewController
 
 - (instancetype)initForOpeningContentTypes:(NSArray<UTType *> *)contentTypes asCopy:(BOOL)asCopy

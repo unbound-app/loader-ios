@@ -2,7 +2,6 @@
 
 #import "Utilities.h"
 
-// Dynamic Island overlay.
 extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 @interface Utilities (DynamicIsland)
@@ -14,7 +13,6 @@ extern const CGFloat DYNAMIC_ISLAND_TOP_INSET;
 
 @end
 
-// Internal helpers for the overlay; not part of the public Utilities surface.
 @interface Utilities (DynamicIslandPrivate)
 
 + (UIImage *)createLogoImage;

@@ -4,12 +4,6 @@
 
 static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *info)
 {
-    // Domain -> set of unconditionally-ignored codes. Conditional codes
-    // (NSPOSIX 22, NSCocoa 256, _UIViewService 1) are handled separately below.
-    //
-    // Policy for new noise: if a whole domain is internal/diagnostic bookkeeping that's never
-    // actionable (e.g. com.apple.Gestures - see below), ignore the domain outright rather than
-    // chasing individual (code, description) pairs one at a time as new variants show up.
     static NSDictionary<NSString *, NSSet<NSNumber *> *> *ignored = nil;
     static dispatch_once_t                                onceToken;
     dispatch_once(&onceToken, ^{
@@ -76,11 +70,6 @@ static BOOL shouldIgnoreError(NSString *domain, NSInteger code, NSDictionary *in
         }
     }
 
-    // com.apple.Gestures is UIKit's internal gesture-recognizer-arbitration bookkeeping (see the
-    // conversation history around the vphone popup hang investigation) - none of it is actionable.
-    // Codes 2/4 are already unconditionally ignored above; 0/7 need a description match because
-    // Apple reuses those codes for other (non-noise) conditions too. If this list keeps growing,
-    // switch to ignoring the domain outright per the policy note at the top of this function.
     if ([domain isEqualToString:@"com.apple.Gestures"])
     {
         NSString *desc = info[NSLocalizedDescriptionKey];

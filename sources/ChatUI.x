@@ -273,8 +273,6 @@ static UIColor *messageCellDynamicColor = nil;
     }
 }
 
-// Reply/embed/mention avatars are much smaller than the ~40pt row avatar, so the largest one
-// found reliably lands on the row's own avatar (see contentBubbleFrameForCell for the row shape).
 + (UIView *)findLargestAvatarView:(UIView *)view
 {
     UIView *best     = nil;
@@ -303,8 +301,6 @@ static UIColor *messageCellDynamicColor = nil;
     return best;
 }
 
-// Distinguishes media (already sized to its real rendered pixels) from a text body (kept at full
-// column width for line-wrapping, so it needs remeasuring even for a single short word).
 + (BOOL)viewHasMediaDescendant:(UIView *)view
 {
     static NSSet<NSString *> *mediaClasses = nil;
@@ -349,8 +345,6 @@ static UIColor *messageCellDynamicColor = nil;
     return nil;
 }
 
-// Remeasures the actual text run instead of the full-width container, unless there's an
-// attachment/embed in the body (which genuinely needs the full column width).
 + (CGRect)tightenTextFrame:(CGRect)bodyFrame forBody:(UIView *)contentBody
 {
     if ([self viewHasMediaDescendant:contentBody])
@@ -381,8 +375,6 @@ static UIColor *messageCellDynamicColor = nil;
     if (!avatarView)
         return CGRectNull;
 
-    // Walk up until a sibling (the content column) is much wider than the avatar column - the
-    // wrapper depth between the avatar and its column varies, so this isn't a fixed offset.
     UIView *node          = avatarView;
     UIView *contentColumn = nil;
     for (int level = 0; level < 6 && node.superview; level++)
@@ -404,7 +396,6 @@ static UIColor *messageCellDynamicColor = nil;
     if (!contentColumn)
         return CGRectNull;
 
-    // [header?, body, trailing zero-height spacer] - body is always right before the spacer.
     NSArray<UIView *> *children = contentColumn.subviews;
     if (children.count == 0)
         return CGRectNull;
@@ -422,9 +413,6 @@ static UIColor *messageCellDynamicColor = nil;
 {
     BOOL enabled = messageBubblesEnabled ? [messageBubblesEnabled boolValue] : NO;
 
-    // Lives in `backgroundView`, not a contentView subview, so it can't corrupt Discord's RN
-    // layout - sized/positioned ourselves in -layoutSubviews below instead of the automatic
-    // full-cell-bounds framing UITableViewCell would otherwise give it.
     if (!enabled)
     {
         if (cell.customBackgroundView)
@@ -538,8 +526,6 @@ static UIColor *messageCellDynamicColor = nil;
     dispatch_async(dispatch_get_main_queue(), ^{ [ChatUI updateMessageCell:self]; });
 }
 
-// Runs after %orig has positioned every subview; only reads those frames and repositions our own
-// backgroundView, which can't feed back into Discord's layout.
 - (void)layoutSubviews
 {
     %orig;

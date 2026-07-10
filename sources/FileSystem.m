@@ -24,8 +24,6 @@ static NSMutableDictionary<NSString *, DirectoryWatcher *> *dirWatchers = nil;
 static NSFileManager                                       *manager     = nil;
 static NSString                                            *documents   = nil;
 
-// Serialises all mutation of monitors/dirWatchers and their sources, which is driven from several
-// queues (registration, directory event handlers, stopMonitoring:).
 static dispatch_queue_t monitorRegistryQueue(void)
 {
     static dispatch_queue_t queue;
@@ -52,8 +50,6 @@ static dispatch_queue_t monitorRegistryQueue(void)
 
 + (void)writeFile:(NSString *)path contents:(NSData *)contents
 {
-    // NSDataWritingAtomic writes to a temp file and renames it into place, so a kill mid-write
-    // (jetsam, crash) can't leave a half-written settings.json or bundle behind.
     NSError *error;
     if (![contents writeToFile:path options:NSDataWritingAtomic error:&error])
     {
@@ -152,7 +148,6 @@ static dispatch_queue_t monitorRegistryQueue(void)
                                       queue:monitor.queue];
         [dir.files addObject:filePath];
 
-        // OK if this is a no-op now (file absent) - the directory watcher arms it once it appears.
         [FileSystem armFileSource:monitor];
     });
 }
@@ -184,8 +179,6 @@ static dispatch_queue_t monitorRegistryQueue(void)
 
 #pragma mark - Monitoring internals (run on monitorRegistryQueue)
 
-// Reuses the directory's existing watcher when one is present, creating it otherwise. The returned
-// watcher fans every event to all FileMonitors registered in its `files` set.
 + (DirectoryWatcher *)watcherForDirectory:(NSString *)dirPath queue:(dispatch_queue_t)queue
 {
     DirectoryWatcher *existing = dirWatchers[dirPath];
@@ -231,7 +224,6 @@ static dispatch_queue_t monitorRegistryQueue(void)
     }
 }
 
-// Drops the shared directory watcher once it no longer serves any files.
 + (void)releaseDirectoryWatcherFor:(NSString *)dirPath
 {
     DirectoryWatcher *watcher = dirWatchers[dirPath];
@@ -247,7 +239,6 @@ static dispatch_queue_t monitorRegistryQueue(void)
     }
 }
 
-// Opens a vnode source on the file's current inode. No-op if absent or already armed.
 + (void)armFileSource:(FileMonitor *)monitor
 {
     if (!monitor || monitor.fileSource)
@@ -268,8 +259,6 @@ static dispatch_queue_t monitorRegistryQueue(void)
         unsigned long flags = dispatch_source_get_data(source);
         dispatch_sync(monitorRegistryQueue(), ^{ [FileSystem scheduleNotify:monitor]; });
 
-        // Inode replaced/removed: drop this watch so the directory watcher re-arms us on the new
-        // one.
         if (flags & kFileGoneMask)
         {
             dispatch_sync(monitorRegistryQueue(), ^{
@@ -287,7 +276,6 @@ static dispatch_queue_t monitorRegistryQueue(void)
     dispatch_resume(source);
 }
 
-// Coalesces bursts of events (an atomic write can fire several) into one debounced onChange.
 + (void)scheduleNotify:(FileMonitor *)monitor
 {
     if (!monitor)

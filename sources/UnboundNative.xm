@@ -86,7 +86,6 @@ static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *nativeFeatureMe
     static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *features;
     static dispatch_once_t                                           onceToken;
     dispatch_once(&onceToken, ^{
-        // Feature lifecycle metadata.
         features = @{
             @"device.info" : @{@"introduced" : @"1.0.0"},
             @"device.entitlements" : @{@"introduced" : @"1.0.0"},
@@ -223,7 +222,7 @@ static NSArray<NSString *> *featureNamesForStatus(NSString *status)
     return [features sortedArrayUsingSelector:@selector(compare:)];
 }
 
-} // namespace
+}
 
 namespace unbound {
 
@@ -233,7 +232,6 @@ void registerNativeInterop(Runtime &runtime)
     {
         Object interop(runtime);
 
-        // -- Feature lifecycle metadata (top-level) --
 
         interop.setProperty(
             runtime, "getNativeModuleVersion",
@@ -320,7 +318,6 @@ void registerNativeInterop(Runtime &runtime)
                           return [JSI fromObjC:featureNamesForStatus(@"removed") runtime:rt];
                       }]);
 
-        // -- device (device.info + device.entitlements) --
 
         {
             Object device(runtime);
@@ -394,7 +391,6 @@ void registerNativeInterop(Runtime &runtime)
             interop.setProperty(runtime, "device", std::move(device));
         }
 
-        // -- app (app.source) --
 
         {
             Object app(runtime);
@@ -411,7 +407,6 @@ void registerNativeInterop(Runtime &runtime)
             interop.setProperty(runtime, "app", std::move(app));
         }
 
-        // -- notifications --
 
         {
             Object notifications(runtime);
@@ -449,7 +444,6 @@ void registerNativeInterop(Runtime &runtime)
             interop.setProperty(runtime, "notifications", std::move(notifications));
         }
 
-        // -- pip (pip.video) --
 
         {
             Object pip(runtime);
@@ -475,7 +469,6 @@ void registerNativeInterop(Runtime &runtime)
             interop.setProperty(runtime, "pip", std::move(pip));
         }
 
-        // -- chat (chat.avatar + chat.messageBubbles) --
 
         {
             Object chat(runtime);
@@ -631,7 +624,6 @@ void registerNativeInterop(Runtime &runtime)
             interop.setProperty(runtime, "chat", std::move(chat));
         }
 
-        // -- toolbox (toolbox.menu) --
 
         {
             Object toolbox(runtime);
@@ -650,11 +642,10 @@ void registerNativeInterop(Runtime &runtime)
             interop.setProperty(runtime, "toolbox", std::move(toolbox));
         }
 
-        // Define directly on the JS global as window.UnboundNative.
         runtime.global().setProperty(runtime, kInteropGlobalName, std::move(interop));
 
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Installed window.UnboundNative"];
     }
 }
 
-} // namespace unbound
+}

@@ -2,7 +2,6 @@
 
 #import "Utilities.h"
 
-// Code-signature / entitlements inspection and tweak signature verification.
 @interface Utilities (CodeSignature)
 
 + (NSDictionary *)getApplicationEntitlements;

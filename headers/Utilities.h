@@ -151,8 +151,6 @@ extern NSString *const TROLL_STORE_LITE_PATH;
 
 + (BOOL)isRecoveryModeEnabled;
 
-// Reloads the JS bundle via Discord's captured BundleUpdaterManager, registered from
-// the loader the moment RN constructs it (see Unbound.xm).
 + (void)setBundleUpdater:(id)bundleUpdater;
 + (void)reloadApp;
 

@@ -5,8 +5,6 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
 
 @implementation HotReload
 {
-    // All state below is mutated only on _queue, so the public API, the reconnect timer, and the
-    // URLSession delegate callbacks can't race.
     dispatch_queue_t      _queue;
     NSURLSession         *_session;
     NSURLSessionDataTask *_task;
@@ -93,7 +91,6 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
 
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
 
-    // The SSE stream is long-lived, so disable the request/resource timeouts.
     config.timeoutIntervalForRequest  = 86400.0;
     config.timeoutIntervalForResource = DBL_MAX;
     config.HTTPAdditionalHeaders      = @{
@@ -120,7 +117,6 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
         return;
     }
 
-    // Bumping the generation makes any reconnect already scheduled before this stop a no-op.
     _running = NO;
     _generation++;
 
@@ -135,7 +131,6 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
     [Logger info:LOG_CATEGORY_UPDATER format:@"Hot-reload: disabled; stream stopped."];
 }
 
-// Reduces `loader.update.url` (a direct bundle URL or a directory) to its origin + `/__hot`.
 - (NSURL *)resolveHotURL
 {
     NSString *base = [Settings getString:@"unbound" key:@"loader.update.url" def:@""];
@@ -236,7 +231,6 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
 
     for (NSString *line in [event componentsSeparatedByString:@"\n"])
     {
-        // Lines starting with ':' are SSE comments (used here as keepalive pings).
         if (line.length == 0 || [line hasPrefix:@":"])
         {
             continue;
@@ -291,7 +285,6 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
           format:@"Hot-reload: etag mismatch (stored %@, incoming %@) -> reloadApp.",
                  stored.length ? stored : @"<none>", incoming];
 
-    // The reload re-runs the launch-time download path, which re-fetches the new bundle.
     [Utilities reloadApp];
 }
 
