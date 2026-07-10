@@ -125,8 +125,7 @@ static void enqueueUnboundBundle(RCTInstance *self)
             return;
         }
 
-        [Logger info:LOG_CATEGORY_DEFAULT
-              format:@"Scheduling Unbound's bundle for execution..."];
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Scheduling Unbound's bundle for execution..."];
         [self callFunctionOnBufferedRuntimeExecutor:[bundle](jsi::Runtime &runtime) {
             [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
             [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
@@ -221,13 +220,6 @@ static void enqueueUnboundBundle(RCTInstance *self)
 #ifndef DEBUG
     dispatch_after(
         dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            [Utilities alert:@"This is a development build that is not designed for end users. "
-                             @"Please do not use it and refrain from reporting any issues."
-                       title:@"⚠️ DEVELOPMENT BUILD"
-                     timeout:10
-                     warning:YES
-                         tts:YES];
-
             if (![Utilities isVerifiedBuild])
             {
                 [Logger error:LOG_CATEGORY_DEFAULT format:@"Tweak signature verification failed"];
@@ -292,6 +284,8 @@ static void enqueueUnboundBundle(RCTInstance *self)
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
                    ^{
                        [Utilities initializeDynamicIslandOverlay];
+#ifdef DEBUG
                        [DevOverlay showDevelopmentBuildBanner];
+#endif
                    });
 }
