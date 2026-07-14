@@ -472,6 +472,7 @@ jobs:
       contents: read
       pages: write
       id-token: write
+      actions: read
     env:
       GPG_KEY: ${{ secrets.GPG_KEY }}
     steps:
@@ -491,9 +492,28 @@ jobs:
           mkdir -p apt-repo/repo/debs
           gh release download --repo ${{ github.repository }} --pattern '*arm64.deb' --dir apt-repo/repo/debs --clobber
 
+      - name: Capture new deb filename
+        run: echo "NEW_DEB_FILENAME=$(basename $(ls apt-repo/repo/debs/*.deb))" >> $GITHUB_ENV
+
+      - name: Restore previous package history
+        run: |
+          ARTIFACT_ID=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=github-pages&per_page=1" --jq '.artifacts[0].id // empty')
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "No previously deployed pages artifact found, starting fresh"
+            exit 0
+          fi
+
+          echo "Restoring debs from previous pages artifact $ARTIFACT_ID"
+          mkdir -p previous-pages
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > previous-pages.zip
+          unzip -q previous-pages.zip -d previous-pages
+          tar -xf previous-pages/artifact.tar -C previous-pages
+
+          find previous-pages -name '*.deb' -exec cp -n {} apt-repo/repo/debs/ \;
+
       - name: Update depiction version
         run: |
-          DEB_FILE=$(ls apt-repo/repo/debs/*.deb)
+          DEB_FILE="apt-repo/repo/debs/${{ env.NEW_DEB_FILENAME }}"
           VERSION=$(dpkg-deb -f "$DEB_FILE" Version)
           PACKAGE_ID=$(dpkg-deb -f "$DEB_FILE" Package)
 
