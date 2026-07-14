@@ -443,6 +443,7 @@ jobs:
         if: inputs.only_apt_repo == true
         run: |
           mkdir -p apt-repo/repo/debs
+          gh release download v309.1 --repo ${{ github.repository }} --pattern '*arm64.deb' --dir apt-repo/repo/debs --clobber
           gh release download --repo ${{ github.repository }} --pattern '*arm64.deb' --dir apt-repo/repo/debs --clobber
 
       - name: Capture new deb filename
@@ -462,7 +463,7 @@ jobs:
       - name: Restore live site state
         run: |
           PACKAGE_ID=$(grep '^Package:' control | cut -d ' ' -f 2)
-          mkdir -p "apt-repo/repo/depictions/web/$PACKAGE_ID"
+          mkdir -p "apt-repo/repo/depictions/web/$PACKAGE_ID" apt-repo/repo/debs
           cp app-repo.json apt-repo/repo/app-repo.json
 
           PAGES_URL=$(gh api "repos/${{ github.repository }}/pages" --jq '.html_url // empty')
