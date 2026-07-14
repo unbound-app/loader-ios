@@ -482,7 +482,6 @@ jobs:
       contents: read
       pages: write
       id-token: write
-      actions: read
     env:
       GPG_KEY: ${{ secrets.GPG_KEY }}
     steps:
@@ -507,19 +506,26 @@ jobs:
 
       - name: Restore previous package history
         run: |
-          ARTIFACT_ID=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=github-pages&per_page=100" --jq '[.artifacts[]] | sort_by(.created_at) | last | .id // empty')
-          if [ -z "$ARTIFACT_ID" ]; then
-            echo "No previously deployed pages artifact found, starting fresh"
+          PAGES_URL=$(gh api "repos/${{ github.repository }}/pages" --jq '.html_url // empty')
+          if [ -z "$PAGES_URL" ]; then
+            echo "GitHub Pages not configured yet, starting fresh"
             exit 0
           fi
 
-          echo "Restoring debs from previous pages artifact $ARTIFACT_ID"
-          mkdir -p previous-pages
-          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > previous-pages.zip
-          unzip -q previous-pages.zip -d previous-pages
-          tar -xf previous-pages/artifact.tar -C previous-pages
+          if ! curl -fsSL "${PAGES_URL%/}/Packages" -o previous-Packages; then
+            echo "No previously deployed Packages file found, starting fresh"
+            exit 0
+          fi
 
-          find previous-pages -name '*.deb' -exec cp -n {} apt-repo/repo/debs/ \;
+          grep '^Filename:' previous-Packages | awk '{print $2}' | sed 's|^\./||' | while read -r deb_path; do
+            deb_name=$(basename "$deb_path")
+            dest="apt-repo/repo/debs/$deb_name"
+            if [ -f "$dest" ]; then
+              continue
+            fi
+            echo "Restoring $deb_name"
+            curl -fsSL "${PAGES_URL%/}/$deb_path" -o "$dest" || echo "Warning: failed to restore $deb_name"
+          done
 
       - name: Update depiction version
         run: |
