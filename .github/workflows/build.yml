@@ -407,71 +407,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  app-repo:
+  deploy-pages:
     if: |
       always() &&
       (
         inputs.only_app_repo == true ||
-        (inputs.caller_workflow != 'ci' && inputs.release == true && inputs.only_apt_repo != true && needs.release-app.result == 'success')
-      )
-    continue-on-error: true
-    runs-on: macos-15
-    timeout-minutes: 15
-    needs: release-app
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Download ipa artifact
-        if: inputs.only_app_repo != true
-        uses: actions/download-artifact@v8
-        with:
-          name: ipa
-
-      - name: Download latest release ipa
-        if: inputs.only_app_repo == true
-        run: gh release download --repo ${{ github.repository }} --pattern '*.ipa' --clobber
-
-      - name: Update app-repo.json
-        run: |
-          APP_FILE=$(ls *.ipa)
-          unzip -q "$APP_FILE"
-          VERSION=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleShortVersionString | cut -d '"' -f 4)
-          
-          if [[ "${{ inputs.is_testflight }}" == true ]]; then
-            BUILD=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleVersion | cut -d '"' -f 4)
-            VERSION="${VERSION}_${BUILD}"
-            APP_INDEX=1
-          else
-            APP_INDEX=0
-          fi
-          
-          NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
-          DATE=$(date -u +"%Y-%m-%d")
-          IPA_SIZE=$(stat -f %z "$APP_FILE")
-          DOWNLOAD_URL=https://github.com/${{ github.repository }}/releases/download/v$VERSION/$NAME.ipa
-          NEW_ENTRY=$(jq -n --arg version "$VERSION" --arg date "$DATE" --arg size "$IPA_SIZE" --arg downloadURL "$DOWNLOAD_URL" '{version: $version, date: $date, size: ($size | tonumber), downloadURL: $downloadURL, localizedDescription: "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."}')
-          
-          VERSION_EXISTS=$(jq --arg version "$VERSION" --argjson index "$APP_INDEX" '.apps[$index].versions | map(select(.version == $version)) | length' app-repo.json)
-          if [ "$VERSION_EXISTS" -gt 0 ]; then
-            jq --argjson newEntry "$NEW_ENTRY" --argjson index "$APP_INDEX" --arg version "$VERSION" '.apps[$index].versions |= map(if .version == $version then $newEntry else . end)' app-repo.json > temp.json
-          else
-            jq --argjson newEntry "$NEW_ENTRY" --argjson index "$APP_INDEX" '.apps[$index].versions |= [$newEntry] + .' app-repo.json > temp.json
-          fi
-          mv temp.json app-repo.json
-
-      - uses: EndBug/add-and-commit@v10
-        with:
-          default_author: github_actions
-          message: "chore: update app-repo.json"
-          add: app-repo.json
-
-  apt-repo:
-    if: |
-      always() &&
-      (
         inputs.only_apt_repo == true ||
-        (inputs.caller_workflow != 'ci' && inputs.release == true && inputs.only_app_repo != true && needs.release-app.result == 'success')
+        (inputs.caller_workflow != 'ci' && inputs.release == true && needs.release-app.result == 'success')
       )
     continue-on-error: true
     runs-on: ubuntu-latest
@@ -491,7 +433,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Download deb artifact
-        if: inputs.only_apt_repo != true
+        if: inputs.only_app_repo != true && inputs.only_apt_repo != true
         uses: actions/download-artifact@v8
         with:
           name: rootless package
@@ -504,32 +446,85 @@ jobs:
           gh release download --repo ${{ github.repository }} --pattern '*arm64.deb' --dir apt-repo/repo/debs --clobber
 
       - name: Capture new deb filename
+        if: inputs.only_app_repo != true
         run: echo "NEW_DEB_FILENAME=$(basename $(ls apt-repo/repo/debs/*.deb))" >> $GITHUB_ENV
 
-      - name: Restore previous package history
+      - name: Download ipa artifact
+        if: inputs.only_app_repo != true && inputs.only_apt_repo != true
+        uses: actions/download-artifact@v8
+        with:
+          name: ipa
+
+      - name: Download latest release ipa
+        if: inputs.only_app_repo == true
+        run: gh release download --repo ${{ github.repository }} --pattern '*.ipa' --clobber
+
+      - name: Restore live site state
         run: |
+          PACKAGE_ID=$(grep '^Package:' control | cut -d ' ' -f 2)
+          mkdir -p "apt-repo/repo/depictions/web/$PACKAGE_ID"
+          cp app-repo.json apt-repo/repo/app-repo.json
+
           PAGES_URL=$(gh api "repos/${{ github.repository }}/pages" --jq '.html_url // empty')
           if [ -z "$PAGES_URL" ]; then
-            echo "GitHub Pages not configured yet, starting fresh"
+            echo "GitHub Pages not deployed yet, starting fresh"
             exit 0
           fi
+          PAGES_URL="${PAGES_URL%/}"
 
-          if ! curl -fsSL "${PAGES_URL%/}/Packages" -o previous-Packages; then
-            echo "No previously deployed Packages file found, starting fresh"
-            exit 0
+          curl -fsSL "$PAGES_URL/app-repo.json" -o apt-repo/repo/app-repo.json.live \
+            && mv apt-repo/repo/app-repo.json.live apt-repo/repo/app-repo.json \
+            || echo "No live app-repo.json yet, using repo template"
+
+          curl -fsSL "$PAGES_URL/depictions/web/$PACKAGE_ID/info.xml" -o "apt-repo/repo/depictions/web/$PACKAGE_ID/info.xml" \
+            || echo "No live depiction yet, using repo template"
+
+          if curl -fsSL "$PAGES_URL/Packages" -o previous-Packages; then
+            grep '^Filename:' previous-Packages | awk '{print $2}' | sed 's|^\./||' | while read -r deb_path; do
+              deb_name=$(basename "$deb_path")
+              dest="apt-repo/repo/debs/$deb_name"
+              if [ -f "$dest" ]; then
+                continue
+              fi
+              echo "Restoring $deb_name"
+              curl -fsSL "$PAGES_URL/$deb_path" -o "$dest" || echo "Warning: failed to restore $deb_name"
+            done
+            rm -f previous-Packages
+          else
+            echo "No live Packages file found, starting fresh"
           fi
 
-          grep '^Filename:' previous-Packages | awk '{print $2}' | sed 's|^\./||' | while read -r deb_path; do
-            deb_name=$(basename "$deb_path")
-            dest="apt-repo/repo/debs/$deb_name"
-            if [ -f "$dest" ]; then
-              continue
-            fi
-            echo "Restoring $deb_name"
-            curl -fsSL "${PAGES_URL%/}/$deb_path" -o "$dest" || echo "Warning: failed to restore $deb_name"
-          done
+      - name: Update app-repo.json
+        if: inputs.only_apt_repo != true
+        run: |
+          APP_FILE=$(ls *.ipa)
+          unzip -q "$APP_FILE"
+          VERSION=$(python3 -c "import plistlib; print(plistlib.load(open('Payload/Discord.app/Info.plist','rb'))['CFBundleShortVersionString'])")
+
+          if [[ "${{ inputs.is_testflight }}" == true ]]; then
+            BUILD=$(python3 -c "import plistlib; print(plistlib.load(open('Payload/Discord.app/Info.plist','rb'))['CFBundleVersion'])")
+            VERSION="${VERSION}_${BUILD}"
+            APP_INDEX=1
+          else
+            APP_INDEX=0
+          fi
+
+          NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
+          DATE=$(date -u +"%Y-%m-%d")
+          IPA_SIZE=$(stat -c%s "$APP_FILE")
+          DOWNLOAD_URL=https://github.com/${{ github.repository }}/releases/download/v$VERSION/$NAME.ipa
+          NEW_ENTRY=$(jq -n --arg version "$VERSION" --arg date "$DATE" --arg size "$IPA_SIZE" --arg downloadURL "$DOWNLOAD_URL" '{version: $version, date: $date, size: ($size | tonumber), downloadURL: $downloadURL, localizedDescription: "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."}')
+
+          VERSION_EXISTS=$(jq --arg version "$VERSION" --argjson index "$APP_INDEX" '.apps[$index].versions | map(select(.version == $version)) | length' apt-repo/repo/app-repo.json)
+          if [ "$VERSION_EXISTS" -gt 0 ]; then
+            jq --argjson newEntry "$NEW_ENTRY" --argjson index "$APP_INDEX" --arg version "$VERSION" '.apps[$index].versions |= map(if .version == $version then $newEntry else . end)' apt-repo/repo/app-repo.json > temp.json
+          else
+            jq --argjson newEntry "$NEW_ENTRY" --argjson index "$APP_INDEX" '.apps[$index].versions |= [$newEntry] + .' apt-repo/repo/app-repo.json > temp.json
+          fi
+          mv temp.json apt-repo/repo/app-repo.json
 
       - name: Update depiction version
+        if: inputs.only_app_repo != true
         run: |
           DEB_FILE="apt-repo/repo/debs/${{ env.NEW_DEB_FILENAME }}"
           VERSION=$(dpkg-deb -f "$DEB_FILE" Version)
