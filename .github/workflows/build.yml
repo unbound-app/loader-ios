@@ -28,11 +28,11 @@ on:
         type: boolean
       only_app_repo:
         default: false
-        description: "Just build and deploy app-repo"
+        description: "Build and deploy app-repo"
         type: boolean
       only_apt_repo:
         default: false
-        description: "Just build and deploy apt-repo"
+        description: "Build and deploy apt-repo"
         type: boolean
   workflow_call:
     inputs:
