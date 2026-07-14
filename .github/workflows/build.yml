@@ -443,7 +443,6 @@ jobs:
         if: inputs.only_apt_repo == true
         run: |
           mkdir -p apt-repo/repo/debs
-          gh release download v309.1 --repo ${{ github.repository }} --pattern '*arm64.deb' --dir apt-repo/repo/debs --clobber
           gh release download --repo ${{ github.repository }} --pattern '*arm64.deb' --dir apt-repo/repo/debs --clobber
 
       - name: Capture new deb filename
