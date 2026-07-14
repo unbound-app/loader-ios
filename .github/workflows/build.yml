@@ -73,13 +73,18 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   GH_TOKEN: ${{ github.token }}
 
 jobs:
   build-tweak:
-    if: inputs.only_app_repo != true && inputs.only_apt_repo != true
+    if: &only_build_check inputs.only_app_repo != true && inputs.only_apt_repo != true
     runs-on: macos-15
+    timeout-minutes: 30
     outputs:
       deb_url: ${{ steps.upload-deb.outputs.artifact-url }}
       deb_filename: ${{ steps.set-deb-filename.outputs.filename }}
@@ -164,8 +169,9 @@ jobs:
           echo "filename=$DEB_FILENAME" >> $GITHUB_OUTPUT
 
   build-ipa:
-    if: inputs.only_app_repo != true && inputs.only_apt_repo != true
+    if: *only_build_check
     runs-on: macos-15
+    timeout-minutes: 45
     needs: build-tweak
     outputs:
       ipa_url: ${{ steps.upload-ipa.outputs.artifact-url }}
@@ -301,8 +307,9 @@ jobs:
         run: echo "filename=${{ env.APP_NAME }}.ipa" >> $GITHUB_OUTPUT
 
   build-simulator:
-    if: inputs.only_app_repo != true && inputs.only_apt_repo != true
+    if: *only_build_check
     runs-on: macos-15
+    timeout-minutes: 20
     needs: build-ipa
     outputs:
       simulator_url: ${{ steps.upload-simulator.outputs.artifact-url }}
@@ -358,6 +365,7 @@ jobs:
   release-app:
     if: inputs.caller_workflow != 'ci' && inputs.release == true && inputs.only_app_repo != true && inputs.only_apt_repo != true
     runs-on: macos-15
+    timeout-minutes: 15
     needs: [build-tweak, build-ipa, build-simulator]
 
     steps:
@@ -406,6 +414,7 @@ jobs:
       )
     continue-on-error: true
     runs-on: macos-15
+    timeout-minutes: 15
     needs: release-app
     steps:
       - name: Checkout code
@@ -464,6 +473,7 @@ jobs:
       )
     continue-on-error: true
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [build-tweak, release-app]
     environment:
       name: github-pages
@@ -497,7 +507,7 @@ jobs:
 
       - name: Restore previous package history
         run: |
-          ARTIFACT_ID=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=github-pages&per_page=1" --jq '.artifacts[0].id // empty')
+          ARTIFACT_ID=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=github-pages&per_page=100" --jq '[.artifacts[]] | sort_by(.created_at) | last | .id // empty')
           if [ -z "$ARTIFACT_ID" ]; then
             echo "No previously deployed pages artifact found, starting fresh"
             exit 0
@@ -548,6 +558,7 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: apt-repo/repo
+          retention-days: 90
 
       - name: Deploy to GitHub Pages
         id: deployment
