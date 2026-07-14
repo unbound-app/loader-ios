@@ -1,7 +1,6 @@
 # @unbound-app/loader-ios
+
 [![Build Unbound](https://github.com/unbound-app/loader-ios/actions/workflows/build.yml/badge.svg)](https://github.com/unbound-app/loader-ios/actions/workflows/build.yml)
-> [!CAUTION]
-> Do not use this. Whilst the objc tweak is sufficiently advanced, the [JavaScript client](https://github.com/unbound-app/client) is not yet finished and will not yield you any use.
 
 Tweak to inject [Unbound](https://github.com/unbound-app/client) into Discord and perform various utility tasks.
 
