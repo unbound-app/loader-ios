@@ -195,11 +195,13 @@ jobs:
 
       - name: Download Discord ipa
         uses: nick-fields/retry@v4
+        env:
+          IPA_URL: ${{ inputs.ipa_url }}
         with:
           timeout_minutes: 10
           max_attempts: 3
           retry_wait_seconds: 15
-          command: curl -L -o discord.ipa ${{ inputs.ipa_url }}
+          command: curl -L -o discord.ipa "$IPA_URL"
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -230,7 +232,7 @@ jobs:
       - name: Build Extensions
         if: inputs.add_extensions == true
         run: |
-          if [ ${{ inputs.is_testflight }} == true ]; then
+          if [ "${{ inputs.is_testflight }}" == true ]; then
             SAFARI_EXT_BUNDLE_ID="com.hammerandchisel.discord.testflight.OpenInDiscord"
             SHARE_EXT_BUNDLE_ID="com.hammerandchisel.discord.testflight.Share"
           else
@@ -281,14 +283,14 @@ jobs:
 
       - name: Inject tweak (and extensions)
         run: |
-          if [ ${{ inputs.add_extensions }} == true ]; then
-            if [ ${{ inputs.is_testflight }} == true ]; then
+          if [ "${{ inputs.add_extensions }}" == true ]; then
+            if [ "${{ inputs.is_testflight }}" == true ]; then
               cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex extensions/ShareToDiscord/build/Share.appex
             else
               cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex extensions/ShareToDiscord/build/Share.appex
             fi
           else
-            if [ ${{ inputs.is_testflight }} == true ]; then
+            if [ "${{ inputs.is_testflight }}" == true ]; then
               cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
             else
               cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
@@ -382,7 +384,7 @@ jobs:
           unzip -q *.ipa
           VERSION=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleShortVersionString | cut -d '"' -f 4)
           
-          if [[ ${{ inputs.is_testflight }} == true ]]; then
+          if [[ "${{ inputs.is_testflight }}" == true ]]; then
             BUILD=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleVersion | cut -d '"' -f 4)
             VERSION="${VERSION}_${BUILD}"
           fi
@@ -436,7 +438,7 @@ jobs:
           unzip -q "$APP_FILE"
           VERSION=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleShortVersionString | cut -d '"' -f 4)
           
-          if [[ ${{ inputs.is_testflight }} == true ]]; then
+          if [[ "${{ inputs.is_testflight }}" == true ]]; then
             BUILD=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleVersion | cut -d '"' -f 4)
             VERSION="${VERSION}_${BUILD}"
             APP_INDEX=1
