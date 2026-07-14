@@ -1,8 +1,8 @@
 name: Build Unbound
 run-name: >-
   ${{
-    inputs.only_app_repo == true && 'app-repo deploy (latest release)' ||
-    inputs.only_apt_repo == true && 'apt-repo deploy (latest release)' ||
+    inputs.only_app_repo == true && 'app-repo deploy' ||
+    inputs.only_apt_repo == true && 'apt-repo deploy' ||
     format('{0} for {1}', (inputs.release == true && 'Release' || 'Build'), inputs.ipa_url)
   }}
 
@@ -11,8 +11,8 @@ on:
     inputs:
       ipa_url:
         default: ""
-        description: "Direct link to the decrypted ipa (not needed for the 'only' options below)"
-        required: false
+        description: "Direct link to the decrypted ipa"
+        required: true
         type: string
       release:
         default: true
@@ -28,11 +28,11 @@ on:
         type: boolean
       only_app_repo:
         default: false
-        description: "Skip build/release entirely and just redeploy app-repo.json using the ipa from the latest GitHub Release"
+        description: "Just build and deploy app-repo"
         type: boolean
       only_apt_repo:
         default: false
-        description: "Skip build/release entirely and just redeploy the apt repo using the deb from the latest GitHub Release"
+        description: "Just build and deploy apt-repo"
         type: boolean
   workflow_call:
     inputs:
