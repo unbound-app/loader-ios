@@ -10,8 +10,8 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 
 ### Jailbroken
 
-- Add the apt repo to your package manager: <https://repo.unbound.rip>
-- Install Unbound by downloading the appropriate Debian package (or by building your own, see [Building](#building)) and adding it to your package manager.
+- Either add the apt repo to your package manager: <https://repo.unbound.rip>
+- Or install Unbound by downloading the appropriate Debian package (or by building your own, see [Building](#building)) and adding it to your package manager.
 
 ### Jailed
 
@@ -22,7 +22,8 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 > [!WARNING]
 > Trying to use non-ellekit tweak runtimes will likely break functionality. Ideally always use the pre-patched ipa when sideloading.
 
-- Download and install [Unbound.ipa](https://github.com/unbound-app/loader-ios/releases/latest/download/Unbound.ipa) using your preferred sideloading method.
+- Either add the altsource to your on-device sideloading tool: <https://repo.unbound.rip/app-repo.json>
+- Or download and install [Unbound.ipa](https://github.com/unbound-app/loader-ios/releases/latest/download/Unbound.ipa) using your preferred sideloading method.
 
 ## Building
 
