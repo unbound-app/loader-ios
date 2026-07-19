@@ -31,19 +31,23 @@ static NSMutableArray *plugins = nil;
                            return;
                        }
 
-                       NSMutableDictionary *manifest = [LoaderShared parseManifestAt:data
-                                                                              folder:folder
-                                                                            category:LOG_CATEGORY_PLUGINS];
+                       NSMutableDictionary *manifest =
+                           [LoaderShared parseManifestAt:data
+                                                  folder:folder
+                                                category:LOG_CATEGORY_PLUGINS];
                        if (!manifest)
                        {
                            return;
                        }
 
-                       NSString *entry = [NSString pathWithComponents:@[ dir, @"bundle.js" ]];
-                       if (![FileSystem exists:entry])
+                       NSString *entry = [LoaderShared resolveManifestEntryInDirectory:dir
+                                                                              manifest:manifest
+                                                                                   key:@"main"];
+                       if (!entry)
                        {
                            [Logger info:LOG_CATEGORY_PLUGINS
-                                 format:@"Skipping %@ as it is missing a bundle.", folder];
+                                 format:@"Skipping %@ as manifest.main is missing or invalid.",
+                                        folder];
                            return;
                        }
 
@@ -51,13 +55,20 @@ static NSMutableArray *plugins = nil;
 
                        manifest[@"folder"] = folder;
                        manifest[@"path"]   = dir;
+                       manifest[@"entry"]  = entry;
 
                        [plugins addObject:@{
                            @"manifest" : manifest,
-                           @"bundle" :
-                               [[NSString alloc] initWithData:bundle encoding:NSUTF8StringEncoding]
+                           @"bundle" : [[NSString alloc] initWithData:bundle
+                                                             encoding:NSUTF8StringEncoding]
                        }];
+
+                       [Logger info:LOG_CATEGORY_PLUGINS
+                             format:@"Loaded %@ from %@.", folder, entry];
                    }];
+
+    [Logger info:LOG_CATEGORY_PLUGINS
+          format:@"Loaded %lu plugin(s).", (unsigned long) [plugins count]];
 };
 
 @end

@@ -13,17 +13,17 @@
     NSString *origin  = [Utilities JSONString:[Utilities getCurrentDylibName]];
     NSString *version = [Utilities JSONString:PACKAGE_VERSION];
 
-    NSString *preloadScript = [NSString
-        stringWithFormat:@"this.UNBOUND_SETTINGS = %@;\n"
-                         @"this.UNBOUND_PLUGINS = %@;\n"
-                         @"this.UNBOUND_THEMES = %@;\n"
-                         @"this.UNBOUND_FONTS = %@;\n"
-                         @"this.UNBOUND_AVAILABLE_FONTS = %@;\n\n"
-                         @"this.UNBOUND_LOADER = {\n"
-                         @"    origin: %@,\n"
-                         @"    version: %@,\n"
-                         @"};",
-                         settings, plugins, themes, fonts, availableFonts, origin, version];
+    NSString *preloadScript = [NSString stringWithFormat:@"this.UNBOUND_SETTINGS = %@;\n"
+                                                         @"this.UNBOUND_PLUGINS = %@;\n"
+                                                         @"this.UNBOUND_THEMES = %@;\n"
+                                                         @"this.UNBOUND_FONTS = %@;\n"
+                                                         @"this.UNBOUND_AVAILABLE_FONTS = %@;\n\n"
+                                                         @"this.UNBOUND_LOADER = {\n"
+                                                         @"    origin: %@,\n"
+                                                         @"    version: %@,\n"
+                                                         @"};",
+                                                         settings, plugins, themes, fonts,
+                                                         availableFonts, origin, version];
 
     return [preloadScript dataUsingEncoding:NSUTF8StringEncoding];
 }
@@ -75,6 +75,27 @@
                format:@"Skipping %@ as its manifest failed to be parsed. (%@)", folder, e.reason];
         return nil;
     }
+}
+
++ (NSString *)resolveManifestEntryInDirectory:(NSString *)dir
+                                     manifest:(NSDictionary *)manifest
+                                          key:(NSString *)key
+{
+    id value = manifest[key];
+    if (![value isKindOfClass:[NSString class]] || [((NSString *) value) length] == 0)
+    {
+        return nil;
+    }
+
+    NSString *entry = (NSString *) value;
+    NSString *path = [entry hasPrefix:@"/"] ? entry : [NSString pathWithComponents:@[ dir, entry ]];
+
+    if (![FileSystem exists:path] || [FileSystem isDirectory:path])
+    {
+        return nil;
+    }
+
+    return path;
 }
 
 @end

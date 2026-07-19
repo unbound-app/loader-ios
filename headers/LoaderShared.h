@@ -19,4 +19,8 @@
                                   folder:(NSString *)folder
                                 category:(const char *)cat;
 
++ (NSString *)resolveManifestEntryInDirectory:(NSString *)dir
+                                    manifest:(NSDictionary *)manifest
+                                         key:(NSString *)key;
+
 @end
