@@ -67,8 +67,9 @@ static NSMutableArray *plugins = nil;
                              format:@"Loaded %@ from %@.", folder, entry];
                    }];
 
-    [Logger info:LOG_CATEGORY_PLUGINS
-          format:@"Loaded %lu plugin(s).", (unsigned long) [plugins count]];
+    NSUInteger pluginCount = [plugins count];
+    NSString  *pluralForm  = (pluginCount == 1) ? @"plugin" : @"plugins";
+    [Logger info:LOG_CATEGORY_PLUGINS format:@"Loaded %lu %@.", pluginCount, pluralForm];
 };
 
 @end
