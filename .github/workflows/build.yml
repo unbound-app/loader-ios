@@ -204,7 +204,7 @@ jobs:
           command: curl -L -o discord.ipa "$IPA_URL"
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           cache: false
           go-version: 'stable'
