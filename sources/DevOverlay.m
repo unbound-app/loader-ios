@@ -1,18 +1,22 @@
 #import "DevOverlay.h"
 
-@interface DevOverlayPassthroughView : UIView
+@interface DevOverlayPassthroughWindow : UIWindow
 @property (nonatomic, copy) void (^outsideTapHandler)(void);
 @end
 
-@implementation DevOverlayPassthroughView
+@implementation DevOverlayPassthroughWindow
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event
 {
     UIView *hitView = [super hitTest:point withEvent:event];
-    if (hitView == self && self.outsideTapHandler)
+    if (hitView == self.rootViewController.view)
     {
-        self.outsideTapHandler();
+        if (self.outsideTapHandler)
+        {
+            self.outsideTapHandler();
+        }
+        return nil;
     }
-    return hitView == self ? nil : hitView;
+    return hitView;
 }
 @end
 
@@ -283,13 +287,14 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
         return;
     }
 
-    UIWindow *overlayWindow       = [[UIWindow alloc] initWithWindowScene:activeScene];
-    overlayWindow.windowLevel     = UIWindowLevelAlert - 1;
-    overlayWindow.backgroundColor = [UIColor clearColor];
+    DevOverlayPassthroughWindow *overlayWindow =
+        [[DevOverlayPassthroughWindow alloc] initWithWindowScene:activeScene];
+    overlayWindow.windowLevel      = UIWindowLevelAlert - 1;
+    overlayWindow.backgroundColor  = [UIColor clearColor];
+    overlayWindow.outsideTapHandler = ^{ [DevOverlay dismissPill]; };
 
-    DevOverlayPassthroughView *passthroughView = [[DevOverlayPassthroughView alloc] init];
-    passthroughView.backgroundColor            = [UIColor clearColor];
-    passthroughView.outsideTapHandler           = ^{ [DevOverlay dismissPill]; };
+    UIView *passthroughView          = [[UIView alloc] init];
+    passthroughView.backgroundColor  = [UIColor clearColor];
 
     UIViewController *rootVC         = [UIViewController new];
     rootVC.view                      = passthroughView;
