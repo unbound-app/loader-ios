@@ -181,4 +181,21 @@ private:
     }
 }
 
++ (jsi::Value)evaluateBytecode:(NSData *)bytecodeData tag:(NSString *)tag runtime:(jsi::Runtime &)runtime
+{
+    if (bytecodeData.length == 0)
+    {
+        throw jsi::JSError(runtime, "evaluateBytecode: bytecode is empty");
+    }
+
+    if (![Utilities isHermesBytecode:bytecodeData])
+    {
+        throw jsi::JSError(runtime, "evaluateBytecode: data is not Hermes bytecode");
+    }
+
+    auto buffer   = std::make_shared<NSDataBuffer>(bytecodeData);
+    auto prepared = runtime.prepareJavaScript(buffer, nsStringToStd(tag));
+    return runtime.evaluatePreparedJavaScript(prepared);
+}
+
 @end

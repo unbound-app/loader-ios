@@ -95,6 +95,7 @@ static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *nativeFeatureMe
             @"chat.avatar" : @{@"introduced" : @"1.0.0"},
             @"chat.messageBubbles" : @{@"introduced" : @"1.0.0"},
             @"toolbox.menu" : @{@"introduced" : @"1.0.0"},
+            @"native.evaluateBytecode" : @{@"introduced" : @"1.0.0"},
         };
     });
     return features;
@@ -316,6 +317,34 @@ void registerNativeInterop(Runtime &runtime)
                       runtime:runtime
                       handler:[](Runtime &rt, const Value &, const Value *, size_t) -> Value {
                           return [JSI fromObjC:featureNamesForStatus(@"removed") runtime:rt];
+                      }]);
+
+        interop.setProperty(
+            runtime, "evaluateBytecode",
+            [JSI makeFunction:"evaluateBytecode"
+                     argCount:2
+                      runtime:runtime
+                      handler:[](Runtime &rt, const Value &, const Value *args,
+                                 size_t count) -> Value {
+                          if (count == 0 || !args[0].isObject() ||
+                              !args[0].asObject(rt).isArrayBuffer(rt))
+                          {
+                              throw JSError(
+                                  rt,
+                                  "evaluateBytecode expects an ArrayBuffer of Hermes bytecode as "
+                                  "its first argument");
+                          }
+
+                          ArrayBuffer arrayBuffer = args[0].asObject(rt).getArrayBuffer(rt);
+                          NSData     *bytecodeData =
+                              [NSData dataWithBytes:arrayBuffer.data(rt)
+                                             length:arrayBuffer.size(rt)];
+
+                          NSString *tag = (count > 1) ? [JSI toNSString:args[1] runtime:rt] : nil;
+
+                          return [JSI evaluateBytecode:bytecodeData
+                                                    tag:(tag ?: @"UnboundNative.evaluateBytecode")
+                                                runtime:rt];
                       }]);
 
 
