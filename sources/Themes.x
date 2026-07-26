@@ -1,9 +1,21 @@
 #import "Themes.h"
 
+@interface Themes ()
++ (void)loadThemes;
++ (void)refreshDiscordTheme;
++ (void)applyThemeOnMainThread:(NSString *)manifestId;
++ (BOOL)setThemeOnMainThread:(NSString *)manifestId;
+@end
+
 @implementation Themes
 static NSMutableDictionary<NSString *, NSValue *> *originalRawImplementations;
 static NSMutableArray                             *themes         = nil;
 static NSString                                   *currentThemeId = nil;
+static __weak DCDTheme                            *currentDiscordTheme;
+static NSString                                   *lastDiscordThemeId = nil;
+static BOOL                                        semanticColorsSwizzled = NO;
+static BOOL                                        refreshingDiscordTheme = NO;
+static BOOL                                        customThemeActive = NO;
 
 + (NSString *)makeJSON
 {
@@ -25,28 +37,88 @@ static NSString                                   *currentThemeId = nil;
 
 + (BOOL)isValidCustomTheme:(NSString *)manifestId
 {
-    NSDictionary *theme = [Themes getThemeById:manifestId];
-
-    if (theme != nil)
-    {
-        return YES;
-    }
-
-    return NO;
+    return [Themes getThemeById:manifestId] != nil;
 }
 
-+ (void)init
++ (NSString *)getTheme
 {
-    if (!themes)
+    return currentThemeId;
+}
+
++ (NSArray *)getThemes
+{
+    return [themes copy] ?: @[];
+}
+
++ (void)applyTheme:(NSString *)manifestId
+{
+    [Utilities runOnMainThread:^{ [Themes applyThemeOnMainThread:manifestId]; }];
+}
+
++ (void)applyThemeOnMainThread:(NSString *)manifestId
+{
+    NSString *themeId = manifestId.length > 0 ? manifestId : nil;
+
+    [Logger info:LOG_CATEGORY_THEMES format:@"Theme updated. (%@)", themeId ?: @"default"];
+    currentThemeId = themeId;
+
+    [Themes restoreOriginalRawColors];
+
+    if ([Settings getBoolean:@"unbound" key:@"recovery" def:NO] || !themeId)
     {
-        themes = [[NSMutableArray alloc] init];
+        return;
     }
 
-    if (!originalRawImplementations)
+    NSDictionary *theme = [Themes getThemeById:themeId];
+    NSDictionary *raw   = theme[@"bundle"][@"raw"];
+    if (raw)
     {
-        originalRawImplementations = [[NSMutableDictionary alloc] init];
+        [Themes swizzleRawColors:raw];
+    }
+}
+
++ (void)refreshDiscordTheme
+{
+    DCDTheme *theme = currentDiscordTheme;
+    if (!theme || lastDiscordThemeId.length == 0)
+    {
+        return;
     }
 
+    refreshingDiscordTheme = YES;
+    @try
+    {
+        [theme updateTheme:lastDiscordThemeId];
+    }
+    @finally
+    {
+        refreshingDiscordTheme = NO;
+    }
+}
+
++ (BOOL)setTheme:(NSString *)manifestId
+{
+    __block BOOL applied = NO;
+    [Utilities runOnMainThread:^{ applied = [Themes setThemeOnMainThread:manifestId]; }];
+    return applied;
+}
+
++ (BOOL)setThemeOnMainThread:(NSString *)manifestId
+{
+    NSString *themeId = manifestId.length > 0 ? manifestId : nil;
+    if (themeId && ![Themes isValidCustomTheme:themeId])
+    {
+        return NO;
+    }
+
+    customThemeActive = themeId != nil;
+    [Themes applyThemeOnMainThread:themeId];
+    [Themes refreshDiscordTheme];
+    return YES;
+}
+
++ (void)loadThemes
+{
     [LoaderShared
         scanAddonDirectory:@"Themes"
                   category:LOG_CATEGORY_THEMES
@@ -113,10 +185,45 @@ static NSString                                   *currentThemeId = nil;
 
                        [themes addObject:@{@"manifest" : manifest, @"bundle" : bundle}];
                    }];
+}
 
-    if (![Settings getBoolean:@"unbound" key:@"recovery" def:NO])
++ (NSArray *)reloadThemes
+{
+    [themes removeAllObjects];
+    [Themes loadThemes];
+
+    if (currentThemeId && ![Themes isValidCustomTheme:currentThemeId])
+    {
+        customThemeActive = NO;
+        [Themes applyTheme:nil];
+    }
+    else if (currentThemeId)
+    {
+        [Themes applyTheme:currentThemeId];
+    }
+
+    [Themes refreshDiscordTheme];
+    return [Themes getThemes];
+}
+
++ (void)init
+{
+    if (!themes)
+    {
+        themes = [[NSMutableArray alloc] init];
+    }
+
+    if (!originalRawImplementations)
+    {
+        originalRawImplementations = [[NSMutableDictionary alloc] init];
+    }
+
+    [Themes reloadThemes];
+
+    if (![Settings getBoolean:@"unbound" key:@"recovery" def:NO] && !semanticColorsSwizzled)
     {
         [Themes swizzleSemanticColors];
+        semanticColorsSwizzled = YES;
     }
 };
 
@@ -311,27 +418,24 @@ static NSString                                   *currentThemeId = nil;
 {
     if (![theme isKindOfClass:[NSString class]])
     {
+        [Utilities runOnMainThread:^{ currentDiscordTheme = self; }];
         return %orig;
     }
 
-    if ([currentThemeId isEqualToString:theme])
+    if (refreshingDiscordTheme)
     {
         return %orig;
     }
 
-    [Logger info:LOG_CATEGORY_THEMES format:@"Theme updated. (%@)", theme];
-    currentThemeId = theme;
+    [Utilities runOnMainThread:^{
+        currentDiscordTheme = self;
+        lastDiscordThemeId = theme;
 
-    [Themes restoreOriginalRawColors];
-
-    NSDictionary *instance = [Themes getThemeById:theme];
-
-    if (instance)
-    {
-        NSDictionary *raw = instance[@"bundle"][@"raw"];
-        if (raw)
-            [Themes swizzleRawColors:raw];
-    }
+        if (!customThemeActive && ![currentThemeId isEqualToString:theme])
+        {
+            [Themes applyTheme:theme];
+        }
+    }];
 
     %orig;
 }

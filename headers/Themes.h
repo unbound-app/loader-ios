@@ -14,6 +14,11 @@
 
 + (NSDictionary *)getThemeById:(NSString *)manifestId;
 + (BOOL)isValidCustomTheme:(NSString *)manifestId;
++ (void)applyTheme:(NSString *)manifestId;
++ (BOOL)setTheme:(NSString *)manifestId;
++ (NSString *)getTheme;
++ (NSArray *)getThemes;
++ (NSArray *)reloadThemes;
 + (void)swizzleRawColors:(NSDictionary *)payload;
 + (UIColor *)parseColor:(NSString *)color;
 + (void)restoreOriginalRawColors;

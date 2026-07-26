@@ -8,6 +8,13 @@ namespace {
 static constexpr const char *kInteropGlobalName   = "UnboundNative";
 static NSString *const       kNativeModuleVersion = @"1.0.0";
 
+static Value mainThreadValue(Runtime &runtime, id (^getter)(void))
+{
+    __block id value = nil;
+    [Utilities runOnMainThread:^{ value = getter(); }];
+    return [JSI fromObjC:value runtime:runtime];
+}
+
 static NSString *semverStringFromMetadataValue(id value)
 {
     if ([value isKindOfClass:[NSString class]])
@@ -96,6 +103,7 @@ static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *nativeFeatureMe
             @"chat.messageBubbles" : @{@"introduced" : @"1.0.0"},
             @"toolbox.menu" : @{@"introduced" : @"1.0.0"},
             @"native.evaluateBytecode" : @{@"introduced" : @"1.0.0"},
+            @"themes.native" : @{@"introduced" : @"1.0.0"},
         };
     });
     return features;
@@ -345,6 +353,45 @@ void registerNativeInterop(Runtime &runtime)
                           return [JSI evaluateBytecode:bytecodeData
                                                     tag:(tag ?: @"UnboundNative.evaluateBytecode")
                                                 runtime:rt];
+                      }]);
+
+        interop.setProperty(
+            runtime, "setTheme",
+            [JSI makeFunction:"setTheme"
+                     argCount:1
+                      runtime:runtime
+                      handler:[](Runtime &rt, const Value &, const Value *args,
+                                 size_t count) -> Value {
+                          NSString *themeId =
+                              (count > 0) ? [JSI toNSString:args[0] runtime:rt] : nil;
+                          return Value([Themes setTheme:themeId]);
+                      }]);
+
+        interop.setProperty(
+            runtime, "getTheme",
+            [JSI makeFunction:"getTheme"
+                     argCount:0
+                      runtime:runtime
+                      handler:[](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+                          return mainThreadValue(rt, ^{ return [Themes getTheme]; });
+                      }]);
+
+        interop.setProperty(
+            runtime, "getThemes",
+            [JSI makeFunction:"getThemes"
+                     argCount:0
+                      runtime:runtime
+                      handler:[](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+                          return mainThreadValue(rt, ^{ return [Themes getThemes]; });
+                      }]);
+
+        interop.setProperty(
+            runtime, "reloadThemes",
+            [JSI makeFunction:"reloadThemes"
+                     argCount:0
+                      runtime:runtime
+                      handler:[](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+                          return mainThreadValue(rt, ^{ return [Themes reloadThemes]; });
                       }]);
 
 

@@ -111,6 +111,7 @@ extern NSString *const TROLL_STORE_LITE_PATH;
 + (dispatch_source_t)createDebounceTimer:(double)delay
                                    queue:(dispatch_queue_t)queue
                                    block:(dispatch_block_t)block;
++ (void)runOnMainThread:(dispatch_block_t)block;
 
 + (uint32_t)getHermesBytecodeVersion;
 + (BOOL)isHermesBytecode:(NSData *)data;

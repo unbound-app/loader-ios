@@ -21,6 +21,7 @@
 
 @interface DCDTheme : NSObject
 + (NSInteger)themeIndex;
+- (void)updateTheme:(id)theme;
 @end
 
 @interface DCDBundleUpdaterManager : NSObject
