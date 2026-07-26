@@ -238,13 +238,23 @@
 
 @implementation DevOverlay
 
-static UIWindow *devOverlayWindow = nil;
-static UIButton *devOverlayButton = nil;
-static UIView   *devOverlayPill   = nil;
+static UIWindow *devOverlayWindow   = nil;
+static UIButton *devOverlayButton   = nil;
+static UIView   *devOverlayBackdrop = nil;
+static UIView   *devOverlayPill     = nil;
 
 static UIWindow *discordKeyWindow = nil;
 
+static CGPoint devOverlayButtonCenter = { 0, 0 };
+static CGPoint devOverlayDragStartCenter = { 0, 0 };
+
 static NSArray<NSNumber *> *avatarRadiusPresets = nil;
+
+static NSString *const kDevOverlayButtonRelativeXKey = @"UnboundDevOverlayButtonRelativeX";
+static NSString *const kDevOverlayButtonRelativeYKey = @"UnboundDevOverlayButtonRelativeY";
+
+static const CGFloat kDevOverlayButtonSide   = 44;
+static const CGFloat kDevOverlayButtonMargin = 8;
 
 + (void)initialize
 {
@@ -302,17 +312,16 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
 
     overlayWindow.hidden = NO;
 
-    overlayWindow.frame = [self collapsedFrameForScreenBounds:activeScene.screen.bounds];
+    devOverlayWindow       = overlayWindow;
+    devOverlayButtonCenter = [self clampedCenter:[self persistedCenterForScreenBounds:
+                                                           activeScene.screen.bounds]];
+
+    overlayWindow.frame = [self collapsedFrame];
     [overlayWindow layoutIfNeeded];
 
-    const CGFloat side   = 44;
-    CGRect        bounds = overlayWindow.bounds;
-    CGRect        buttonFrame =
-        CGRectMake(bounds.size.width - side - 16, bounds.size.height - side - 96, side, side);
+    const CGFloat side = kDevOverlayButtonSide;
 
-    UIView *backdrop = [[UIView alloc] initWithFrame:buttonFrame];
-    backdrop.autoresizingMask =
-        UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
+    UIView *backdrop                = [[UIView alloc] init];
     backdrop.layer.cornerRadius     = side / 2.0;
     backdrop.layer.cornerCurve      = kCACornerCurveContinuous;
     backdrop.layer.masksToBounds    = YES;
@@ -320,17 +329,15 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
 
     UIVisualEffectView *blur = [[UIVisualEffectView alloc]
         initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
-    blur.frame            = backdrop.bounds;
+    blur.frame            = CGRectMake(0, 0, side, side);
     blur.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [backdrop addSubview:blur];
 
     [rootVC.view addSubview:backdrop];
 
-    UIButton *button        = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.frame            = buttonFrame;
-    button.autoresizingMask = backdrop.autoresizingMask;
-    button.tintColor        = UIColor.labelColor;
-    button.backgroundColor  = UIColor.clearColor;
+    UIButton *button       = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.tintColor       = UIColor.labelColor;
+    button.backgroundColor = UIColor.clearColor;
 
     UIImageSymbolConfiguration *symbolConfig =
         [UIImageSymbolConfiguration configurationWithPointSize:18
@@ -342,18 +349,92 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
                   action:@selector(toggleButtonTapped)
         forControlEvents:UIControlEventTouchUpInside];
 
+    UIPanGestureRecognizer *pan =
+        [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleButtonPan:)];
+    [button addGestureRecognizer:pan];
+
     [rootVC.view addSubview:button];
 
-    devOverlayWindow = overlayWindow;
-    devOverlayButton = button;
+    devOverlayBackdrop = backdrop;
+    devOverlayButton   = button;
+
+    [self applyButtonPosition];
 }
 
-+ (CGRect)collapsedFrameForScreenBounds:(CGRect)screenBounds
+#pragma mark - Button placement
+
++ (CGRect)screenBounds
 {
-    const CGFloat width  = 76;
-    const CGFloat height = 156;
-    return CGRectMake(screenBounds.size.width - width, screenBounds.size.height - height, width,
-                       height);
+    UIWindowScene *scene = devOverlayWindow.windowScene ?: [self activeWindowScene];
+    return scene ? scene.screen.bounds : UIScreen.mainScreen.bounds;
+}
+
++ (CGPoint)persistedCenterForScreenBounds:(CGRect)screenBounds
+{
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    if (![defaults objectForKey:kDevOverlayButtonRelativeXKey] ||
+        ![defaults objectForKey:kDevOverlayButtonRelativeYKey])
+    {
+        return CGPointMake(screenBounds.size.width - 38, screenBounds.size.height - 118);
+    }
+
+    return CGPointMake([defaults doubleForKey:kDevOverlayButtonRelativeXKey] * screenBounds.size.width,
+                        [defaults doubleForKey:kDevOverlayButtonRelativeYKey] * screenBounds.size.height);
+}
+
++ (void)persistButtonCenter
+{
+    CGRect screenBounds = [self screenBounds];
+    if (screenBounds.size.width <= 0 || screenBounds.size.height <= 0)
+        return;
+
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    [defaults setDouble:devOverlayButtonCenter.x / screenBounds.size.width
+                  forKey:kDevOverlayButtonRelativeXKey];
+    [defaults setDouble:devOverlayButtonCenter.y / screenBounds.size.height
+                  forKey:kDevOverlayButtonRelativeYKey];
+}
+
++ (CGPoint)clampedCenter:(CGPoint)center
+{
+    CGRect       screenBounds = [self screenBounds];
+    UIEdgeInsets insets       = discordKeyWindow.safeAreaInsets;
+    CGFloat      inset        = kDevOverlayButtonSide / 2.0 + kDevOverlayButtonMargin;
+
+    CGFloat minX = inset + insets.left;
+    CGFloat maxX = screenBounds.size.width - inset - insets.right;
+    CGFloat minY = inset + insets.top;
+    CGFloat maxY = screenBounds.size.height - inset - insets.bottom;
+
+    return CGPointMake(MIN(MAX(center.x, minX), MAX(minX, maxX)),
+                        MIN(MAX(center.y, minY), MAX(minY, maxY)));
+}
+
++ (CGRect)buttonFrameInScreen
+{
+    return CGRectMake(devOverlayButtonCenter.x - kDevOverlayButtonSide / 2.0,
+                       devOverlayButtonCenter.y - kDevOverlayButtonSide / 2.0,
+                       kDevOverlayButtonSide, kDevOverlayButtonSide);
+}
+
++ (CGRect)collapsedFrame
+{
+    CGRect padded = CGRectInset([self buttonFrameInScreen], -kDevOverlayButtonMargin,
+                                 -kDevOverlayButtonMargin);
+    CGRect clipped = CGRectIntersection(padded, [self screenBounds]);
+    return CGRectIsNull(clipped) ? padded : clipped;
+}
+
++ (void)applyButtonPosition
+{
+    if (!devOverlayWindow || !devOverlayButton)
+        return;
+
+    CGPoint origin      = devOverlayWindow.frame.origin;
+    CGRect  buttonFrame = CGRectOffset([self buttonFrameInScreen], -origin.x, -origin.y);
+
+    devOverlayButton.frame   = buttonFrame;
+    devOverlayBackdrop.frame = buttonFrame;
 }
 
 + (void)growOverlayWindow
@@ -364,16 +445,60 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
 
     devOverlayWindow.frame = scene.screen.bounds;
     [devOverlayWindow layoutIfNeeded];
+    [self applyButtonPosition];
 }
 
 + (void)shrinkOverlayWindow
 {
-    UIWindowScene *scene = devOverlayWindow.windowScene;
-    if (!scene)
+    if (!devOverlayWindow)
         return;
 
-    devOverlayWindow.frame = [self collapsedFrameForScreenBounds:scene.screen.bounds];
+    devOverlayButtonCenter = [self clampedCenter:devOverlayButtonCenter];
+    devOverlayWindow.frame = [self collapsedFrame];
     [devOverlayWindow layoutIfNeeded];
+    [self applyButtonPosition];
+}
+
++ (void)handleButtonPan:(UIPanGestureRecognizer *)gesture
+{
+    switch (gesture.state)
+    {
+        case UIGestureRecognizerStateBegan:
+        {
+            if (devOverlayPill)
+            {
+                [devOverlayPill removeFromSuperview];
+                devOverlayPill = nil;
+            }
+
+            [self growOverlayWindow];
+            [gesture setTranslation:CGPointZero inView:devOverlayWindow];
+            devOverlayDragStartCenter = devOverlayButtonCenter;
+
+            [[[UIImpactFeedbackGenerator alloc]
+                initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+            break;
+        }
+        case UIGestureRecognizerStateChanged:
+        {
+            CGPoint translation = [gesture translationInView:devOverlayWindow];
+            devOverlayButtonCenter =
+                [self clampedCenter:CGPointMake(devOverlayDragStartCenter.x + translation.x,
+                                                 devOverlayDragStartCenter.y + translation.y)];
+            [self applyButtonPosition];
+            break;
+        }
+        case UIGestureRecognizerStateEnded:
+        case UIGestureRecognizerStateCancelled:
+        case UIGestureRecognizerStateFailed:
+        {
+            [self persistButtonCenter];
+            [self shrinkOverlayWindow];
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 + (void)toggleButtonTapped
@@ -398,16 +523,7 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     UIView *pill = [self buildPillView];
     [devOverlayButton.superview insertSubview:pill belowSubview:devOverlayButton];
 
-    const CGFloat pillWidth = 250;
-    CGSize fitSize = [pill systemLayoutSizeFittingSize:CGSizeMake(pillWidth, UILayoutFittingCompressedSize.height)
-                          withHorizontalFittingPriority:UILayoutPriorityRequired
-                                verticalFittingPriority:UILayoutPriorityFittingSizeLevel];
-
-    CGRect buttonFrame = devOverlayButton.frame;
-    CGRect pillFrame    = CGRectMake(CGRectGetMaxX(buttonFrame) - pillWidth,
-                                      buttonFrame.origin.y - fitSize.height - 12, pillWidth,
-                                      fitSize.height);
-    pill.frame     = pillFrame;
+    [self positionPill:pill withWidth:250];
     pill.alpha     = 0;
     pill.transform = CGAffineTransformMakeScale(0.92, 0.92);
 
@@ -449,24 +565,44 @@ static NSArray<NSNumber *> *avatarRadiusPresets = nil;
     if (!devOverlayPill)
         return;
 
-    CGRect  oldFrame = devOverlayPill.frame;
-    UIView *oldPill  = devOverlayPill;
+    CGFloat pillWidth = devOverlayPill.frame.size.width;
+    UIView *oldPill   = devOverlayPill;
     [oldPill removeFromSuperview];
 
     UIView *newPill = [self buildPillView];
     [devOverlayButton.superview insertSubview:newPill belowSubview:devOverlayButton];
 
-    const CGFloat pillWidth = oldFrame.size.width;
-    CGSize        fitSize =
-        [newPill systemLayoutSizeFittingSize:CGSizeMake(pillWidth, UILayoutFittingCompressedSize.height)
-              withHorizontalFittingPriority:UILayoutPriorityRequired
-                    verticalFittingPriority:UILayoutPriorityFittingSizeLevel];
-
-    CGRect buttonFrame = devOverlayButton.frame;
-    newPill.frame       = CGRectMake(CGRectGetMaxX(buttonFrame) - pillWidth,
-                                      buttonFrame.origin.y - fitSize.height - 12, pillWidth,
-                                      fitSize.height);
+    [self positionPill:newPill withWidth:pillWidth];
     devOverlayPill = newPill;
+}
+
++ (void)positionPill:(UIView *)pill withWidth:(CGFloat)pillWidth
+{
+    CGSize fitSize =
+        [pill systemLayoutSizeFittingSize:CGSizeMake(pillWidth, UILayoutFittingCompressedSize.height)
+             withHorizontalFittingPriority:UILayoutPriorityRequired
+                   verticalFittingPriority:UILayoutPriorityFittingSizeLevel];
+
+    CGRect        bounds      = devOverlayWindow.bounds;
+    CGRect        buttonFrame = devOverlayButton.frame;
+    UIEdgeInsets  insets      = discordKeyWindow.safeAreaInsets;
+    const CGFloat gap         = 12;
+
+    CGFloat minX = insets.left + gap;
+    CGFloat maxX = bounds.size.width - insets.right - gap - pillWidth;
+    CGFloat x    = CGRectGetMaxX(buttonFrame) - pillWidth;
+    x            = MIN(MAX(x, minX), MAX(minX, maxX));
+
+    CGFloat minY = insets.top + gap;
+    CGFloat maxY = bounds.size.height - insets.bottom - gap - fitSize.height;
+    CGFloat y    = CGRectGetMinY(buttonFrame) - fitSize.height - gap;
+    if (y < minY)
+    {
+        y = CGRectGetMaxY(buttonFrame) + gap;
+    }
+    y = MIN(MAX(y, minY), MAX(minY, maxY));
+
+    pill.frame = CGRectMake(x, y, pillWidth, fitSize.height);
 }
 
 #pragma mark - Pill construction
