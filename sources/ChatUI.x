@@ -1,6 +1,7 @@
 #import "ChatUI.h"
 
 #import <CoreText/CoreText.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 @interface YYTextRunDelegate : NSObject
@@ -11,7 +12,7 @@
 
 static NSNumber   *customAvatarRadius  = nil;
 static const float defaultAvatarRadius = -1.0f;
-static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *mentionAvatars = nil;
+static NSDictionary<NSString *, NSArray<NSDictionary<NSString *, id> *> *> *mentionAvatars = nil;
 static NSCache<NSString *, UIImage *> *mentionAvatarImageCache = nil;
 static BOOL mentionAvatarsShowAtSymbol = YES;
 static BOOL mentionAvatarUpdateScheduled = NO;
@@ -483,7 +484,7 @@ static UIColor *messageCellDynamicColor = nil;
     cell.customBackgroundView.frame = frame;
 }
 
-+ (void)setMentionAvatars:(NSDictionary<NSString *, NSDictionary<NSString *, id> *> *)mentions
++ (void)setMentionAvatars:(NSDictionary<NSString *, NSArray<NSDictionary<NSString *, id> *> *> *)mentions
              showAtSymbol:(BOOL)showAtSymbol
 {
     mentionAvatars = [mentions copy] ?: @{};
@@ -530,7 +531,78 @@ static UIColor *messageCellDynamicColor = nil;
     }
 }
 
-+ (UIImage *)mentionAvatarImageForMetadata:(NSDictionary<NSString *, id> *)metadata
++ (UIImage *)defaultRoleMentionImageWithColor:(UIColor *)color
+{
+	CGFloat size = 16;
+	CGFloat scale = size / 24;
+	CGPoint (^point)(CGFloat, CGFloat) = ^CGPoint(CGFloat x, CGFloat y) {
+		return CGPointMake(x * scale, y * scale);
+	};
+	UIGraphicsBeginImageContextWithOptions(CGSizeMake(size, size), NO, 0);
+	[color ?: UIColor.labelColor setFill];
+	UIBezierPath *primary = [UIBezierPath bezierPath];
+	[primary moveToPoint:point(14, 8.00598)];
+	[primary addCurveToPoint:point(10, 12.006)
+	          controlPoint1:point(14, 10.211)
+	          controlPoint2:point(12.206, 12.006)];
+	[primary addCurveToPoint:point(6, 8.00598)
+	          controlPoint1:point(7.795, 12.006)
+	          controlPoint2:point(6, 10.211)];
+	[primary addCurveToPoint:point(10, 4.00598)
+	          controlPoint1:point(6, 5.80098)
+	          controlPoint2:point(7.794, 4.00598)];
+	[primary addCurveToPoint:point(14, 8.00598)
+	          controlPoint1:point(12.206, 4.00598)
+	          controlPoint2:point(14, 5.80098)];
+	[primary closePath];
+	[primary moveToPoint:point(2, 19.006)];
+	[primary addCurveToPoint:point(10, 13.006)
+	          controlPoint1:point(2, 15.473)
+	          controlPoint2:point(5.29, 13.006)];
+	[primary addCurveToPoint:point(18, 19.006)
+	          controlPoint1:point(14.711, 13.006)
+	          controlPoint2:point(18, 15.473)];
+	[primary addLineToPoint:point(18, 20.006)];
+	[primary addLineToPoint:point(2, 20.006)];
+	[primary closePath];
+	[primary fill];
+	UIBezierPath *secondaryBody = [UIBezierPath bezierPath];
+	[secondaryBody moveToPoint:point(20.0001, 20.006)];
+	[secondaryBody addLineToPoint:point(22.0001, 20.006)];
+	[secondaryBody addLineToPoint:point(22.0001, 19.006)];
+	[secondaryBody addCurveToPoint:point(17.5213, 13.5352)
+	                   controlPoint1:point(22.0001, 16.4433)
+	                   controlPoint2:point(20.2697, 14.4415)];
+	[secondaryBody addCurveToPoint:point(20.0001, 19.006)
+	                   controlPoint1:point(19.0621, 14.9127)
+	                   controlPoint2:point(20.0001, 16.8059)];
+	[secondaryBody closePath];
+	[secondaryBody fill];
+	UIBezierPath *secondaryHead = [UIBezierPath bezierPath];
+	[secondaryHead moveToPoint:point(14.8834, 11.9077)];
+	[secondaryHead addCurveToPoint:point(18.0001, 8.00598)
+	                   controlPoint1:point(16.6657, 11.5044)
+	                   controlPoint2:point(18.0001, 9.9077)];
+	[secondaryHead addCurveToPoint:point(14.4971, 4.0367)
+	                   controlPoint1:point(18.0001, 5.96916)
+	                   controlPoint2:point(16.4693, 4.28218)];
+	[secondaryHead addCurveToPoint:point(16.0001, 8.00598)
+	                   controlPoint1:point(15.4322, 5.09511)
+	                   controlPoint2:point(16.0001, 6.48524)];
+	[secondaryHead addCurveToPoint:point(14.6378, 11.8102)
+	                   controlPoint1:point(16.0001, 9.44888)
+	                   controlPoint2:point(15.4889, 10.7742)];
+	[secondaryHead addCurveToPoint:point(14.8834, 11.9077)
+	                   controlPoint1:point(14.7203, 11.8418)
+	                   controlPoint2:point(14.8022, 11.8743)];
+	[secondaryHead closePath];
+	[secondaryHead fill];
+	UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+	UIGraphicsEndImageContext();
+	return image;
+}
+
++ (UIImage *)mentionAvatarImageForMetadata:(NSDictionary<NSString *, id> *)metadata color:(UIColor *)color
 {
     NSString *avatarURL = metadata[@"avatarURL"];
     if ([avatarURL isKindOfClass:NSString.class] && avatarURL.length > 0)
@@ -566,7 +638,7 @@ static UIColor *messageCellDynamicColor = nil;
 
     if ([metadata[@"type"] isEqual:@"role"])
     {
-        return [UIImage systemImageNamed:@"person.2.fill"];
+        return [self defaultRoleMentionImageWithColor:color];
     }
     return nil;
 }
@@ -625,76 +697,136 @@ static UIColor *messageCellDynamicColor = nil;
 	return result;
 }
 
-+ (NSAttributedString *)mentionAvatarTextFromOriginal:(NSAttributedString *)original
++ (NSRange)mentionRangeForLabels:(NSArray<NSString *> *)labels
+                           inText:(NSString *)text
+                        fromIndex:(NSUInteger)index
+                      matchedText:(NSString **)matchedText
 {
-    if (mentionAvatars.count == 0)
+    NSRange bestRange = NSMakeRange(NSNotFound, 0);
+    NSString *bestText = nil;
+    NSRange searchRange = NSMakeRange(index, text.length - index);
+    for (NSString *label in labels)
+    {
+        NSString *mentionText = [@"@" stringByAppendingString:label];
+        NSRange range = [text rangeOfString:mentionText options:0 range:searchRange];
+        if (range.location == NSNotFound ||
+            (bestRange.location != NSNotFound && range.location >= bestRange.location))
+        {
+            continue;
+        }
+        bestRange = range;
+        bestText = mentionText;
+    }
+    if (matchedText)
+    {
+        *matchedText = bestText;
+    }
+    return bestRange;
+}
+
++ (NSAttributedString *)mentionAvatarTextFromOriginal:(NSAttributedString *)original
+                                              mentions:(NSArray<NSDictionary<NSString *, id> *> *)mentions
+{
+    if (mentions.count == 0)
     {
         return original;
     }
 
     NSMutableAttributedString *result = [original mutableCopy];
-    NSArray<NSString *> *labels = [mentionAvatars.allKeys sortedArrayUsingComparator:
-        ^NSComparisonResult(NSString *left, NSString *right) {
-            if (left.length > right.length) return NSOrderedAscending;
-            if (left.length < right.length) return NSOrderedDescending;
-            return [left compare:right];
-        }];
-
-    for (NSString *label in labels)
+    NSUInteger searchIndex = 0;
+    for (NSDictionary<NSString *, id> *metadata in mentions)
     {
-        NSString *mentionText = [@"@" stringByAppendingString:label];
-        NSRange searchRange = NSMakeRange(0, result.length);
-        while (searchRange.length > 0)
+        NSArray<NSString *> *labels = metadata[@"labels"];
+        if (![labels isKindOfClass:NSArray.class] || searchIndex >= result.length)
         {
-            NSRange range = [result.string rangeOfString:mentionText options:0 range:searchRange];
-            if (range.location == NSNotFound)
-            {
-                break;
-            }
-
-            NSDictionary<NSAttributedStringKey, id> *attributes =
-                [result attributesAtIndex:range.location effectiveRange:nil];
-			if (!attributes[@"YYTextHighlight"])
-			{
-				NSUInteger next = NSMaxRange(range);
-				searchRange = NSMakeRange(next, result.length - next);
-				continue;
-			}
-            UIImage *image = [self mentionAvatarImageForMetadata:mentionAvatars[label]];
-            if (!image)
-            {
-                NSUInteger next = NSMaxRange(range);
-                searchRange = NSMakeRange(next, result.length - next);
-                continue;
-            }
-
-			NSAttributedString *avatar = [self mentionAvatarAttachmentForImage:image
-			                                                           metadata:mentionAvatars[label]
-			                                                         attributes:attributes];
-			if (!avatar)
-			{
-				NSUInteger next = NSMaxRange(range);
-				searchRange = NSMakeRange(next, result.length - next);
-				continue;
-			}
-			NSMutableAttributedString *replacement = [[NSMutableAttributedString alloc]
-			    initWithAttributedString:avatar];
-            NSString *text = mentionAvatarsShowAtSymbol ? mentionText : [mentionText substringFromIndex:1];
-            [replacement appendAttributedString:[[NSAttributedString alloc] initWithString:text
-                                                                                  attributes:attributes]];
-            [result replaceCharactersInRange:range withAttributedString:replacement];
-
-            NSUInteger next = range.location + replacement.length;
-            searchRange = NSMakeRange(next, result.length - next);
+            continue;
         }
+
+        NSString *mentionText = nil;
+        NSRange range = [self mentionRangeForLabels:labels inText:result.string fromIndex:searchIndex
+                                         matchedText:&mentionText];
+        if (range.location == NSNotFound)
+        {
+            continue;
+        }
+
+        NSDictionary<NSAttributedStringKey, id> *attributes =
+            [result attributesAtIndex:range.location effectiveRange:nil];
+        if (!attributes[@"YYTextHighlight"])
+        {
+            searchIndex = NSMaxRange(range);
+            continue;
+        }
+
+        UIColor *foregroundColor = attributes[NSForegroundColorAttributeName];
+        UIImage *image = [self mentionAvatarImageForMetadata:metadata color:foregroundColor];
+        if (!image)
+        {
+            searchIndex = NSMaxRange(range);
+            continue;
+        }
+
+        NSAttributedString *avatar = [self mentionAvatarAttachmentForImage:image
+                                                                     metadata:metadata
+                                                                   attributes:attributes];
+        if (!avatar)
+        {
+            searchIndex = NSMaxRange(range);
+            continue;
+        }
+
+        NSString *text = mentionAvatarsShowAtSymbol ? mentionText : [mentionText substringFromIndex:1];
+        NSAttributedString *mention = [[NSAttributedString alloc] initWithString:text attributes:attributes];
+        NSMutableAttributedString *replacement = [[NSMutableAttributedString alloc] init];
+        if ([metadata[@"type"] isEqual:@"role"])
+        {
+            [replacement appendAttributedString:mention];
+            [replacement appendAttributedString:avatar];
+        }
+        else
+        {
+            [replacement appendAttributedString:avatar];
+            [replacement appendAttributedString:mention];
+        }
+        [result replaceCharactersInRange:range withAttributedString:replacement];
+        searchIndex = range.location + replacement.length;
     }
 
     return result;
 }
 
-+ (void)updateMentionAvatarsInView:(UIView *)view
++ (NSString *)mentionMessageIDForCell:(UIView *)cell
 {
-    if ([view respondsToSelector:@selector(setAttributedText:)])
+    Ivar viewModelIvar = class_getInstanceVariable(cell.class, "viewModel");
+    id viewModel = viewModelIvar ? object_getIvar(cell, viewModelIvar) : nil;
+    if (![viewModel respondsToSelector:@selector(message)])
+    {
+        return nil;
+    }
+    id message = ((id (*)(id, SEL)) objc_msgSend)(viewModel, @selector(message));
+    if (![message respondsToSelector:@selector(id)])
+    {
+        return nil;
+    }
+    id messageID = ((id (*)(id, SEL)) objc_msgSend)(message, @selector(id));
+    if (!messageID)
+    {
+        return nil;
+    }
+    return [messageID isKindOfClass:NSString.class] ? messageID : [messageID description];
+}
+
++ (void)updateMentionAvatarsInView:(UIView *)view
+                         messageID:(NSString *)messageID
+{
+    NSString *currentMessageID = messageID;
+    if ([NSStringFromClass(view.class) isEqual:@"DCDMessageTableViewCell"])
+    {
+        currentMessageID = [self mentionMessageIDForCell:view];
+    }
+
+    NSArray<NSDictionary<NSString *, id> *> *mentions = mentionAvatars[currentMessageID];
+    if (mentions.count > 0 && [view respondsToSelector:@selector(setAttributedText:)])
     {
         NSAttributedString *original = objc_getAssociatedObject(view, mentionAvatarOriginalTextKey);
         if (!original)
@@ -709,15 +841,20 @@ static UIColor *messageCellDynamicColor = nil;
 
         if (original.length > 0)
         {
-			NSAttributedString *updated = [self mentionAvatarTextFromOriginal:original];
+			NSAttributedString *updated = [self mentionAvatarTextFromOriginal:original mentions:mentions];
             [view setValue:updated forKey:@"attributedText"];
         }
     }
 
     for (UIView *subview in view.subviews)
     {
-        [self updateMentionAvatarsInView:subview];
+        [self updateMentionAvatarsInView:subview messageID:currentMessageID];
     }
+}
+
++ (void)updateMentionAvatarsInView:(UIView *)view
+{
+    [self updateMentionAvatarsInView:view messageID:nil];
 }
 
 @end

@@ -120,7 +120,7 @@ static BOOL isFeatureKnown(NSString *featureName)
     return nativeFeatureInfo(featureName) != nil;
 }
 
-static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *mentionAvatarsFromJSON(
+static NSDictionary<NSString *, NSArray<NSDictionary<NSString *, id> *> *> *mentionAvatarsFromJSON(
     NSString *json, BOOL *showAtSymbol)
 {
     if (showAtSymbol)
@@ -146,36 +146,69 @@ static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *mentionAvatarsF
         *showAtSymbol = [payload[@"showAtSymbol"] boolValue];
     }
 
-    NSArray *entries = payload[@"mentions"];
-    if (![entries isKindOfClass:NSArray.class])
+    NSArray *messages = payload[@"messages"];
+    if (![messages isKindOfClass:NSArray.class])
     {
         return @{};
     }
 
-    NSMutableDictionary<NSString *, NSDictionary<NSString *, id> *> *mentions =
+    NSMutableDictionary<NSString *, NSArray<NSDictionary<NSString *, id> *> *> *mentions =
         [NSMutableDictionary dictionary];
-    for (id entry in entries)
+    for (id message in messages)
     {
-        if (![entry isKindOfClass:NSDictionary.class])
+        if (![message isKindOfClass:NSDictionary.class])
         {
             continue;
         }
 
-        NSString *label = entry[@"label"];
-        NSString *type = entry[@"type"];
-        if (![label isKindOfClass:NSString.class] || label.length == 0 ||
-            ![type isKindOfClass:NSString.class])
+        NSString *messageID = message[@"id"];
+        NSArray *entries = message[@"mentions"];
+        if (![messageID isKindOfClass:NSString.class] || messageID.length == 0 ||
+            ![entries isKindOfClass:NSArray.class])
         {
             continue;
         }
 
-        NSMutableDictionary<NSString *, id> *metadata = [@{ @"type" : type } mutableCopy];
-        NSString *avatarURL = entry[@"avatarURL"];
-        if ([avatarURL isKindOfClass:NSString.class] && avatarURL.length > 0)
+        NSMutableArray<NSDictionary<NSString *, id> *> *messageMentions = [NSMutableArray array];
+        for (id entry in entries)
         {
-            metadata[@"avatarURL"] = avatarURL;
+            if (![entry isKindOfClass:NSDictionary.class])
+            {
+                continue;
+            }
+
+            NSString *type = entry[@"type"];
+            NSArray *labels = entry[@"labels"];
+            if (!([type isEqual:@"user"] || [type isEqual:@"role"]) ||
+                ![labels isKindOfClass:NSArray.class])
+            {
+                continue;
+            }
+
+            NSMutableArray<NSString *> *validLabels = [NSMutableArray array];
+            for (id label in labels)
+            {
+                if ([label isKindOfClass:NSString.class] && [label length] > 0)
+                {
+                    [validLabels addObject:label];
+                }
+            }
+            if (validLabels.count == 0)
+            {
+                continue;
+            }
+
+            NSMutableDictionary<NSString *, id> *metadata =
+                [@{ @"type" : type, @"labels" : validLabels } mutableCopy];
+            NSString *avatarURL = entry[@"avatarURL"];
+            if ([avatarURL isKindOfClass:NSString.class] && avatarURL.length > 0)
+            {
+                metadata[@"avatarURL"] = avatarURL;
+            }
+            [messageMentions addObject:metadata];
         }
-        mentions[label] = metadata;
+
+        mentions[messageID] = messageMentions;
     }
     return mentions;
 }
