@@ -1,9 +1,21 @@
 #import "ChatUI.h"
 
+#import <CoreText/CoreText.h>
+#import <objc/runtime.h>
+
+@interface YYTextRunDelegate : NSObject
+- (CTRunDelegateRef)CTRunDelegate CF_RETURNS_RETAINED;
+@end
+
 @implementation ChatUI
 
 static NSNumber   *customAvatarRadius  = nil;
 static const float defaultAvatarRadius = -1.0f;
+static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *mentionAvatars = nil;
+static NSCache<NSString *, UIImage *> *mentionAvatarImageCache = nil;
+static BOOL mentionAvatarsShowAtSymbol = YES;
+static BOOL mentionAvatarUpdateScheduled = NO;
+static void *mentionAvatarOriginalTextKey = &mentionAvatarOriginalTextKey;
 
 static NSNumber *messageBubblesEnabled     = nil;
 static NSString *messageBubbleLightColor   = nil;
@@ -471,6 +483,243 @@ static UIColor *messageCellDynamicColor = nil;
     cell.customBackgroundView.frame = frame;
 }
 
++ (void)setMentionAvatars:(NSDictionary<NSString *, NSDictionary<NSString *, id> *> *)mentions
+             showAtSymbol:(BOOL)showAtSymbol
+{
+    mentionAvatars = [mentions copy] ?: @{};
+    mentionAvatarsShowAtSymbol = showAtSymbol;
+    [self scheduleMentionAvatarUpdate];
+}
+
++ (void)clearMentionAvatars
+{
+    mentionAvatars = nil;
+    [self scheduleMentionAvatarUpdate];
+}
+
++ (void)scheduleMentionAvatarUpdate
+{
+    if (mentionAvatarUpdateScheduled)
+    {
+        return;
+    }
+
+    mentionAvatarUpdateScheduled = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        mentionAvatarUpdateScheduled = NO;
+        [self updateMentionAvatarsInView:[Utilities keyWindow]];
+    });
+}
+
++ (void)clearMentionAvatarStateInView:(UIView *)view
+{
+    if ([view respondsToSelector:@selector(setAttributedText:)])
+    {
+        NSAttributedString *original = objc_getAssociatedObject(view, mentionAvatarOriginalTextKey);
+        if (original)
+        {
+            [view setValue:original forKey:@"attributedText"];
+            objc_setAssociatedObject(view, mentionAvatarOriginalTextKey, nil,
+                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+
+    for (UIView *subview in view.subviews)
+    {
+        [self clearMentionAvatarStateInView:subview];
+    }
+}
+
++ (UIImage *)mentionAvatarImageForMetadata:(NSDictionary<NSString *, id> *)metadata
+{
+    NSString *avatarURL = metadata[@"avatarURL"];
+    if ([avatarURL isKindOfClass:NSString.class] && avatarURL.length > 0)
+    {
+        if (!mentionAvatarImageCache)
+        {
+            mentionAvatarImageCache = [[NSCache alloc] init];
+        }
+
+        UIImage *cached = [mentionAvatarImageCache objectForKey:avatarURL];
+        if (cached)
+        {
+            return cached;
+        }
+
+        NSURL *url = [NSURL URLWithString:avatarURL];
+        if (url)
+        {
+            [[[NSURLSession sharedSession] dataTaskWithURL:url
+                                         completionHandler:^(NSData *data, NSURLResponse *response,
+                                                             NSError *error) {
+                UIImage *image = data ? [UIImage imageWithData:data] : nil;
+                if (!image)
+                {
+                    return;
+                }
+
+                [mentionAvatarImageCache setObject:image forKey:avatarURL];
+                [self scheduleMentionAvatarUpdate];
+            }] resume];
+        }
+    }
+
+    if ([metadata[@"type"] isEqual:@"role"])
+    {
+        return [UIImage systemImageNamed:@"person.2.fill"];
+    }
+    return nil;
+}
+
++ (NSAttributedString *)mentionAvatarAttachmentForImage:(UIImage *)image
+                                                metadata:(NSDictionary<NSString *, id> *)metadata
+                                              attributes:(NSDictionary<NSAttributedStringKey, id> *)attributes
+{
+	Class attachmentClass = NSClassFromString(@"YYTextAttachment");
+	Class runDelegateClass = NSClassFromString(@"YYTextRunDelegate");
+	if (!attachmentClass || !runDelegateClass)
+	{
+		return nil;
+	}
+
+	UIFont *font = attributes[NSFontAttributeName] ?: [UIFont systemFontOfSize:14];
+	CGFloat size = 16;
+	BOOL isRole = [metadata[@"type"] isEqual:@"role"];
+	CGFloat leading = isRole ? 4 : 2;
+	CGFloat trailing = isRole ? 2 : 4;
+	UIGraphicsBeginImageContextWithOptions(CGSizeMake(size, size), NO, 0);
+	CGRect imageRect = CGRectMake(0, 0, size, size);
+	if (!isRole)
+	{
+		[[UIBezierPath bezierPathWithOvalInRect:imageRect] addClip];
+	}
+	[image drawInRect:imageRect blendMode:kCGBlendModeNormal alpha:1];
+	UIImage *renderedImage = UIGraphicsGetImageFromCurrentImageContext();
+	UIGraphicsEndImageContext();
+	if (!renderedImage)
+	{
+		return nil;
+	}
+
+	id attachment = [[attachmentClass alloc] init];
+	[attachment setValue:renderedImage forKey:@"content"];
+	[attachment setValue:@(UIViewContentModeScaleAspectFit) forKey:@"contentMode"];
+	[attachment setValue:[NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, leading, 0, trailing)]
+	              forKey:@"contentInsets"];
+	YYTextRunDelegate *runDelegate = [[runDelegateClass alloc] init];
+	[runDelegate setValue:@(font.ascender) forKey:@"ascent"];
+	[runDelegate setValue:@(-font.descender) forKey:@"descent"];
+	[runDelegate setValue:@(leading + size + trailing) forKey:@"width"];
+	NSMutableAttributedString *result = [[NSMutableAttributedString alloc]
+	    initWithString:@"\uFFFC" attributes:attributes];
+	[result addAttribute:@"YYTextAttachment" value:attachment range:NSMakeRange(0, result.length)];
+	CTRunDelegateRef coreTextRunDelegate = [runDelegate CTRunDelegate];
+	if (!coreTextRunDelegate)
+	{
+		return nil;
+	}
+	[result addAttribute:(NSString *)kCTRunDelegateAttributeName
+	               value:(__bridge id)coreTextRunDelegate
+	               range:NSMakeRange(0, result.length)];
+	CFRelease(coreTextRunDelegate);
+	return result;
+}
+
++ (NSAttributedString *)mentionAvatarTextFromOriginal:(NSAttributedString *)original
+{
+    if (mentionAvatars.count == 0)
+    {
+        return original;
+    }
+
+    NSMutableAttributedString *result = [original mutableCopy];
+    NSArray<NSString *> *labels = [mentionAvatars.allKeys sortedArrayUsingComparator:
+        ^NSComparisonResult(NSString *left, NSString *right) {
+            if (left.length > right.length) return NSOrderedAscending;
+            if (left.length < right.length) return NSOrderedDescending;
+            return [left compare:right];
+        }];
+
+    for (NSString *label in labels)
+    {
+        NSString *mentionText = [@"@" stringByAppendingString:label];
+        NSRange searchRange = NSMakeRange(0, result.length);
+        while (searchRange.length > 0)
+        {
+            NSRange range = [result.string rangeOfString:mentionText options:0 range:searchRange];
+            if (range.location == NSNotFound)
+            {
+                break;
+            }
+
+            NSDictionary<NSAttributedStringKey, id> *attributes =
+                [result attributesAtIndex:range.location effectiveRange:nil];
+			if (!attributes[@"YYTextHighlight"])
+			{
+				NSUInteger next = NSMaxRange(range);
+				searchRange = NSMakeRange(next, result.length - next);
+				continue;
+			}
+            UIImage *image = [self mentionAvatarImageForMetadata:mentionAvatars[label]];
+            if (!image)
+            {
+                NSUInteger next = NSMaxRange(range);
+                searchRange = NSMakeRange(next, result.length - next);
+                continue;
+            }
+
+			NSAttributedString *avatar = [self mentionAvatarAttachmentForImage:image
+			                                                           metadata:mentionAvatars[label]
+			                                                         attributes:attributes];
+			if (!avatar)
+			{
+				NSUInteger next = NSMaxRange(range);
+				searchRange = NSMakeRange(next, result.length - next);
+				continue;
+			}
+			NSMutableAttributedString *replacement = [[NSMutableAttributedString alloc]
+			    initWithAttributedString:avatar];
+            NSString *text = mentionAvatarsShowAtSymbol ? mentionText : [mentionText substringFromIndex:1];
+            [replacement appendAttributedString:[[NSAttributedString alloc] initWithString:text
+                                                                                  attributes:attributes]];
+            [result replaceCharactersInRange:range withAttributedString:replacement];
+
+            NSUInteger next = range.location + replacement.length;
+            searchRange = NSMakeRange(next, result.length - next);
+        }
+    }
+
+    return result;
+}
+
++ (void)updateMentionAvatarsInView:(UIView *)view
+{
+    if ([view respondsToSelector:@selector(setAttributedText:)])
+    {
+        NSAttributedString *original = objc_getAssociatedObject(view, mentionAvatarOriginalTextKey);
+        if (!original)
+        {
+            original = [view valueForKey:@"attributedText"];
+            if (original.length > 0)
+            {
+                objc_setAssociatedObject(view, mentionAvatarOriginalTextKey, original,
+                                         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+        }
+
+        if (original.length > 0)
+        {
+			NSAttributedString *updated = [self mentionAvatarTextFromOriginal:original];
+            [view setValue:updated forKey:@"attributedText"];
+        }
+    }
+
+    for (UIView *subview in view.subviews)
+    {
+        [self updateMentionAvatarsInView:subview];
+    }
+}
+
 @end
 
 %hook DCDAvatarView
@@ -523,12 +772,15 @@ static UIColor *messageCellDynamicColor = nil;
 - (void)prepareForReuse
 {
     %orig;
+    [ChatUI clearMentionAvatarStateInView:self];
     dispatch_async(dispatch_get_main_queue(), ^{ [ChatUI updateMessageCell:self]; });
 }
 
 - (void)layoutSubviews
 {
     %orig;
+
+    [ChatUI updateMentionAvatarsInView:self];
 
     BOOL enabled = messageBubblesEnabled ? [messageBubblesEnabled boolValue] : NO;
     if (enabled)

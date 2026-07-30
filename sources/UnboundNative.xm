@@ -6,7 +6,7 @@ using namespace facebook::jsi;
 namespace {
 
 static constexpr const char *kInteropGlobalName   = "UnboundNative";
-static NSString *const       kNativeModuleVersion = @"1.0.0";
+static NSString *const       kNativeModuleVersion = PACKAGE_VERSION;
 
 static Value mainThreadValue(Runtime &runtime, id (^getter)(void))
 {
@@ -94,16 +94,17 @@ static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *nativeFeatureMe
     static dispatch_once_t                                           onceToken;
     dispatch_once(&onceToken, ^{
         features = @{
-            @"device.info" : @{@"introduced" : @"1.0.0"},
-            @"device.entitlements" : @{@"introduced" : @"1.0.0"},
-            @"app.source" : @{@"introduced" : @"1.0.0"},
-            @"notifications" : @{@"introduced" : @"1.0.0"},
-            @"pip.video" : @{@"introduced" : @"1.0.0"},
-            @"chat.avatar" : @{@"introduced" : @"1.0.0"},
-            @"chat.messageBubbles" : @{@"introduced" : @"1.0.0"},
-            @"toolbox.menu" : @{@"introduced" : @"1.0.0"},
-            @"native.evaluateBytecode" : @{@"introduced" : @"1.0.0"},
-            @"themes.native" : @{@"introduced" : @"1.0.0"},
+            @"device.info" : @{@"introduced" : @"2.0.0"},
+            @"device.entitlements" : @{@"introduced" : @"2.0.0"},
+            @"app.source" : @{@"introduced" : @"2.0.0"},
+            @"notifications" : @{@"introduced" : @"2.0.0"},
+            @"pip.video" : @{@"introduced" : @"2.0.0"},
+            @"chat.avatar" : @{@"introduced" : @"2.0.0"},
+            @"chat.mentionAvatars" : @{@"introduced" : @"2.3.0"},
+            @"chat.messageBubbles" : @{@"introduced" : @"2.0.0"},
+            @"toolbox.menu" : @{@"introduced" : @"2.0.0"},
+            @"native.evaluateBytecode" : @{@"introduced" : @"2.1.0"},
+            @"themes.native" : @{@"introduced" : @"2.2.0"},
         };
     });
     return features;
@@ -117,6 +118,66 @@ static NSDictionary<NSString *, id> *nativeFeatureInfo(NSString *featureName)
 static BOOL isFeatureKnown(NSString *featureName)
 {
     return nativeFeatureInfo(featureName) != nil;
+}
+
+static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *mentionAvatarsFromJSON(
+    NSString *json, BOOL *showAtSymbol)
+{
+    if (showAtSymbol)
+    {
+        *showAtSymbol = YES;
+    }
+    if (json.length == 0)
+    {
+        return @{};
+    }
+
+    NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+    NSError *error = nil;
+    id value = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+    if (error || ![value isKindOfClass:NSDictionary.class])
+    {
+        return @{};
+    }
+
+    NSDictionary *payload = value;
+    if ([payload[@"showAtSymbol"] isKindOfClass:NSNumber.class] && showAtSymbol)
+    {
+        *showAtSymbol = [payload[@"showAtSymbol"] boolValue];
+    }
+
+    NSArray *entries = payload[@"mentions"];
+    if (![entries isKindOfClass:NSArray.class])
+    {
+        return @{};
+    }
+
+    NSMutableDictionary<NSString *, NSDictionary<NSString *, id> *> *mentions =
+        [NSMutableDictionary dictionary];
+    for (id entry in entries)
+    {
+        if (![entry isKindOfClass:NSDictionary.class])
+        {
+            continue;
+        }
+
+        NSString *label = entry[@"label"];
+        NSString *type = entry[@"type"];
+        if (![label isKindOfClass:NSString.class] || label.length == 0 ||
+            ![type isKindOfClass:NSString.class])
+        {
+            continue;
+        }
+
+        NSMutableDictionary<NSString *, id> *metadata = [@{ @"type" : type } mutableCopy];
+        NSString *avatarURL = entry[@"avatarURL"];
+        if ([avatarURL isKindOfClass:NSString.class] && avatarURL.length > 0)
+        {
+            metadata[@"avatarURL"] = avatarURL;
+        }
+        mentions[label] = metadata;
+    }
+    return mentions;
 }
 
 static BOOL isNativeFeatureRemoved(NSString *featureName)
@@ -581,6 +642,33 @@ void registerNativeInterop(Runtime &runtime)
                           handler:[](Runtime &, const Value &, const Value *, size_t) -> Value {
                               dispatch_async(dispatch_get_main_queue(),
                                              ^{ [ChatUI resetAvatarCornerRadius]; });
+                              return Value::undefined();
+                          }]);
+
+            chat.setProperty(
+                runtime, "setMentionAvatars",
+                [JSI makeFunction:"setMentionAvatars"
+                         argCount:1
+                          runtime:runtime
+                          handler:[](Runtime &rt, const Value &, const Value *args,
+                                     size_t count) -> Value {
+                              NSString *json =
+                                  (count > 0) ? [JSI toNSString:args[0] runtime:rt] : nil;
+                              BOOL showAtSymbol = YES;
+                              NSDictionary *mentions = mentionAvatarsFromJSON(json, &showAtSymbol);
+                              dispatch_async(dispatch_get_main_queue(), ^{
+                                  [ChatUI setMentionAvatars:mentions showAtSymbol:showAtSymbol];
+                              });
+                              return Value::undefined();
+                          }]);
+
+            chat.setProperty(
+                runtime, "clearMentionAvatars",
+                [JSI makeFunction:"clearMentionAvatars"
+                         argCount:0
+                          runtime:runtime
+                          handler:[](Runtime &, const Value &, const Value *, size_t) -> Value {
+                              dispatch_async(dispatch_get_main_queue(), ^{ [ChatUI clearMentionAvatars]; });
                               return Value::undefined();
                           }]);
 
