@@ -262,6 +262,20 @@ static const CGFloat kDevOverlayButtonMargin = 8;
         return;
 
     avatarRadiusPresets = @[ @0, @8, @16, @20 ];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(settingsDidChange:)
+                                                 name:UnboundSettingsDidChangeNotification
+                                               object:nil];
+}
+
++ (BOOL)shouldShowOverlay
+{
+#ifdef DEBUG
+    return YES;
+#else
+    return [Utilities isVPhone] ||
+           [Settings getBoolean:@"unbound" key:@"developer-mode" def:NO];
+#endif
 }
 
 + (UIWindowScene *)activeWindowScene
@@ -277,14 +291,61 @@ static const CGFloat kDevOverlayButtonMargin = 8;
     return nil;
 }
 
++ (UIWindow *)activeKeyWindow
+{
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes)
+    {
+        if (![scene isKindOfClass:[UIWindowScene class]])
+        {
+            continue;
+        }
+
+        for (UIWindow *window in ((UIWindowScene *) scene).windows)
+        {
+            if (window.isKeyWindow)
+            {
+                return window;
+            }
+        }
+    }
+
+    return nil;
+}
+
++ (void)removeOverlay
+{
+    [devOverlayPill removeFromSuperview];
+    devOverlayPill = nil;
+    devOverlayButton = nil;
+    devOverlayBackdrop = nil;
+    devOverlayWindow.hidden = YES;
+    devOverlayWindow.rootViewController = nil;
+    devOverlayWindow = nil;
+}
+
++ (void)refreshOverlay
+{
+    if ([self shouldShowOverlay])
+    {
+        UIWindow *window = discordKeyWindow ?: [self activeKeyWindow];
+        if (window)
+        {
+            [self ensureOverlayForWindow:window];
+        }
+        return;
+    }
+
+    [self removeOverlay];
+}
+
++ (void)settingsDidChange:(NSNotification *)notification
+{
+    dispatch_async(dispatch_get_main_queue(), ^{ [self refreshOverlay]; });
+}
+
 + (void)ensureOverlayForWindow:(UIWindow *)keyWindow
 {
-#ifdef DEBUG
-    BOOL shouldShow = YES;
-#else
-    BOOL shouldShow = [Utilities isVPhone];
-#endif
-    if (!shouldShow || devOverlayWindow)
+    if (![self shouldShowOverlay] || devOverlayWindow)
     {
         return;
     }

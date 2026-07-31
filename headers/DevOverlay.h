@@ -10,6 +10,7 @@
 @interface DevOverlay : NSObject
 
 + (void)ensureOverlayForWindow:(UIWindow *)keyWindow;
++ (void)refreshOverlay;
 + (void)showDevelopmentBuildBanner;
 
 @end

@@ -169,6 +169,7 @@ static void enqueueUnboundBundle(RCTInstance *self)
 {
     [FileSystem init];
     [Settings init];
+    dispatch_async(dispatch_get_main_queue(), ^{ [DevOverlay refreshOverlay]; });
 
     if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES])
     {
