@@ -13,3 +13,5 @@
 #import "Utilities.h"
 #import "Updater.h"
 #import "MobileGestalt.h"
+
+void UnboundCompleteBrowserLogin(NSString *token);

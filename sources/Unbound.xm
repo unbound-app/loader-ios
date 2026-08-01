@@ -14,6 +14,37 @@ using namespace facebook;
 #pragma mark - Pre/post bundle injection
 
 static jsi::Runtime *gRuntime = nullptr;
+static __weak RCTInstance *gInstance = nil;
+
+void UnboundCompleteBrowserLogin(NSString *token)
+{
+    RCTInstance *instance = gInstance;
+    if (!instance || token.length == 0)
+    {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [Utilities alert:@"Return to Discord and try the browser login again."
+                       title:@"Could Not Finish Login"];
+        });
+        return;
+    }
+
+    NSString *tokenJSON = [Utilities JSONStringFromObject:token options:0 fallback:nil];
+    if (!tokenJSON)
+    {
+        return;
+    }
+
+    NSString *source = [NSString
+        stringWithFormat:@"globalThis.unbound.metro.findByProps('getAnalyticsToken','setToken').setToken(%@)",
+                         tokenJSON];
+    NSData *script = [source dataUsingEncoding:NSUTF8StringEncoding];
+
+    [instance callFunctionOnBufferedRuntimeExecutor:[script](jsi::Runtime &runtime) {
+        [JSI evaluate:script tag:@"unbound:browser-login" runtime:runtime];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.25 * NSEC_PER_SEC),
+                       dispatch_get_main_queue(), ^{ [Utilities reloadApp]; });
+    }];
+}
 
 static void injectUnboundPreBundle(jsi::Runtime &runtime)
 {
@@ -167,6 +198,7 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
 - (void)_loadJSBundle:(NSURL *)sourceURL
 {
+    gInstance = self;
     [FileSystem init];
     [Settings init];
     dispatch_async(dispatch_get_main_queue(), ^{ [DevOverlay refreshOverlay]; });
