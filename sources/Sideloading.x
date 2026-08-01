@@ -188,10 +188,7 @@ static BOOL browserLoginShouldHandleController(ASAuthorizationController *contro
 {
     for (ASAuthorizationRequest *request in controller.authorizationRequests)
     {
-        if ([request isKindOfClass:[ASAuthorizationPlatformPublicKeyCredentialAssertionRequest
-                                       class]] ||
-            [request isKindOfClass:[ASAuthorizationSecurityKeyPublicKeyCredentialAssertionRequest
-                                       class]])
+        if ([request conformsToProtocol:@protocol(ASAuthorizationPublicKeyCredentialAssertionRequest)])
         {
             return YES;
         }
