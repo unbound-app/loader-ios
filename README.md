@@ -16,11 +16,11 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 ### Jailed
 
 <div>
-    <a href="https://intradeus.github.io/http-protocol-redirector?r=sidestore://source?url=https://github.com/unbound-app/loader-ios/raw/refs/heads/main/app-repo.json"><img src="./.github/resources/sidestore-badge.png" alt="Add to SideStore" height="60"></a>
+    <a href="https://intradeus.github.io/http-protocol-redirector?r=sidestore://source?url=https://repo.unbound.rip/app-repo.json"><img src="./.github/resources/sidestore-badge.png" alt="Add to SideStore" height="60"></a>
     &nbsp;
-    <a href="https://intradeus.github.io/http-protocol-redirector?r=feather://source/https://github.com/unbound-app/loader-ios/raw/refs/heads/main/app-repo.json"><img src="./.github/resources/feather-badge.png" alt="Add to Feather" height="60"></a>
+    <a href="https://intradeus.github.io/http-protocol-redirector?r=feather://source/https://repo.unbound.rip/app-repo.json"><img src="./.github/resources/feather-badge.png" alt="Add to Feather" height="60"></a>
     &nbsp;
-    <a href="https://intradeus.github.io/http-protocol-redirector?r=altstore://source?url=https://github.com/unbound-app/loader-ios/raw/refs/heads/main/app-repo.json"><img src="./.github/resources/altstore-badge.png" alt="Add to AltStore" height="60"></a>
+    <a href="https://intradeus.github.io/http-protocol-redirector?r=altstore://source?url=https://repo.unbound.rip/app-repo.json"><img src="./.github/resources/altstore-badge.png" alt="Add to AltStore" height="60"></a>
     &nbsp;
     <a href="https://github.com/unbound-app/loader-ios/releases/latest/download/Unbound.ipa"><img src="./.github/resources/github-badge.png" alt="Download from GitHub" height="60"></a>
 </div>
