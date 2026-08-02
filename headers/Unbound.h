@@ -13,3 +13,11 @@
 #import "Utilities.h"
 #import "Updater.h"
 #import "MobileGestalt.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+void UnboundCompleteBrowserLogin(NSString *token);
+#ifdef __cplusplus
+}
+#endif

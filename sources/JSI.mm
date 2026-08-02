@@ -147,11 +147,11 @@ private:
                                                  argCount, handler);
 }
 
-+ (void)evaluate:(NSData *)scriptData tag:(NSString *)tag runtime:(jsi::Runtime &)runtime
++ (BOOL)evaluate:(NSData *)scriptData tag:(NSString *)tag runtime:(jsi::Runtime &)runtime
 {
     if (scriptData.length == 0)
     {
-        return;
+        return NO;
     }
 
     try
@@ -168,16 +168,19 @@ private:
             auto        buffer = std::make_shared<jsi::StringBuffer>(std::move(source));
             runtime.evaluateJavaScript(buffer, std::string(tag.UTF8String));
         }
+        return YES;
     }
     catch (const jsi::JSError &e)
     {
         [Logger error:LOG_CATEGORY_DEFAULT
                format:@"JSI eval of '%@' threw JSError: %s", tag, e.what()];
+        return NO;
     }
     catch (const std::exception &e)
     {
         [Logger error:LOG_CATEGORY_DEFAULT
                format:@"JSI eval of '%@' threw exception: %s", tag, e.what()];
+        return NO;
     }
 }
 

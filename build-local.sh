@@ -163,6 +163,18 @@ if [ $? -ne 0 ]; then
 fi
 print_success "Patched ipa"
 
+PATCHED_INFO=$(mktemp)
+PATCHED_EXECUTABLE=$(mktemp)
+unzip -p "$TEMP_PATCHED_IPA" 'Payload/*.app/Info.plist' > "$PATCHED_INFO"
+PATCHED_EXECUTABLE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$PATCHED_INFO")
+PATCHED_EXECUTABLE_PATH=$(unzip -Z1 "$TEMP_PATCHED_IPA" | grep -E "^Payload/[^/]+\.app/$PATCHED_EXECUTABLE_NAME$" | head -n 1)
+unzip -p "$TEMP_PATCHED_IPA" "$PATCHED_EXECUTABLE_PATH" > "$PATCHED_EXECUTABLE"
+UNBOUND_LOAD_COUNT=$(otool -L "$PATCHED_EXECUTABLE" 2>/dev/null | grep -c 'Unbound\.dylib' || true)
+if [ "$UNBOUND_LOAD_COUNT" -gt 0 ]; then
+    print_error "Input ipa already contains Unbound.dylib; use a clean Discord ipa before injecting"
+    exit 1
+fi
+
 EXTENSIONS=""
 if [ "$USE_EXTENSION" = "1" ] && [ "$UNAME" = "Darwin" ]; then
     # OpenInDiscord Extension
