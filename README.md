@@ -15,9 +15,15 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 
 ### Jailed
 
-<a href="https://tinyurl.com/unbound-feather"><img src="https://adriancastro.dev/0byxzkzdsauj.png" width="230"></a>
-<a href="https://tinyurl.com/unbound-trollstore"><img src="https://i.imgur.com/dsbDLK9.png" width="230"></a>
-<a href="https://tinyurl.com/unbound-sidestore"><img src="https://adriancastro.dev/basmxxk8sj3k.png" width="230"></a>
+<div>
+    <a href="https://intradeus.github.io/http-protocol-redirector?r=sidestore://source?url=https://github.com/unbound-app/loader-ios/raw/refs/heads/main/app-repo.json"><img src="./.github/resources/sidestore-diagonal-badge.png" alt="Add to SideStore" height="60"></a>
+    &nbsp;
+    <a href="https://intradeus.github.io/http-protocol-redirector?r=feather://source/https://github.com/unbound-app/loader-ios/raw/refs/heads/main/app-repo.json"><img src="./.github/resources/feather-diagonal-badge.png" alt="Add to Feather" height="60"></a>
+    &nbsp;
+    <a href="https://intradeus.github.io/http-protocol-redirector?r=altstore://source?url=https://github.com/unbound-app/loader-ios/raw/refs/heads/main/app-repo.json"><img src="./.github/resources/altstore-diagonal-badge.png" alt="Add to AltStore" height="60"></a>
+    &nbsp;
+    <a href="https://github.com/unbound-app/loader-ios/releases/latest/download/Unbound.ipa"><img src="./.github/resources/github-releases-linear-badge.png" alt="Download from GitHub" height="60"></a>
+</div>
 
 > [!WARNING]
 > Trying to use non-ellekit tweak runtimes will likely break functionality. Ideally always use the pre-patched ipa when sideloading.
