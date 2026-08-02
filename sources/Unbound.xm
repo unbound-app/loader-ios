@@ -9,6 +9,8 @@
 #import "Unbound.h"
 #import "UnboundNative.h"
 
+#include <atomic>
+
 using namespace facebook;
 
 #pragma mark - Pre/post bundle injection
@@ -122,14 +124,15 @@ static void injectUnboundPreBundle(jsi::Runtime &runtime)
 
 static NSData              *gUnboundBundle    = nil;
 static dispatch_semaphore_t gUnboundBundleSem = nil;
-static uint64_t             gPrefetchToken    = 0;
+static std::atomic_uint64_t gPrefetchToken{0};
 
 static void prefetchUnboundBundle(void)
 {
-    uint64_t token = ++gPrefetchToken;
+    uint64_t token = gPrefetchToken.fetch_add(1) + 1;
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
 
     gUnboundBundle    = nil;
-    gUnboundBundleSem = dispatch_semaphore_create(0);
+    gUnboundBundleSem = sem;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *bundlePath = [Updater resolveBundlePath];
@@ -157,8 +160,9 @@ static void prefetchUnboundBundle(void)
             }
         }
 
-        if (token != gPrefetchToken)
+        if (token != gPrefetchToken.load())
         {
+            dispatch_semaphore_signal(sem);
             return;
         }
 
@@ -179,18 +183,24 @@ static void prefetchUnboundBundle(void)
             });
         }
 
-        dispatch_semaphore_signal(gUnboundBundleSem);
+        dispatch_semaphore_signal(sem);
     });
 }
 
 static void enqueueUnboundBundle(RCTInstance *self)
 {
     dispatch_semaphore_t sem = gUnboundBundleSem;
+    uint64_t              token = gPrefetchToken.load();
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         if (sem)
         {
             dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+        }
+
+        if (token != gPrefetchToken.load())
+        {
+            return;
         }
 
         NSData *bundle = gUnboundBundle;
@@ -200,7 +210,7 @@ static void enqueueUnboundBundle(RCTInstance *self)
         }
 
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Scheduling Unbound's bundle for execution..."];
-        [self callFunctionOnBufferedRuntimeExecutor:[bundle](jsi::Runtime &runtime) {
+        [self callFunctionOnBufferedRuntimeExecutor:[bundle, token](jsi::Runtime &runtime) {
             [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
             BOOL didLoadBundle = [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
             if (didLoadBundle)
@@ -208,6 +218,10 @@ static void enqueueUnboundBundle(RCTInstance *self)
                 [Logger info:LOG_CATEGORY_DEFAULT
                       format:@"Unbound's bundle was successfully executed."];
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    if (token != gPrefetchToken.load())
+                    {
+                        return;
+                    }
                     gUnboundBundleIsReady = YES;
                     applyPendingBrowserLogin();
                 });

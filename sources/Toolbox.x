@@ -782,21 +782,10 @@ static UIWindowScene *activeWindowScene(void)
                                       [Settings set:@"unbound"
                                                 key:@"loader.update.force"
                                               value:@YES];
-
-                                      dispatch_async(
-                                          dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,
-                                                                    0),
-                                          ^{
-                                              NSString *bundlePath = [Updater resolveBundlePath];
-                                              [Updater downloadBundle:bundlePath];
-                                              dispatch_async(dispatch_get_main_queue(), ^{
-                                                  [self
-                                                      dismissViewControllerAnimated:YES
-                                                                         completion:^{
-                                                                             [Utilities reloadApp];
-                                                                         }];
-                                              });
-                                          });
+                                      [self dismissViewControllerAnimated:YES
+                                                                  completion:^{
+                                                                      [Utilities reloadApp];
+                                                                  }];
                                   }
                               }]];
     [self presentViewController:alert animated:YES completion:nil];
