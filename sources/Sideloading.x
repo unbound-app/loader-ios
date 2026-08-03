@@ -1,8 +1,8 @@
 #import "Sideloading.h"
 
-static NSString *const BrowserLoginStateKey  = @"UnboundBrowserLoginState";
-static NSString *const BrowserLoginSecretKey = @"UnboundBrowserLoginSecret";
-static NSString *const BrowserLoginDateKey   = @"UnboundBrowserLoginDate";
+static NSString *const BrowserLoginStateKey  = @"BrowserLoginState";
+static NSString *const BrowserLoginSecretKey = @"BrowserLoginSecret";
+static NSString *const BrowserLoginDateKey   = @"BrowserLoginDate";
 
 static NSString *browserLoginBase64URL(NSData *data)
 {
@@ -94,7 +94,7 @@ static void browserLoginStart(void)
     [defaults setObject:[NSDate date] forKey:BrowserLoginDateKey];
 
     NSString *urlString = [NSString stringWithFormat:
-                               @"https://discord.com/login#unbound-login-state=%@&unbound-login-secret=%@",
+                               @"https://discord.com/login#login-state=%@&login-secret=%@",
                            state, key];
     [[UIApplication sharedApplication] openURL:[NSURL URLWithString:urlString]
                                         options:@{}
@@ -111,15 +111,15 @@ static void browserLoginStart(void)
 static BOOL browserLoginHandleURL(NSURL *url)
 {
     if (![[url.scheme lowercaseString] isEqualToString:@"com.hammerandchisel.discord"] ||
-        ![[url.host lowercaseString] isEqualToString:@"unbound-login"])
+        ![[url.host lowercaseString] isEqualToString:@"login"])
     {
         return NO;
     }
 
     NSUserDefaults  *defaults = [NSUserDefaults standardUserDefaults];
     NSString        *state    = [defaults stringForKey:BrowserLoginStateKey];
-    NSData          *secret   = [defaults dataForKey:BrowserLoginSecretKey];
-    NSDate          *date     = [defaults objectForKey:BrowserLoginDateKey];
+    NSData           *secret   = [defaults dataForKey:BrowserLoginSecretKey];
+    NSDate           *date     = [defaults objectForKey:BrowserLoginDateKey];
     if (state.length == 0 || secret.length == 0 || !date)
     {
         [Logger info:LOG_CATEGORY_DEFAULT
@@ -207,7 +207,7 @@ static BOOL browserLoginHandleURL(NSURL *url)
     }
 
     [Logger info:LOG_CATEGORY_DEFAULT format:@"Browser login callback verified."];
-    UnboundCompleteBrowserLogin(token);
+    CompleteBrowserLogin(token);
     return YES;
 }
 
@@ -221,6 +221,83 @@ static BOOL browserLoginShouldHandleController(ASAuthorizationController *contro
         }
     }
     return NO;
+}
+
+static NSError *iconError(NSInteger code, NSString *description)
+{
+    return [NSError errorWithDomain:@"Icon"
+                               code:code
+                           userInfo:@{ NSLocalizedDescriptionKey : description }];
+}
+
+static void completeIconChange(void (^completion)(NSError *error), NSError *error)
+{
+    if (completion)
+    {
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
+    }
+}
+
+static void setAlternateIconNameWithUIKit(NSString *iconName,
+                                           void (^completion)(NSError *error),
+                                           NSError *fallbackError)
+{
+    UIApplication *application = UIApplication.sharedApplication;
+    SEL setterSelector         = NSSelectorFromString(@"_setAlternateIconName:completionHandler:");
+    if (![application respondsToSelector:setterSelector])
+    {
+        completeIconChange(completion, fallbackError);
+        return;
+    }
+
+    typedef void (*IconSetter)(id, SEL, NSString *, void (^)(NSError *error));
+    IconSetter setIcon = (IconSetter) objc_msgSend;
+    setIcon(application, setterSelector, iconName, ^(NSError *error) {
+        [Logger info:LOG_CATEGORY_DEFAULT
+               format:@"UIKit private icon result: icon=%@ error=%@.",
+                       iconName ?: @"<primary>", error];
+        completeIconChange(completion, error ?: fallbackError);
+    });
+}
+
+void SetAlternateIconName(NSString *iconName, void (^completion)(NSError *error))
+{
+    Class bundleProxyClass = NSClassFromString(@"LSBundleProxy");
+    SEL proxySelector = NSSelectorFromString(@"bundleProxyForCurrentProcess");
+    if (!bundleProxyClass || ![bundleProxyClass respondsToSelector:proxySelector])
+    {
+        NSError *error = iconError(1, @"LSBundleProxy is unavailable");
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"LSBundleProxy unavailable."];
+        setAlternateIconNameWithUIKit(iconName, completion, error);
+        return;
+    }
+
+    id (*getBundleProxy)(id, SEL) = (id (*)(id, SEL))objc_msgSend;
+    id bundleProxy = getBundleProxy(bundleProxyClass, proxySelector);
+    SEL setterSelector = NSSelectorFromString(@"setAlternateIconName:withResult:");
+    if (!bundleProxy || ![bundleProxy respondsToSelector:setterSelector])
+    {
+        NSError *error = iconError(2, @"LSApplicationProxy icon setter is unavailable");
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"LSApplicationProxy icon setter unavailable."];
+        setAlternateIconNameWithUIKit(iconName, completion, error);
+        return;
+    }
+
+    typedef void (*IconSetter)(id, SEL, NSString *, void (^)(BOOL success, NSError *error));
+    IconSetter setIcon = (IconSetter)objc_msgSend;
+    setIcon(bundleProxy, setterSelector, iconName, ^(BOOL success, NSError *error) {
+        [Logger info:LOG_CATEGORY_DEFAULT
+               format:@"LSApplicationProxy icon result: success=%d icon=%@ error=%@.",
+                       success, iconName ?: @"<primary>", error];
+        if (success && !error)
+        {
+            completeIconChange(completion, nil);
+            return;
+        }
+
+        NSError *fallbackError = error ?: iconError(3, @"LSApplicationProxy rejected the icon change");
+        setAlternateIconNameWithUIKit(iconName, completion, fallbackError);
+    });
 }
 
 %hook NSFileManager
@@ -324,7 +401,7 @@ static BOOL browserLoginShouldHandleController(ASAuthorizationController *contro
         }
     };
 
-    %orig(iconName, wrappedCompletion);
+    SetAlternateIconName(iconName, wrappedCompletion);
 }
 %end
 

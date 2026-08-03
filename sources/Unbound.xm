@@ -47,7 +47,7 @@ static void applyPendingBrowserLogin(void)
     NSData *script = [source dataUsingEncoding:NSUTF8StringEncoding];
 
     [instance callFunctionOnBufferedRuntimeExecutor:[script, token](jsi::Runtime &runtime) {
-        BOOL applied = [JSI evaluate:script tag:@"unbound:browser-login" runtime:runtime];
+    BOOL applied = [JSI evaluate:script tag:@"browser-login" runtime:runtime];
         dispatch_async(dispatch_get_main_queue(), ^{
             gBrowserLoginIsApplying = NO;
             if (applied)
@@ -79,7 +79,7 @@ static void applyPendingBrowserLogin(void)
     }];
 }
 
-void UnboundCompleteBrowserLogin(NSString *token)
+void CompleteBrowserLogin(NSString *token)
 {
     if (token.length == 0)
     {

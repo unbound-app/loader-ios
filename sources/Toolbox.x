@@ -285,7 +285,7 @@ static UIWindowScene *activeWindowScene(void)
                                          },
                                          nil];
 
-    if (![Utilities isAppStoreApp] && ![Utilities isTestFlightApp])
+    if (![Utilities hasDiscordProductionEntitlements])
     {
         [settingsItems addObject:@{
             @"title" : @"Use Unbound Icon",

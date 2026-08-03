@@ -17,7 +17,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-void UnboundCompleteBrowserLogin(NSString *token);
+void CompleteBrowserLogin(NSString *token);
 #ifdef __cplusplus
 }
 #endif

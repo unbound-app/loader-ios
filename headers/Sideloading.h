@@ -9,3 +9,5 @@
              options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options;
 
 @end
+
+void SetAlternateIconName(NSString *iconName, void (^completion)(NSError *error));
