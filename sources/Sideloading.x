@@ -388,13 +388,6 @@ void SetAlternateIconName(NSString *iconName, void (^completion)(NSError *error)
 - (void)setAlternateIconName:(NSString *)iconName completionHandler:(void (^)(NSError *))completion
 {
     void (^wrappedCompletion)(NSError *) = ^(NSError *error) {
-        if (error)
-        {
-            [Utilities alert:@"For this to work change the Bundle ID so that it matches your "
-                             @"provisioning profile's App ID (excluding the Team ID prefix)."
-                       title:@"Cannot Change Icon"];
-        }
-
         if (completion)
         {
             completion(error);
