@@ -3,6 +3,7 @@
 static NSString *const BrowserLoginStateKey  = @"BrowserLoginState";
 static NSString *const BrowserLoginSecretKey = @"BrowserLoginSecret";
 static NSString *const BrowserLoginDateKey   = @"BrowserLoginDate";
+static NSString *const BrowserLoginExtensionName = @"OpenInDiscord";
 
 static NSString *browserLoginBase64URL(NSData *data)
 {
@@ -75,7 +76,17 @@ static void browserLoginClear(void)
     [defaults removeObjectForKey:BrowserLoginDateKey];
 }
 
-static void browserLoginStart(void)
+static NSString *browserLoginExtensionIdentifier(void)
+{
+    NSString *extensionsPath = [[[NSBundle mainBundle] bundlePath]
+        stringByAppendingPathComponent:@"PlugIns"];
+    NSString *extensionPath = [extensionsPath
+        stringByAppendingPathComponent:[BrowserLoginExtensionName stringByAppendingPathExtension:@"appex"]];
+    NSBundle *extensionBundle = [NSBundle bundleWithPath:extensionPath];
+    return [extensionBundle objectForInfoDictionaryKey:@"CFBundleIdentifier"];
+}
+
+static void browserLoginStartFlow(void)
 {
     NSData *stateData = browserLoginRandomData(24);
     NSData *secret    = browserLoginRandomData(64);
@@ -105,7 +116,63 @@ static void browserLoginStart(void)
                                       [Utilities alert:@"Safari could not be opened."
                                                  title:@"Could Not Start Login"];
                                   }
-                              }];
+    }];
+}
+
+static void browserLoginStart(void)
+{
+    if (![Utilities hasAppExtension:BrowserLoginExtensionName])
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"Safari extension is missing."];
+        [Utilities alert:@"Browser login requires the Safari extension to be enabled."
+                   title:@"Safari Extension Required"];
+        return;
+    }
+
+    if (@available(iOS 26.2, *))
+    {
+        NSString *identifier = browserLoginExtensionIdentifier();
+        if (identifier.length == 0)
+        {
+            [Logger error:LOG_CATEGORY_DEFAULT
+                   format:@"Safari extension bundle identifier is unavailable."];
+            [Utilities alert:@"Discord could not identify the Safari extension."
+                       title:@"Could Not Check Extension"];
+            return;
+        }
+
+        [SFSafariExtensionManager
+            getStateOfExtensionWithIdentifier:identifier
+                             completionHandler:^(SFSafariExtensionState *state, NSError *error) {
+                                 dispatch_async(dispatch_get_main_queue(), ^{
+                                     if (error || !state)
+                                     {
+                                         [Logger error:LOG_CATEGORY_DEFAULT
+                                                format:@"Could not read Safari extension state: %@.",
+                                                        error];
+                                         [Utilities alert:@"Discord could not check whether the Safari "
+                                                          @"extension is enabled."
+                                                    title:@"Could Not Check Extension"];
+                                         return;
+                                     }
+
+                                     if (!state.isEnabled)
+                                     {
+                                         [Logger info:LOG_CATEGORY_DEFAULT
+                                               format:@"Safari extension is disabled."];
+                                         [Utilities alert:@"Enable the Safari extension "
+                                                          @"in Settings, then try browser login again."
+                                                    title:@"Safari Extension Disabled"];
+                                         return;
+                                     }
+
+                                     browserLoginStartFlow();
+                                 });
+                             }];
+        return;
+    }
+
+    browserLoginStartFlow();
 }
 
 static BOOL browserLoginHandleURL(NSURL *url)

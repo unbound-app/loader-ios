@@ -1,5 +1,6 @@
 #import "Unbound.h"
 #import <AuthenticationServices/AuthenticationServices.h>
+#import <SafariServices/SafariServices.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 @interface RCTLinkingManager : NSObject
