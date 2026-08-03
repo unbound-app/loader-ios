@@ -152,12 +152,6 @@ static void prefetchUnboundBundle(void)
                                      @"to the developers."];
                 });
             }
-            else
-            {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [Utilities alert:@"Bundle failed to update, loading out of date bundle."];
-                });
-            }
         }
 
         if (token != gPrefetchToken.load())
