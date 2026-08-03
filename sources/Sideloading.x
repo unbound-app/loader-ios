@@ -3,7 +3,7 @@
 static NSString *const BrowserLoginStateKey  = @"BrowserLoginState";
 static NSString *const BrowserLoginSecretKey = @"BrowserLoginSecret";
 static NSString *const BrowserLoginDateKey   = @"BrowserLoginDate";
-static NSString *const BrowserLoginExtensionName = @"OpenInDiscord";
+static NSString *const SafariExtensionName = @"OpenInDiscord";
 
 static NSString *browserLoginBase64URL(NSData *data)
 {
@@ -81,7 +81,7 @@ static NSString *browserLoginExtensionIdentifier(void)
     NSString *extensionsPath = [[[NSBundle mainBundle] bundlePath]
         stringByAppendingPathComponent:@"PlugIns"];
     NSString *extensionPath = [extensionsPath
-        stringByAppendingPathComponent:[BrowserLoginExtensionName stringByAppendingPathExtension:@"appex"]];
+        stringByAppendingPathComponent:[SafariExtensionName stringByAppendingPathExtension:@"appex"]];
     NSBundle *extensionBundle = [NSBundle bundleWithPath:extensionPath];
     return [extensionBundle objectForInfoDictionaryKey:@"CFBundleIdentifier"];
 }
@@ -121,7 +121,7 @@ static void browserLoginStartFlow(void)
 
 static void browserLoginStart(void)
 {
-    if (![Utilities hasAppExtension:BrowserLoginExtensionName])
+    if (![Utilities hasAppExtension:SafariExtensionName])
     {
         [Logger error:LOG_CATEGORY_DEFAULT format:@"Safari extension is missing."];
         [Utilities alert:@"Browser login requires the Safari extension to be enabled."
