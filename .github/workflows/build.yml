@@ -83,7 +83,7 @@ env:
 jobs:
   build-tweak:
     if: &only_build_check inputs.only_app_repo != true && inputs.only_apt_repo != true
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     outputs:
       deb_url: ${{ steps.upload-deb.outputs.artifact-url }}
@@ -145,6 +145,13 @@ jobs:
         with:
           path: ${{ github.workspace }}/theos
           key: ${{ runner.os }}-${{ env.upstream_heads }}
+
+      - name: Trust Homebrew tap
+        if: env.DEB_DOWNLOADED == 'false'
+        run: |
+          if brew tap | grep -Fxq 'aws/tap'; then
+            brew trust aws/tap
+          fi
 
       - name: Prepare Theos
         if: env.DEB_DOWNLOADED == 'false'
