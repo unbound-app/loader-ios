@@ -207,7 +207,7 @@ static BOOL browserLoginHandleURL(NSURL *url)
     if (!stateMatches)
     {
         [Logger info:LOG_CATEGORY_DEFAULT
-               format:@"[DEBUG-BL1] Ignoring callback with state length %lu; active state length %lu.",
+               format:@"Ignoring callback with state length %lu; active state length %lu.",
                       (unsigned long)returnedState.length, (unsigned long)state.length];
         return YES;
     }
@@ -217,7 +217,7 @@ static BOOL browserLoginHandleURL(NSURL *url)
         returnedMAC.length != CC_SHA256_DIGEST_LENGTH)
     {
         [Logger error:LOG_CATEGORY_DEFAULT
-               format:@"[DEBUG-BL1] Browser login validation failed: session=%d fresh=%d secret=%lu iv=%lu ciphertext=%lu mac=%lu age=%.1f.",
+               format:@"Browser login validation failed: session=%d fresh=%d secret=%lu iv=%lu ciphertext=%lu mac=%lu age=%.1f.",
                       validSession, sessionFresh, (unsigned long)secret.length, (unsigned long)iv.length,
                       (unsigned long)ciphertext.length, (unsigned long)returnedMAC.length, sessionAge];
         browserLoginClear();
