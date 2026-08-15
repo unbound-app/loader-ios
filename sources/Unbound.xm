@@ -4,25 +4,35 @@
 #import "HotReload.h"
 #import "JSI.h"
 #import "LoaderShared.h"
-#import "RCTInstance.h"
+#import "RCTHost.h"
 #import "Unbound.h"
 #import "UnboundNative.h"
+
+#import <substrate.h>
 
 #include <atomic>
 
 using namespace facebook;
 
+@interface NSObject (UnboundRuntimeExecutor)
+- (void)callFunctionOnBufferedRuntimeExecutor:
+    (std::function<void(facebook::jsi::Runtime &)> &&)executor;
+@end
+
 #pragma mark - Pre/post bundle injection
 
-static __weak RCTInstance *gInstance = nil;
+static jsi::Runtime *gRuntime = nullptr;
+static __weak id gInstance = nil;
 static NSString *gPendingBrowserLoginToken = nil;
 static BOOL      gBrowserLoginIsApplying    = NO;
 static BOOL      gUnboundBundleIsReady      = NO;
 static NSUInteger gBrowserLoginFailureCount = 0;
+static std::atomic_bool gLoaderPrepared{false};
+static std::atomic_bool gBundleExecutionScheduled{false};
 
 static void applyPendingBrowserLogin(void)
 {
-    RCTInstance *instance = gInstance;
+    id          instance = gInstance;
     NSString    *token    = gPendingBrowserLoginToken;
     if (!instance || token.length == 0 || !gUnboundBundleIsReady || gBrowserLoginIsApplying)
     {
@@ -129,6 +139,35 @@ static NSData              *gUnboundBundle    = nil;
 static dispatch_semaphore_t gUnboundBundleSem = nil;
 static std::atomic_uint64_t gPrefetchToken{0};
 
+static void prefetchUnboundBundle(void);
+
+static void prepareUnboundLoading(id instance)
+{
+    if (!instance || gLoaderPrepared.exchange(true))
+    {
+        return;
+    }
+
+    gInstance = instance;
+    gUnboundBundleIsReady = NO;
+    gBundleExecutionScheduled.store(false);
+    [FileSystem init];
+    [Settings init];
+    dispatch_async(dispatch_get_main_queue(), ^{ [DevOverlay refreshOverlay]; });
+
+    if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES])
+    {
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Loader is disabled. Aborting."];
+        return;
+    }
+
+    [Plugins init];
+    [Themes init];
+    [Fonts init];
+    prefetchUnboundBundle();
+    [HotReload observe];
+}
+
 static void prefetchUnboundBundle(void)
 {
     uint64_t token = gPrefetchToken.fetch_add(1) + 1;
@@ -139,22 +178,25 @@ static void prefetchUnboundBundle(void)
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *bundlePath = [Updater resolveBundlePath];
+        NSString *localBundlePath = bundlePath;
 
         @try
         {
-            bundlePath = [Updater downloadBundle:bundlePath];
+            NSString *downloadedPath = [Updater downloadBundle:bundlePath];
+            if ([FileSystem exists:downloadedPath])
+            {
+                bundlePath = downloadedPath;
+            }
         }
         @catch (NSException *e)
         {
             [Logger error:LOG_CATEGORY_DEFAULT format:@"Bundle download failed. (%@)", e];
+            bundlePath = localBundlePath;
+        }
 
-            if (![FileSystem exists:bundlePath])
-            {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [Utilities alert:@"Bundle failed to download, please report this "
-                                     @"to the developers."];
-                });
-            }
+        if (![FileSystem exists:bundlePath] && [FileSystem exists:localBundlePath])
+        {
+            bundlePath = localBundlePath;
         }
 
         if (token != gPrefetchToken.load())
@@ -184,8 +226,70 @@ static void prefetchUnboundBundle(void)
     });
 }
 
-static void enqueueUnboundBundle(RCTInstance *self)
+static BOOL runtimeHasRequiredModules(jsi::Runtime &runtime)
 {
+    NSString *source =
+        @"(()=>{const map=globalThis.modules??globalThis.__c?.();if(!globalThis.modules&&map)globalThis.modules=map;if(!map||typeof map.values!=='function')return false;let rn=false;let react=false;for(const m of map.values()){const e=m?.publicModule?.exports??m?.exports??m;const values=[e,e?.default,e?.default?.default];for(const value of values){if(!value)continue;if(!rn&&value.AppState&&value.NativeModules)rn=true;if(!react&&typeof value.createElement==='function')react=true;}}return rn&&react;})()";
+    jsi::Value result = [JSI evaluateSource:source tag:@"unbound:runtime-readiness" runtime:runtime];
+    return [JSI toBool:result runtime:runtime fallback:NO];
+}
+
+static void executeUnboundBundle(id instance,
+                                 NSData *bundle,
+                                 uint64_t token,
+                                 NSUInteger attempt)
+{
+    if (!instance || bundle.length == 0 || token != gPrefetchToken.load())
+    {
+        return;
+    }
+
+    [instance callFunctionOnBufferedRuntimeExecutor:[bundle, token, attempt](jsi::Runtime &runtime) {
+        injectModulesPatch(runtime);
+        if (!runtimeHasRequiredModules(runtime))
+        {
+            if (attempt >= 200)
+            {
+                [Logger error:LOG_CATEGORY_DEFAULT
+                       format:@"React Native modules were not ready after %lu attempts.",
+                              (unsigned long)attempt];
+                return;
+            }
+
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
+                           dispatch_get_main_queue(), ^{
+                               executeUnboundBundle(gInstance, bundle, token, attempt + 1);
+                           });
+            return;
+        }
+
+        injectModulesPatch(runtime);
+        injectUnboundPreBundle(runtime);
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
+        BOOL didLoadBundle = [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
+        if (didLoadBundle)
+        {
+            [Logger info:LOG_CATEGORY_DEFAULT
+                  format:@"Unbound's bundle was successfully executed."];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (token != gPrefetchToken.load())
+                {
+                    return;
+                }
+                gUnboundBundleIsReady = YES;
+                applyPendingBrowserLogin();
+            });
+        }
+    }];
+}
+
+static void enqueueUnboundBundle(id self)
+{
+    if (gBundleExecutionScheduled.exchange(true))
+    {
+        return;
+    }
+
     dispatch_semaphore_t sem = gUnboundBundleSem;
     uint64_t              token = gPrefetchToken.load();
 
@@ -207,28 +311,35 @@ static void enqueueUnboundBundle(RCTInstance *self)
         }
 
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Scheduling Unbound's bundle for execution..."];
-        [self callFunctionOnBufferedRuntimeExecutor:[bundle, token](jsi::Runtime &runtime) {
-            injectUnboundPreBundle(runtime);
-            [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
-            BOOL didLoadBundle = [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
-            if (didLoadBundle)
-            {
-                [Logger info:LOG_CATEGORY_DEFAULT
-                      format:@"Unbound's bundle was successfully executed."];
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (token != gPrefetchToken.load())
-                    {
-                        return;
-                    }
-                    gUnboundBundleIsReady = YES;
-                    applyPendingBrowserLogin();
-                });
-            }
-        }];
+        executeUnboundBundle(self, bundle, token, 0);
     });
 }
 
 #pragma mark - Hooks
+
+%hook RCTHost
+
+- (void)instance:(id)instance didInitializeRuntime:(facebook::jsi::Runtime &)runtime
+{
+    gRuntime = &runtime;
+    [Logger info:LOG_CATEGORY_DEFAULT format:@"RCTHost didInitializeRuntime reached."];
+    id hostInstance = instance;
+    prepareUnboundLoading(hostInstance);
+    injectModulesPatch(runtime);
+    %orig;
+    if ([hostInstance respondsToSelector:@selector(callFunctionOnBufferedRuntimeExecutor:)])
+    {
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"RCTHost runtime instance is ready."];
+        enqueueUnboundBundle(hostInstance);
+    }
+    else
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT
+               format:@"RCTHost runtime instance has no buffered executor."];
+    }
+}
+
+%end
 
 %hook DCDBundleUpdaterManager
 
@@ -245,44 +356,78 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
 %end
 
-%hook RCTInstance
+typedef void (*LoadJSBundleIMP)(id, SEL, NSURL *);
+typedef void (*LoadScriptFromSourceIMP)(id, SEL, id);
 
-- (void)_loadJSBundle:(NSURL *)sourceURL
+static LoadJSBundleIMP         gOriginalLoadJSBundle         = NULL;
+static LoadScriptFromSourceIMP gOriginalLoadScriptFromSource = NULL;
+static BOOL                    gRCTInstanceHooksInstalled   = NO;
+
+static void unboundLoadJSBundle(id self, SEL selector, NSURL *sourceURL)
 {
-    gInstance = self;
-    gUnboundBundleIsReady = NO;
-    [FileSystem init];
-    [Settings init];
-    dispatch_async(dispatch_get_main_queue(), ^{ [DevOverlay refreshOverlay]; });
-
-    if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES])
+    prepareUnboundLoading(self);
+    if (gOriginalLoadJSBundle)
     {
-        [Logger info:LOG_CATEGORY_DEFAULT format:@"Loader is disabled. Aborting."];
-        %orig(sourceURL);
-        return;
+        gOriginalLoadJSBundle(self, selector, sourceURL);
     }
-
-    [Plugins init];
-    [Themes init];
-    [Fonts init];
-
-    prefetchUnboundBundle();
-
-    [HotReload observe];
-
-    %orig(sourceURL);
 }
 
-- (void)_loadScriptFromSource:(id)source
+static void unboundLoadScriptFromSource(id self, SEL selector, id source)
 {
     [self callFunctionOnBufferedRuntimeExecutor:[](jsi::Runtime &runtime) {
         injectModulesPatch(runtime);
     }];
-    %orig(source);
+
+    if (gOriginalLoadScriptFromSource)
+    {
+        gOriginalLoadScriptFromSource(self, selector, source);
+    }
+
     enqueueUnboundBundle(self);
 }
 
-%end
+static BOOL installRCTInstanceHooks(void)
+{
+    if (gRCTInstanceHooksInstalled)
+    {
+        return YES;
+    }
+
+    Class instanceClass = NSClassFromString(@"RCTInstance");
+    if (!instanceClass || !class_getInstanceMethod(instanceClass, @selector(_loadJSBundle:)) ||
+        !class_getInstanceMethod(instanceClass, @selector(_loadScriptFromSource:)))
+    {
+        return NO;
+    }
+
+    MSHookMessageEx(instanceClass,
+                    @selector(_loadJSBundle:),
+                    (IMP)unboundLoadJSBundle,
+                    (IMP *)&gOriginalLoadJSBundle);
+    MSHookMessageEx(instanceClass,
+                    @selector(_loadScriptFromSource:),
+                    (IMP)unboundLoadScriptFromSource,
+                    (IMP *)&gOriginalLoadScriptFromSource);
+    gRCTInstanceHooksInstalled = gOriginalLoadJSBundle != NULL &&
+                                 gOriginalLoadScriptFromSource != NULL;
+    return gRCTInstanceHooksInstalled;
+}
+
+static void retryRCTInstanceHooks(NSUInteger attempt)
+{
+    if (installRCTInstanceHooks() || attempt >= 300)
+    {
+        if (!gRCTInstanceHooksInstalled)
+        {
+            [Logger error:LOG_CATEGORY_DEFAULT format:@"RCTInstance hooks could not be installed."];
+        }
+        return;
+    }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
+                   dispatch_get_main_queue(),
+                   ^{ retryRCTInstanceHooks(attempt + 1); });
+}
 
 %ctor
 {
@@ -294,6 +439,10 @@ static void enqueueUnboundBundle(RCTInstance *self)
         });
         return;
     }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
+                   dispatch_get_main_queue(),
+                   ^{ retryRCTInstanceHooks(0); });
 
 #ifndef DEBUG
     dispatch_after(

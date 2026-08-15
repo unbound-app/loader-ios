@@ -154,34 +154,81 @@ private:
         return NO;
     }
 
-    try
+    @try
     {
-        if ([Utilities isHermesBytecode:scriptData])
+        try
         {
-            auto buffer   = std::make_shared<NSDataBuffer>(scriptData);
-            auto prepared = runtime.prepareJavaScript(buffer, std::string(tag.UTF8String));
-            runtime.evaluatePreparedJavaScript(prepared);
+            if ([Utilities isHermesBytecode:scriptData])
+            {
+                auto buffer   = std::make_shared<NSDataBuffer>(scriptData);
+                auto prepared = runtime.prepareJavaScript(buffer, std::string(tag.UTF8String));
+                runtime.evaluatePreparedJavaScript(prepared);
+            }
+            else
+            {
+                std::string source((const char *) scriptData.bytes, scriptData.length);
+                auto        buffer = std::make_shared<jsi::StringBuffer>(std::move(source));
+                runtime.evaluateJavaScript(buffer, std::string(tag.UTF8String));
+            }
+            return YES;
         }
-        else
+        catch (const jsi::JSError &e)
         {
-            std::string source((const char *) scriptData.bytes, scriptData.length);
-            auto        buffer = std::make_shared<jsi::StringBuffer>(std::move(source));
-            runtime.evaluateJavaScript(buffer, std::string(tag.UTF8String));
+            [Logger error:LOG_CATEGORY_DEFAULT
+                   format:@"JSI eval of '%@' threw JSError: %s", tag, e.what()];
+            return NO;
         }
-        return YES;
+        catch (const std::exception &e)
+        {
+            [Logger error:LOG_CATEGORY_DEFAULT
+                   format:@"JSI eval of '%@' threw exception: %s", tag, e.what()];
+            return NO;
+        }
     }
-    catch (const jsi::JSError &e)
+    @catch (NSException *exception)
     {
         [Logger error:LOG_CATEGORY_DEFAULT
-               format:@"JSI eval of '%@' threw JSError: %s", tag, e.what()];
+               format:@"JSI eval of '%@' threw NSException %@: %@", tag, exception.name, exception.reason];
         return NO;
     }
-    catch (const std::exception &e)
+}
+
++ (jsi::Value)evaluateSource:(NSString *)source
+                           tag:(NSString *)tag
+                       runtime:(jsi::Runtime &)runtime
+{
+    if (source.length == 0)
+    {
+        return jsi::Value();
+    }
+
+    @try
+    {
+        try
+        {
+            std::string              text((const char *) source.UTF8String);
+            auto                     buffer = std::make_shared<jsi::StringBuffer>(std::move(text));
+            return runtime.evaluateJavaScript(buffer, std::string(tag.UTF8String));
+        }
+        catch (const jsi::JSError &e)
+        {
+            [Logger error:LOG_CATEGORY_DEFAULT
+                   format:@"JSI source eval of '%@' threw JSError: %s", tag, e.what()];
+        }
+        catch (const std::exception &e)
+        {
+            [Logger error:LOG_CATEGORY_DEFAULT
+                   format:@"JSI source eval of '%@' threw exception: %s", tag, e.what()];
+        }
+    }
+    @catch (NSException *exception)
     {
         [Logger error:LOG_CATEGORY_DEFAULT
-               format:@"JSI eval of '%@' threw exception: %s", tag, e.what()];
-        return NO;
+               format:@"JSI source eval of '%@' threw NSException %@: %@", tag, exception.name,
+                      exception.reason];
     }
+
+    return jsi::Value();
 }
 
 + (jsi::Value)evaluateBytecode:(NSData *)bytecodeData tag:(NSString *)tag runtime:(jsi::Runtime &)runtime
