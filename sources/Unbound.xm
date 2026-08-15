@@ -4,7 +4,6 @@
 #import "HotReload.h"
 #import "JSI.h"
 #import "LoaderShared.h"
-#import "RCTHost.h"
 #import "RCTInstance.h"
 #import "Unbound.h"
 #import "UnboundNative.h"
@@ -15,7 +14,6 @@ using namespace facebook;
 
 #pragma mark - Pre/post bundle injection
 
-static jsi::Runtime *gRuntime = nullptr;
 static __weak RCTInstance *gInstance = nil;
 static NSString *gPendingBrowserLoginToken = nil;
 static BOOL      gBrowserLoginIsApplying    = NO;
@@ -91,6 +89,16 @@ void CompleteBrowserLogin(NSString *token)
     applyPendingBrowserLogin();
 }
 
+static void injectModulesPatch(jsi::Runtime &runtime)
+{
+    NSData *modules = [Utilities getResource:@"modules" data:true ext:@"js"];
+    if (modules.length)
+    {
+        [Logger info:LOG_CATEGORY_DEFAULT format:@"Executing modules patch..."];
+        [JSI evaluate:modules tag:@"unbound:modules" runtime:runtime];
+    }
+}
+
 static void injectUnboundPreBundle(jsi::Runtime &runtime)
 {
     unbound::registerNativeInterop(runtime);
@@ -105,14 +113,9 @@ static void injectUnboundPreBundle(jsi::Runtime &runtime)
         }
     }
 
-    {
-        NSData *modules = [Utilities getResource:@"modules" data:true ext:@"js"];
-        if (modules.length)
-        {
-            [Logger info:LOG_CATEGORY_DEFAULT format:@"Executing modules patch..."];
-            [JSI evaluate:modules tag:@"unbound:modules" runtime:runtime];
-        }
-    }
+    NSData *moduleBootstrap = [@"globalThis.modules \x3f\x3f= globalThis.__c?.();"
+        dataUsingEncoding:NSUTF8StringEncoding];
+    [JSI evaluate:moduleBootstrap tag:@"unbound:modules-bootstrap" runtime:runtime];
 
     {
         NSData *preloadData = [LoaderShared buildPreloadScriptData];
@@ -205,6 +208,7 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Scheduling Unbound's bundle for execution..."];
         [self callFunctionOnBufferedRuntimeExecutor:[bundle, token](jsi::Runtime &runtime) {
+            injectUnboundPreBundle(runtime);
             [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
             BOOL didLoadBundle = [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
             if (didLoadBundle)
@@ -225,17 +229,6 @@ static void enqueueUnboundBundle(RCTInstance *self)
 }
 
 #pragma mark - Hooks
-
-%hook RCTHost
-
-- (void)instance:(id)instance didInitializeRuntime:(facebook::jsi::Runtime &)runtime
-{
-    gRuntime = &runtime;
-    [Logger info:LOG_CATEGORY_DEFAULT format:@"RCTHost didInitializeRuntime; runtime captured."];
-    %orig;
-}
-
-%end
 
 %hook DCDBundleUpdaterManager
 
@@ -282,16 +275,9 @@ static void enqueueUnboundBundle(RCTInstance *self)
 
 - (void)_loadScriptFromSource:(id)source
 {
-    if (gRuntime)
-    {
-        injectUnboundPreBundle(*gRuntime);
-    }
-    else
-    {
-        [Logger error:LOG_CATEGORY_DEFAULT
-               format:@"Runtime not captured; skipping pre-bundle injection."];
-    }
-
+    [self callFunctionOnBufferedRuntimeExecutor:[](jsi::Runtime &runtime) {
+        injectModulesPatch(runtime);
+    }];
     %orig(source);
     enqueueUnboundBundle(self);
 }
