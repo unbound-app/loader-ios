@@ -70,11 +70,7 @@ on:
         description: "Filename of the iOS Simulator zip"
         value: ${{ jobs.build-simulator.outputs.simulator_filename }}
 
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
-  artifact-metadata: write
+permissions: {}
 
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
@@ -88,6 +84,11 @@ jobs:
     if: &only_build_check inputs.only_app_repo != true && inputs.only_apt_repo != true
     runs-on: macos-26
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     outputs:
       deb_url: ${{ steps.upload-deb.outputs.artifact-url }}
       deb_filename: ${{ steps.set-deb-filename.outputs.filename }}
@@ -97,7 +98,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           submodules: recursive
 
@@ -165,7 +166,7 @@ jobs:
       - name: Use cache
         if: env.DEB_DOWNLOADED == 'false'
         id: cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ github.workspace }}/theos
           key: ${{ runner.os }}-${{ env.upstream_heads }}
@@ -179,7 +180,7 @@ jobs:
 
       - name: Prepare Theos
         if: env.DEB_DOWNLOADED == 'false'
-        uses: Randomblock1/theos-action@v1
+        uses: Randomblock1/theos-action@4e23d15886bca77b5f7c462a82567e0de33ebe0b
 
       - name: Build package
         if: env.DEB_DOWNLOADED == 'false'
@@ -187,13 +188,13 @@ jobs:
 
       - name: Upload rootless package
         id: upload-deb
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rootless package
           path: packages/*.deb
 
       - name: Attest rootless package
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: packages/*.deb
 
@@ -208,6 +209,11 @@ jobs:
     if: *only_build_check
     runs-on: macos-15
     timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     needs: build-tweak
     outputs:
       ipa_url: ${{ steps.upload-ipa.outputs.artifact-url }}
@@ -215,7 +221,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           submodules: recursive
 
@@ -234,7 +240,7 @@ jobs:
           xcodebuild -version
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           merge-multiple: true
 
@@ -255,13 +261,13 @@ jobs:
           exit 1
 
       - name: Setup Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           cache: false
           go-version: 'stable'
 
       - name: Clone patcher
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: unbound-app/patcher-ios
           path: patcher-ios
@@ -350,13 +356,13 @@ jobs:
 
       - name: Upload ipa as artifact
         id: upload-ipa
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ipa
           path: ${{ env.APP_NAME }}.ipa
 
       - name: Attest IPA
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: ${{ env.APP_NAME }}.ipa
 
@@ -368,6 +374,11 @@ jobs:
     if: *only_build_check
     runs-on: macos-15
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     needs: build-ipa
     env:
       ATTESTATION_PK: ${{ secrets.ATTESTATION_PK }}
@@ -377,10 +388,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Download ipa artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: ipa
 
@@ -434,13 +445,13 @@ jobs:
 
       - name: Upload iOS Simulator artifact
         id: upload-simulator
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ios-simulator
           path: unbound-ios-simulator.zip
 
       - name: Attest iOS Simulator artifact
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: unbound-ios-simulator.zip
 
@@ -452,14 +463,16 @@ jobs:
     if: inputs.caller_workflow != 'ci' && inputs.release == true && inputs.only_app_repo != true && inputs.only_apt_repo != true
     runs-on: macos-15
     timeout-minutes: 15
+    permissions:
+      contents: write
     needs: [build-tweak, build-ipa, build-simulator]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           merge-multiple: true
 
@@ -477,7 +490,7 @@ jobs:
 
       - name: Create GitHub Release
         id: create_release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e
         with:
           tag_name: v${{ env.DISCORD_VERSION }}
           files: |
@@ -514,11 +527,11 @@ jobs:
       GPG_KEY: ${{ secrets.GPG_KEY }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Download deb artifact
         if: inputs.only_app_repo != true && inputs.only_apt_repo != true
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: rootless package
           path: apt-repo/repo/debs
@@ -535,7 +548,7 @@ jobs:
 
       - name: Download ipa artifact
         if: inputs.only_app_repo != true && inputs.only_apt_repo != true
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: ipa
 
@@ -639,14 +652,14 @@ jobs:
           ./update-repo.sh
 
       - name: Setup Pages
-        uses: actions/configure-pages@v6
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
           path: apt-repo/repo
           retention-days: 90
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128

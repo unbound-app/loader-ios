@@ -5,14 +5,33 @@ on:
         types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
-    contents: write
+    contents: read
     pull-requests: write
-    pages: write
     id-token: write
     attestations: write
     artifact-metadata: write
 
 jobs:
+    validate-submodules:
+        name: Validate submodules
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+              with:
+                  submodules: recursive
+                  fetch-depth: 1
+
+            - name: Verify submodule state
+              run: |
+                  set -euo pipefail
+                  status="$(git submodule status --recursive)"
+                  if printf '%s\n' "$status" | grep -Eq '^[+-U]'; then
+                      printf '%s\n' "$status"
+                      exit 1
+                  fi
+                  git submodule foreach --recursive 'git diff --exit-code'
+
     fetch-latest-ipa:
         name: Get latest stable ipa
         runs-on: ubuntu-latest
@@ -48,13 +67,13 @@ jobs:
         if: github.event_name == 'pull_request'
         steps:
             - name: Checkout code
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
               with:
                   ref: ${{ github.event.pull_request.head.sha }}
                   fetch-depth: 1
 
             - name: Delete existing comment
-              uses: izhangzhihao/delete-comment@master
+              uses: izhangzhihao/delete-comment@d075704468e1cf74e60944d9f335351213c34d85
               with:
                   github_token: ${{ secrets.GITHUB_TOKEN }}
                   delete_user_name: github-actions[bot]
@@ -70,7 +89,7 @@ jobs:
                   echo "time=$BUILD_TIME" >> $GITHUB_OUTPUT
 
             - name: Comment on current PR
-              uses: thollander/actions-comment-pull-request@v3
+              uses: thollander/actions-comment-pull-request@65f9e5c9a1f2cd378bd74b2e057c9736982a8e74
               with:
                   message: |
                       **Commit**: [#${{ steps.build-info.outputs.hash }}](https://github.com/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }})
