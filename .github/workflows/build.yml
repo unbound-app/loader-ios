@@ -319,7 +319,7 @@ jobs:
           name: ipa
           path: ${{ env.APP_NAME }}.ipa
 
-      - name: Attest injected IPA
+      - name: Attest IPA
         uses: actions/attest@v4
         with:
           subject-path: ${{ env.APP_NAME }}.ipa
