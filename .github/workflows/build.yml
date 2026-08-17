@@ -72,6 +72,9 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
@@ -90,7 +93,7 @@ jobs:
       deb_filename: ${{ steps.set-deb-filename.outputs.filename }}
     env:
       DEB_DOWNLOADED: false
-      UNBOUND_PK: ${{ secrets.UNBOUND_PK }}
+      ATTESTATION_PK: ${{ secrets.ATTESTATION_PK }}
 
     steps:
       - name: Checkout code
@@ -167,6 +170,11 @@ jobs:
         with:
           name: rootless package
           path: packages/*.deb
+
+      - name: Attest rootless package
+        uses: actions/attest@v4
+        with:
+          subject-path: packages/*.deb
 
       - name: Set deb filename
         id: set-deb-filename
@@ -311,6 +319,11 @@ jobs:
           name: ipa
           path: ${{ env.APP_NAME }}.ipa
 
+      - name: Attest injected IPA
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ env.APP_NAME }}.ipa
+
       - name: Set ipa filename
         id: set-ipa-filename
         run: echo "filename=${{ env.APP_NAME }}.ipa" >> $GITHUB_OUTPUT
@@ -320,6 +333,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     needs: build-ipa
+    env:
+      ATTESTATION_PK: ${{ secrets.ATTESTATION_PK }}
     outputs:
       simulator_url: ${{ steps.upload-simulator.outputs.artifact-url }}
       simulator_filename: ${{ steps.set-simulator-filename.outputs.filename }}
@@ -354,6 +369,27 @@ jobs:
           codesign -f -s - Payload/Discord.app/Frameworks/* || true
           codesign -f -s - Payload/Discord.app
 
+      - name: Re-attest converted tweak
+        run: |
+          key_file=$(mktemp)
+          expected_key=$(mktemp)
+          actual_key=$(mktemp)
+          expected_key_pem=$(mktemp)
+          trap 'rm -f "$key_file" "$expected_key" "$actual_key" "$expected_key_pem"' EXIT
+          printf "%s" "$ATTESTATION_PK" | tr -d '\r' > "$key_file"
+          openssl base64 -d -A -in tools/attestation_public_key.b64 -out "$expected_key"
+          openssl pkey -pubin -inform DER -in "$expected_key" -out "$expected_key_pem" 2>/dev/null
+          openssl ec -in "$key_file" -pubout -outform DER -out "$actual_key" 2>/dev/null
+          cmp -s "$expected_key" "$actual_key"
+          commit_hash=$(git rev-parse HEAD)
+          package_version=$(grep '^Version:' control | cut -d ' ' -f 2)
+          dylib=$(find Payload/Discord.app -type f -name 'Unbound.dylib' -print -quit)
+          test -n "$dylib"
+          python3 tools/macho_attest.py sign "$dylib" --private-key "$key_file" --commit-hash "$commit_hash" --package-version "$package_version"
+          codesign -f -s - "$dylib"
+          python3 tools/macho_attest.py verify "$dylib" --public-key "$expected_key_pem"
+          codesign -f -s - Payload/Discord.app
+
       - name: Create zip archive
         run: |
           cd Payload
@@ -366,6 +402,11 @@ jobs:
         with:
           name: ios-simulator
           path: unbound-ios-simulator.zip
+
+      - name: Attest iOS Simulator artifact
+        uses: actions/attest@v4
+        with:
+          subject-path: unbound-ios-simulator.zip
 
       - name: Set simulator filename
         id: set-simulator-filename

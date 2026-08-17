@@ -14,7 +14,8 @@ BUILD_TIMESTAMP := $(shell date "+%Y-%m-%d %H:%M:%S %Z")
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Unbound
-COMMON_FLAGS = -fobjc-arc -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -DCOMMIT_SHORT_HASH='@"$(COMMIT_SHORT_HASH)"' -DCOMMIT_SUBJECT='@"$(COMMIT_SUBJECT)"' -DCOMMIT_BRANCH='@"$(COMMIT_BRANCH)"' -DBUILD_TIMESTAMP='@"$(BUILD_TIMESTAMP)"' -I$(THEOS_PROJECT_DIR)/headers
+ATTESTATION_ENABLED := $(if $(filter 1,$(DEBUG)),0,1)
+COMMON_FLAGS = -fobjc-arc -DATTESTATION_ENABLED=$(ATTESTATION_ENABLED) -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -DCOMMIT_SHORT_HASH='@"$(COMMIT_SHORT_HASH)"' -DCOMMIT_SUBJECT='@"$(COMMIT_SUBJECT)"' -DCOMMIT_BRANCH='@"$(COMMIT_BRANCH)"' -DBUILD_TIMESTAMP='@"$(BUILD_TIMESTAMP)"' -I$(THEOS_PROJECT_DIR)/headers
 
 $(TWEAK_NAME)_FILES = $(shell find sources -name "*.x*" -o -name "*.m*")
 $(TWEAK_NAME)_CFLAGS = $(COMMON_FLAGS)
@@ -40,14 +41,35 @@ before-all::
 		git submodule update --init --recursive || exit 1; \
 	fi
 
-	@if [ -n "$$UNBOUND_PK" ]; then \
-		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign <(printf '%s' "$$UNBOUND_PK" | tr -d '\r') -out resources/signature.bin 2>/dev/null; \
-	elif [ -f "private_key.pem" ]; then \
-		echo -n "$(COMMIT_HASH)" | openssl dgst -sha256 -sign private_key.pem -out resources/signature.bin 2>/dev/null; \
-	fi
-
 after-stage::
 	find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete
+	find $(THEOS_STAGING_DIR) -type f \( -name "signature.bin" -o -name "public_key.der" \) -delete
+	if [ "$(DEBUG)" = "1" ]; then \
+		echo "Skipping embedded attestation for debug build"; \
+	else \
+		key_file=$$(mktemp); \
+		expected_key=$$(mktemp); \
+		actual_key=$$(mktemp); \
+		expected_key_pem=$$(mktemp); \
+		trap 'rm -f "$$key_file" "$$expected_key" "$$actual_key" "$$expected_key_pem"' EXIT; \
+		if [ -n "$$ATTESTATION_PK" ]; then \
+			printf "%s" "$$ATTESTATION_PK" | tr -d '\r' > "$$key_file"; \
+		elif [ -f "attestation_private.pem" ]; then \
+			cp "attestation_private.pem" "$$key_file"; \
+		else \
+			echo "ATTESTATION_PK or attestation_private.pem is required for release attestation"; \
+			exit 1; \
+		fi; \
+		openssl base64 -d -A -in tools/attestation_public_key.b64 -out "$$expected_key"; \
+		openssl pkey -pubin -inform DER -in "$$expected_key" -out "$$expected_key_pem" 2>/dev/null; \
+		openssl ec -in "$$key_file" -pubout -outform DER -out "$$actual_key" 2>/dev/null; \
+		cmp -s "$$expected_key" "$$actual_key" || { echo "attestation private key does not match the pinned public key"; exit 1; }; \
+		dylib=$$(find "$(THEOS_STAGING_DIR)" -type f -name "Unbound.dylib" -print -quit); \
+		[ -n "$$dylib" ] || { echo "staged Unbound.dylib not found"; exit 1; }; \
+		python3 tools/macho_attest.py sign "$$dylib" --private-key "$$key_file" --commit-hash "$(COMMIT_HASH)" --package-version "$(THEOS_PACKAGE_BASE_VERSION)"; \
+		python3 tools/macho_attest.py verify "$$dylib" --public-key "$$expected_key_pem"; \
+		ldid -S "$$dylib"; \
+		python3 tools/macho_attest.py verify "$$dylib" --public-key "$$expected_key_pem"; \
+	fi
 
 after-package::
-	rm -f resources/signature.bin

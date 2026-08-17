@@ -8,6 +8,8 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  attestations: write
+  artifact-metadata: write
 
 jobs:
   trigger-deploy:

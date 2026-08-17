@@ -9,6 +9,8 @@ permissions:
     pull-requests: write
     pages: write
     id-token: write
+    attestations: write
+    artifact-metadata: write
 
 jobs:
     fetch-latest-ipa:

@@ -336,6 +336,35 @@ if [ "$BUILD_SIMULATOR" = "1" ] && [ "$UNAME" = "Darwin" ]; then
         rm -rf "$TEMP_DIR"
         exit 1
     fi
+
+    if [ -z "$DEBUG_ARG" ]; then
+        KEY_FILE=$(mktemp)
+        EXPECTED_KEY=$(mktemp)
+        ACTUAL_KEY=$(mktemp)
+        EXPECTED_KEY_PEM=$(mktemp)
+        trap 'rm -f "$KEY_FILE" "$EXPECTED_KEY" "$ACTUAL_KEY" "$EXPECTED_KEY_PEM"' EXIT
+        if [ -n "$ATTESTATION_PK" ]; then
+            printf "%s" "$ATTESTATION_PK" | tr -d '\r' > "$KEY_FILE"
+        else
+            cp attestation_private.pem "$KEY_FILE"
+        fi
+        openssl base64 -d -A -in tools/attestation_public_key.b64 -out "$EXPECTED_KEY"
+        openssl pkey -pubin -inform DER -in "$EXPECTED_KEY" -out "$EXPECTED_KEY_PEM" 2>/dev/null
+        openssl ec -in "$KEY_FILE" -pubout -outform DER -out "$ACTUAL_KEY" 2>/dev/null
+        cmp -s "$EXPECTED_KEY" "$ACTUAL_KEY"
+        COMMIT_HASH=$(git rev-parse HEAD)
+        PACKAGE_VERSION=$(grep '^Version:' control | cut -d ' ' -f 2)
+        SIMULATOR_DYLIB=$(find "$TEMP_DIR/Payload/Discord.app" -type f -name 'Unbound.dylib' -print -quit)
+        if [ -z "$SIMULATOR_DYLIB" ]; then
+            print_error "Simulator Unbound.dylib not found"
+            rm -rf "$TEMP_DIR"
+            exit 1
+        fi
+        python3 tools/macho_attest.py sign "$SIMULATOR_DYLIB" --private-key "$KEY_FILE" --commit-hash "$COMMIT_HASH" --package-version "$PACKAGE_VERSION"
+        codesign -f -s - "$SIMULATOR_DYLIB"
+        python3 tools/macho_attest.py verify "$SIMULATOR_DYLIB" --public-key "$EXPECTED_KEY_PEM"
+        codesign -f -s - "$TEMP_DIR/Payload/Discord.app"
+    fi
     
     # Create simulator zip
     print_status "Creating iOS Simulator zip..."

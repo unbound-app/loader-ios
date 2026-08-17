@@ -440,25 +440,29 @@ static void retryRCTInstanceHooks(NSUInteger attempt)
         return;
     }
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
-                   dispatch_get_main_queue(),
-                   ^{ retryRCTInstanceHooks(0); });
-
 #ifndef DEBUG
-    dispatch_after(
-        dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            if (![Utilities isVerifiedBuild])
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        BOOL verified = [Utilities isVerifiedBuild];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!verified)
             {
-                [Logger error:LOG_CATEGORY_DEFAULT format:@"Tweak signature verification failed"];
-                [Utilities alert:@"The injected tweak is missing Unbound's detached signature. "
+                [Logger error:LOG_CATEGORY_DEFAULT format:@"Embedded tweak attestation verification failed"];
+                [Utilities alert:@"The injected tweak failed Unbound's embedded integrity verification. "
                                  @"You cannot be sure that this is free of malware. "
                                  @"If this app was obtained via 'cypwn' or similar sources "
                                  @"we heavily recommend you uninstall it immediately."
                            title:@"⚠️ SECURITY WARNING"
                          timeout:15
                          warning:YES];
+                return;
             }
+            retryRCTInstanceHooks(0);
         });
+    });
+#else
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
+                   dispatch_get_main_queue(),
+                   ^{ retryRCTInstanceHooks(0); });
 #endif
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(),
