@@ -10,14 +10,14 @@
 
 #import "Logger.h"
 
-#include <cstring>
+#include <string.h>
 
 #if ATTESTATION_ENABLED
 __attribute__((section("__TEXT,__attestation"), used))
 const unsigned char AttestationPlaceholder[ATTESTATION_SECTION_SIZE] = {0};
 #endif
 
-struct AttestationSliceInfo
+typedef struct
 {
     size_t        size;
     size_t        boundary;
@@ -29,7 +29,7 @@ struct AttestationSliceInfo
     bool          hasLinkedit;
     cpu_type_t    cpuType;
     cpu_subtype_t cpuSubtype;
-};
+} AttestationSliceInfo;
 
 static bool readUInt32(const uint8_t *bytes, size_t length, size_t offset, uint32_t *value)
 {
@@ -83,24 +83,24 @@ static bool parseSlice(const uint8_t *bytes, size_t length, AttestationSliceInfo
     uint32_t magic = 0;
     uint32_t commandCount = 0;
     uint32_t commandSize = 0;
-    if (!readUInt32(bytes, length, 0, &magic) || magic != MH_MAGIC_64 || length < sizeof(mach_header_64))
+    if (!readUInt32(bytes, length, 0, &magic) || magic != MH_MAGIC_64 || length < sizeof(struct mach_header_64))
     {
         return false;
     }
-    if (!readUInt32(bytes, length, offsetof(mach_header_64, ncmds), &commandCount) ||
-        !readUInt32(bytes, length, offsetof(mach_header_64, sizeofcmds), &commandSize))
+    if (!readUInt32(bytes, length, offsetof(struct mach_header_64, ncmds), &commandCount) ||
+        !readUInt32(bytes, length, offsetof(struct mach_header_64, sizeofcmds), &commandSize))
     {
         return false;
     }
-    size_t commandsStart = sizeof(mach_header_64);
+    size_t commandsStart = sizeof(struct mach_header_64);
     if (commandSize > length - commandsStart)
     {
         return false;
     }
     memset(result, 0, sizeof(*result));
     result->size = length;
-    memcpy(&result->cpuType, bytes + offsetof(mach_header_64, cputype), sizeof(result->cpuType));
-    memcpy(&result->cpuSubtype, bytes + offsetof(mach_header_64, cpusubtype), sizeof(result->cpuSubtype));
+    memcpy(&result->cpuType, bytes + offsetof(struct mach_header_64, cputype), sizeof(result->cpuType));
+    memcpy(&result->cpuSubtype, bytes + offsetof(struct mach_header_64, cpusubtype), sizeof(result->cpuSubtype));
     size_t commandOffset = commandsStart;
     size_t commandEnd = commandsStart + commandSize;
     for (uint32_t index = 0; index < commandCount; index++)
@@ -220,7 +220,7 @@ static bool chooseLoadedSlice(const uint8_t *bytes,
     {
         return false;
     }
-    const uint8_t *fallback = nullptr;
+    const uint8_t *fallback = NULL;
     size_t fallbackLength = 0;
     for (uint32_t index = 0; index < architectureCount; index++)
     {
@@ -275,21 +275,21 @@ static NSString *hexDigest(const uint8_t *digest)
     return result;
 }
 
-static NSData *canonicalDigest(const uint8_t *slice, const AttestationSliceInfo &info)
+static NSData *canonicalDigest(const uint8_t *slice, const AttestationSliceInfo *info)
 {
-    NSMutableData *canonical = [NSMutableData dataWithLength:info.boundary];
-    memcpy(canonical.mutableBytes, slice, info.boundary);
-    if (!zeroRange(canonical, info.sectionOffset + 24, 32) ||
-        !zeroRange(canonical, info.sectionOffset + 56, 2) ||
-        !zeroRange(canonical, info.sectionOffset + 60, ATTESTATION_SIGNATURE_CAPACITY))
+    NSMutableData *canonical = [NSMutableData dataWithLength:info->boundary];
+    memcpy(canonical.mutableBytes, slice, info->boundary);
+    if (!zeroRange(canonical, info->sectionOffset + 24, 32) ||
+        !zeroRange(canonical, info->sectionOffset + 56, 2) ||
+        !zeroRange(canonical, info->sectionOffset + 60, ATTESTATION_SIGNATURE_CAPACITY))
     {
         return nil;
     }
-    if (info.hasCodeSignature && !zeroRange(canonical, info.codeSignatureCommand + 8, 8))
+    if (info->hasCodeSignature && !zeroRange(canonical, info->codeSignatureCommand + 8, 8))
     {
         return nil;
     }
-    if (info.hasLinkedit && !zeroRange(canonical, info.linkeditFilesize, 8))
+    if (info->hasLinkedit && !zeroRange(canonical, info->linkeditFilesize, 8))
     {
         return nil;
     }
@@ -330,7 +330,7 @@ static bool failVerification(NSString *reason)
     return false;
 }
 
-extern "C" bool VerifyEmbeddedAttestation(void)
+bool VerifyEmbeddedAttestation(void)
 {
     Dl_info imageInfo = {0};
     if (dladdr((const void *)&VerifyEmbeddedAttestation, &imageInfo) == 0 || !imageInfo.dli_fname)
@@ -350,7 +350,7 @@ extern "C" bool VerifyEmbeddedAttestation(void)
     {
         return failVerification(fileError.localizedDescription ?: @"unable to read the loaded dylib");
     }
-    const uint8_t *slice = nullptr;
+    const uint8_t *slice = NULL;
     size_t sliceLength = 0;
     if (!chooseLoadedSlice((const uint8_t *)fileData.bytes,
                            fileData.length,
@@ -376,7 +376,7 @@ extern "C" bool VerifyEmbeddedAttestation(void)
     {
         return failVerification(@"attestation metadata is invalid");
     }
-    NSData *digest = canonicalDigest(slice, info);
+    NSData *digest = canonicalDigest(slice, &info);
     if (!digest || memcmp(digest.bytes, attestation.digest, digest.length) != 0)
     {
         return failVerification(@"Mach-O digest mismatch");
