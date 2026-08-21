@@ -96,8 +96,7 @@ static NSString *etag = nil;
 {
     NSString *baseURL             = [Settings getString:@"unbound"
                                         key:@"loader.update.url"
-                                        def:@"https://raw.githubusercontent.com/unbound-app/builds/"
-                                                        @"refs/heads/main/"];
+                                        def:@"https://builds.unbound.rip/"];
     NSString *directURLIfProvided = nil;
 
     if ([baseURL hasSuffix:@".bundle"] || [baseURL hasSuffix:@".js"])
