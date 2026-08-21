@@ -135,25 +135,32 @@ static NSString *etag = nil;
     if (manifestData)
     {
         NSDictionary *manifest = [Utilities parseJSON:manifestData];
-        if (manifest && manifest[@"bytecodeVersion"])
+        if (manifest)
         {
-            NSNumber *manifestBytecodeVersion = manifest[@"bytecodeVersion"];
-            uint32_t  currentBytecodeVersion  = [Utilities getHermesBytecodeVersion];
+            NSArray *manifestBytecodeVersions = manifest[@"bytecodeVersions"];
+            uint32_t currentBytecodeVersion   = [Utilities getHermesBytecodeVersion];
 
             [Logger info:LOG_CATEGORY_UPDATER
-                  format:@"Manifest bytecode version: %@, Current bytecode version: %u",
-                         manifestBytecodeVersion, currentBytecodeVersion];
+                  format:@"Manifest bytecode versions: %@, Current bytecode version: %u",
+                         manifestBytecodeVersions, currentBytecodeVersion];
 
-            if ([manifestBytecodeVersion unsignedIntValue] == currentBytecodeVersion)
+            if ([manifestBytecodeVersions isKindOfClass:[NSArray class]])
             {
-                [Logger info:LOG_CATEGORY_UPDATER format:@"Using hermes bytecode bundle"];
-                return [NSURL URLWithString:[baseURL stringByAppendingString:@"unbound.bundle"]];
+                for (NSNumber *version in manifestBytecodeVersions)
+                {
+                    if ([version isKindOfClass:[NSNumber class]] &&
+                        [version unsignedIntValue] == currentBytecodeVersion)
+                    {
+                        [Logger info:LOG_CATEGORY_UPDATER format:@"Using hermes bytecode bundle"];
+                        NSString *bundle =
+                            [NSString stringWithFormat:@"unbound.%u.bundle", currentBytecodeVersion];
+                        return [NSURL URLWithString:[baseURL stringByAppendingString:bundle]];
+                    }
+                }
             }
-            else
-            {
-                [Logger info:LOG_CATEGORY_UPDATER format:@"Using JavaScript bundle"];
-                return [NSURL URLWithString:[baseURL stringByAppendingString:@"unbound.js"]];
-            }
+
+            [Logger info:LOG_CATEGORY_UPDATER format:@"Using JavaScript bundle"];
+            return [NSURL URLWithString:[baseURL stringByAppendingString:@"unbound.js"]];
         }
     }
 
