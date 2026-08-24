@@ -337,7 +337,7 @@ if [ "$BUILD_SIMULATOR" = "1" ] && [ "$UNAME" = "Darwin" ]; then
         exit 1
     fi
 
-    if [ -z "$DEBUG_ARG" ]; then
+    if [ -z "$DEBUG_ARG" ] && [ "$(./tools/attestation_enabled.sh)" = "1" ]; then
         KEY_FILE=$(mktemp)
         EXPECTED_KEY=$(mktemp)
         ACTUAL_KEY=$(mktemp)
@@ -347,10 +347,6 @@ if [ "$BUILD_SIMULATOR" = "1" ] && [ "$UNAME" = "Darwin" ]; then
             printf "%s" "$ATTESTATION_PK" | tr -d '\r' > "$KEY_FILE"
         elif [ -f "attestation_private.pem" ]; then
             cp attestation_private.pem "$KEY_FILE"
-        else
-            print_error "ATTESTATION_PK or attestation_private.pem is required for release attestation"
-            rm -rf "$TEMP_DIR"
-            exit 1
         fi
         if ! openssl base64 -d -A -in tools/attestation_public_key.b64 -out "$EXPECTED_KEY" || \
             ! openssl pkey -pubin -inform DER -in "$EXPECTED_KEY" -out "$EXPECTED_KEY_PEM" 2>/dev/null || \

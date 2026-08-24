@@ -213,7 +213,11 @@
 
 + (BOOL)isVerifiedBuild
 {
+#if ATTESTATION_ENABLED
     return VerifyEmbeddedAttestation() ? YES : NO;
+#else
+    return YES;
+#endif
 }
 
 + (BOOL)hasDiscordProductionEntitlements

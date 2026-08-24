@@ -93,7 +93,6 @@ jobs:
       deb_url: ${{ steps.upload-deb.outputs.artifact-url }}
       deb_filename: ${{ steps.set-deb-filename.outputs.filename }}
     env:
-      DEB_DOWNLOADED: false
       ATTESTATION_PK: ${{ secrets.ATTESTATION_PK }}
 
     steps:
@@ -102,69 +101,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download Tweak
-        if: inputs.caller_workflow != 'ci'
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3; do
-            release_info=$(gh api --header 'Accept: application/vnd.github+json' "repos/${{ github.repository }}/releases/latest" 2>/dev/null || true)
-            if [ -z "$release_info" ]; then
-              if [ "$attempt" -lt 3 ]; then
-                sleep 10
-                continue
-              fi
-              echo "No release metadata was available after $attempt attempts"
-              echo "DEB_DOWNLOADED=false" >> "$GITHUB_ENV"
-              exit 0
-            fi
-
-            status_code=$(jq -r '.status // empty' <<< "$release_info")
-            if [ -n "$status_code" ]; then
-              if [ "$attempt" -lt 3 ]; then
-                sleep 10
-                continue
-              fi
-              echo "No releases found or request failed, status code: $status_code"
-              echo "DEB_DOWNLOADED=false" >> "$GITHUB_ENV"
-              exit 0
-            fi
-
-            release_version=$(jq -r '.assets[] | select(.name | contains("iphoneos-arm64.deb")) | .name' <<< "$release_info" | grep -o '_[0-9.]\+_' | tr -d '_' || true)
-            control_version=$(grep '^Version:' control | cut -d ' ' -f 2)
-
-            if [ "$release_version" != "$control_version" ]; then
-              echo "Versions do not match. No files will be downloaded."
-              echo "DEB_DOWNLOADED=false" >> "$GITHUB_ENV"
-              exit 0
-            fi
-
-            mkdir -p packages
-            download_failed=false
-            while IFS= read -r asset_url; do
-              if ! curl --fail --location --output "packages/$(basename "$asset_url")" "$asset_url"; then
-                download_failed=true
-                break
-              fi
-            done < <(jq -r '.assets[] | select(.name | endswith("arm64.deb")) | .browser_download_url' <<< "$release_info")
-
-            if [ "$download_failed" = false ]; then
-              echo "DEB_DOWNLOADED=true" >> "$GITHUB_ENV"
-              exit 0
-            fi
-
-            if [ "$attempt" -lt 3 ]; then
-              sleep 10
-            fi
-          done
-          echo "DEB download failed after 3 attempts"
-          exit 1
-
       - name: Check cache
-        if: env.DEB_DOWNLOADED == 'false'
         run: echo upstream_heads=`git ls-remote https://github.com/theos/theos | head -n 1 | cut -f 1`-`git ls-remote https://github.com/theos/sdks | head -n 1 | cut -f 1` >> $GITHUB_ENV
 
       - name: Use cache
-        if: env.DEB_DOWNLOADED == 'false'
         id: cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -172,18 +112,15 @@ jobs:
           key: ${{ runner.os }}-${{ env.upstream_heads }}
 
       - name: Trust Homebrew tap
-        if: env.DEB_DOWNLOADED == 'false'
         run: |
           if brew tap | grep -Fxq 'aws/tap'; then
             brew trust aws/tap
           fi
 
       - name: Prepare Theos
-        if: env.DEB_DOWNLOADED == 'false'
         uses: Randomblock1/theos-action@4e23d15886bca77b5f7c462a82567e0de33ebe0b
 
       - name: Build package
-        if: env.DEB_DOWNLOADED == 'false'
         run: gmake package
 
       - name: Upload rootless package
@@ -418,6 +355,9 @@ jobs:
 
       - name: Re-attest converted tweak
         run: |
+          if [ "$(./tools/attestation_enabled.sh)" != "1" ]; then
+            exit 0
+          fi
           key_file=$(mktemp)
           expected_key=$(mktemp)
           actual_key=$(mktemp)

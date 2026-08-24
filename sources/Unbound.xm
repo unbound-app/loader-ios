@@ -440,7 +440,7 @@ static void retryRCTInstanceHooks(NSUInteger attempt)
         return;
     }
 
-#ifndef DEBUG
+#if ATTESTATION_ENABLED
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         BOOL verified = [Utilities isVerifiedBuild];
         dispatch_async(dispatch_get_main_queue(), ^{
