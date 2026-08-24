@@ -69,12 +69,6 @@ The resulting `.deb` file will be in the `packages` folder.
 
 </details>
 
-## Embedded attestation
-
-Release builds embed a P-256/SHA-256 attestation in each architecture slice of the injected dylib. The runtime verifier uses iOS `SecKey` APIs and canonicalizes the Mach-O image so the outer iOS code signature can be replaced without invalidating the attestation. Debug builds intentionally omit the attestation.
-
-The release signer reads `ATTESTATION_PK` in CI or the ignored local `attestation_private.pem` file. The matching public key is pinned in `tools/attestation_public_key.b64`; the private key must never be committed. The build workflow creates GitHub Sigstore provenance attestations for the Debian package, injected IPA, and Simulator archive. Verify a downloaded GitHub artifact with `gh attestation verify <artifact> --repo unbound-app/loader-ios`.
-
 ## Live reload (HMR)
 
 When working on the [JavaScript client](https://github.com/unbound-app/client) you can have the
