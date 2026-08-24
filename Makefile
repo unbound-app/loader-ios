@@ -14,7 +14,7 @@ BUILD_TIMESTAMP := $(shell date "+%Y-%m-%d %H:%M:%S %Z")
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Unbound
-ATTESTATION_ENABLED := $(if $(filter 1,$(DEBUG)),0,$(shell ./tools/attestation_enabled.sh))
+ATTESTATION_ENABLED := $(if $(filter 1,$(DEBUG)),0,1)
 COMMON_FLAGS = -fobjc-arc -DATTESTATION_ENABLED=$(ATTESTATION_ENABLED) -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -DCOMMIT_SHORT_HASH='@"$(COMMIT_SHORT_HASH)"' -DCOMMIT_SUBJECT='@"$(COMMIT_SUBJECT)"' -DCOMMIT_BRANCH='@"$(COMMIT_BRANCH)"' -DBUILD_TIMESTAMP='@"$(BUILD_TIMESTAMP)"' -I$(THEOS_PROJECT_DIR)/headers
 
 $(TWEAK_NAME)_FILES = $(shell find sources -name "*.x*" -o -name "*.m*")
@@ -44,7 +44,7 @@ before-all::
 after-stage::
 	find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete
 	find $(THEOS_STAGING_DIR) -type f \( -name "signature.bin" -o -name "public_key.der" \) -delete
-	if [ "$(ATTESTATION_ENABLED)" = "1" ]; then \
+	if [ "$(DEBUG)" != "1" ] && [ "$(shell ./tools/attestation_enabled.sh)" = "1" ]; then \
 		key_file=$$(mktemp); \
 		expected_key=$$(mktemp); \
 		actual_key=$$(mktemp); \
