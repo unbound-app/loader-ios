@@ -1,6 +1,10 @@
 #import "Toolbox.h"
 #import "DevOverlay.h"
 
+@interface UnboundToolboxViewController ()
+@property (nonatomic, assign) BOOL dismissalInProgress;
+@end
+
 @implementation Toolbox
 
 + (void)showToolboxMenu
@@ -149,6 +153,8 @@ static UIWindowScene *activeWindowScene(void)
     card.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:card];
     self.cardView = card;
+    card.alpha = 0;
+    card.transform = CGAffineTransformMakeScale(0.97, 0.97);
 
     [NSLayoutConstraint activateConstraints:@[
         [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
@@ -208,20 +214,23 @@ static UIWindowScene *activeWindowScene(void)
     ]];
 }
 
+- (void)viewDidAppear:(BOOL)animated
+{
+    [super viewDidAppear:animated];
+    [UIView animateWithDuration:0.2
+                          delay:0
+         usingSpringWithDamping:0.9
+          initialSpringVelocity:0.2
+                        options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+                         self.cardView.alpha = 1;
+                         self.cardView.transform = CGAffineTransformIdentity;
+                     }
+                     completion:nil];
+}
+
 - (UIButton *)addCloseButtonToView:(UIView *)container
 {
-    UIView *backdrop                                = [[UIView alloc] init];
-    backdrop.translatesAutoresizingMaskIntoConstraints = NO;
-    backdrop.layer.cornerRadius                     = 18;
-    backdrop.layer.cornerCurve                      = kCACornerCurveContinuous;
-    backdrop.layer.masksToBounds                    = YES;
-    backdrop.userInteractionEnabled                 = NO;
-
-    UIVisualEffectView *blur = [[UIVisualEffectView alloc]
-        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
-    blur.translatesAutoresizingMaskIntoConstraints = NO;
-    [backdrop addSubview:blur];
-
     UIButton *button                                 = [UIButton buttonWithType:UIButtonTypeSystem];
     button.tintColor                                 = UIColor.labelColor;
     button.backgroundColor                           = UIColor.clearColor;
@@ -233,24 +242,13 @@ static UIWindowScene *activeWindowScene(void)
              forState:UIControlStateNormal];
     [button addTarget:self action:@selector(dismiss) forControlEvents:UIControlEventTouchUpInside];
 
-    [container addSubview:backdrop];
     [container addSubview:button];
 
     [NSLayoutConstraint activateConstraints:@[
-        [blur.topAnchor constraintEqualToAnchor:backdrop.topAnchor],
-        [blur.leadingAnchor constraintEqualToAnchor:backdrop.leadingAnchor],
-        [blur.trailingAnchor constraintEqualToAnchor:backdrop.trailingAnchor],
-        [blur.bottomAnchor constraintEqualToAnchor:backdrop.bottomAnchor],
-
-        [backdrop.topAnchor constraintEqualToAnchor:container.topAnchor constant:12],
-        [backdrop.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-12],
-        [backdrop.widthAnchor constraintEqualToConstant:36],
-        [backdrop.heightAnchor constraintEqualToConstant:36],
-
-        [button.topAnchor constraintEqualToAnchor:backdrop.topAnchor],
-        [button.leadingAnchor constraintEqualToAnchor:backdrop.leadingAnchor],
-        [button.trailingAnchor constraintEqualToAnchor:backdrop.trailingAnchor],
-        [button.bottomAnchor constraintEqualToAnchor:backdrop.bottomAnchor],
+        [button.topAnchor constraintEqualToAnchor:container.topAnchor constant:12],
+        [button.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-12],
+        [button.widthAnchor constraintEqualToConstant:36],
+        [button.heightAnchor constraintEqualToConstant:36],
     ]];
 
     return button;
@@ -976,26 +974,39 @@ static UIWindowScene *activeWindowScene(void)
 
 - (void)dismiss
 {
-    [self dismissViewControllerAnimated:YES
-                              completion:^{
-                                  UIWindow *storedWindow =
-                                      objc_getAssociatedObject(self, "recoveryTopWindow");
-                                  UIWindow *origKeyWindow =
-                                      objc_getAssociatedObject(self, "recoveryOriginalKeyWindow");
+    if (self.dismissalInProgress)
+    {
+        return;
+    }
 
-                                  if (storedWindow)
-                                  {
-                                      storedWindow.hidden             = YES;
-                                      storedWindow.rootViewController = nil;
-                                  }
+    self.dismissalInProgress = YES;
+    [UIView animateWithDuration:0.16
+        animations:^{
+            self.cardView.alpha = 0;
+            self.cardView.transform = CGAffineTransformMakeScale(0.97, 0.97);
+            self.view.backgroundColor = UIColor.clearColor;
+        }
+        completion:^(BOOL finished) {
+            [self dismissViewControllerAnimated:NO completion:^{ [self finishDismissal]; }];
+        }];
+}
 
-                                  [origKeyWindow makeKeyAndVisible];
+- (void)finishDismissal
+{
+    UIWindow *storedWindow = objc_getAssociatedObject(self, "recoveryTopWindow");
+    UIWindow *origKeyWindow = objc_getAssociatedObject(self, "recoveryOriginalKeyWindow");
 
-                                  objc_setAssociatedObject(self, "recoveryTopWindow", nil,
-                                                           OBJC_ASSOCIATION_ASSIGN);
-                                  objc_setAssociatedObject(self, "recoveryOriginalKeyWindow", nil,
-                                                           OBJC_ASSOCIATION_ASSIGN);
-                              }];
+    if (storedWindow)
+    {
+        storedWindow.hidden = YES;
+        storedWindow.rootViewController = nil;
+    }
+
+    [origKeyWindow makeKeyAndVisible];
+
+    objc_setAssociatedObject(self, "recoveryTopWindow", nil, OBJC_ASSOCIATION_ASSIGN);
+    objc_setAssociatedObject(self, "recoveryOriginalKeyWindow", nil,
+                             OBJC_ASSOCIATION_ASSIGN);
 }
 
 void showToolboxSheet(void)

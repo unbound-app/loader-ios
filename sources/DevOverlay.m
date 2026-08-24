@@ -1,40 +1,13 @@
 #import "DevOverlay.h"
 
 @interface DevOverlayPassthroughWindow : UIWindow
-@property (nonatomic, copy) void (^outsideTapHandler)(void);
 @end
 
 @implementation DevOverlayPassthroughWindow
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event
 {
     UIView *hitView = [super hitTest:point withEvent:event];
-    if (hitView == self.rootViewController.view)
-    {
-        if (self.outsideTapHandler)
-        {
-            self.outsideTapHandler();
-        }
-        return nil;
-    }
-    return hitView;
-}
-@end
-
-@interface DevOverlayRowButton : UIButton
-@property (nonatomic, copy) void (^rowAction)(void);
-@property (nonatomic, assign) BOOL dismissesOnTap;
-@end
-
-@implementation DevOverlayRowButton
-- (void)setHighlighted:(BOOL)highlighted
-{
-    [super setHighlighted:highlighted];
-    [UIView animateWithDuration:0.1
-                     animations:^{
-                         self.backgroundColor = highlighted
-                                                     ? [UIColor.labelColor colorWithAlphaComponent:0.08]
-                                                     : UIColor.clearColor;
-                     }];
+    return hitView == self.rootViewController.view ? nil : hitView;
 }
 @end
 
@@ -241,7 +214,6 @@
 static UIWindow *devOverlayWindow   = nil;
 static UIButton *devOverlayButton   = nil;
 static UIView   *devOverlayBackdrop = nil;
-static UIView   *devOverlayPill     = nil;
 
 static UIWindow *discordKeyWindow = nil;
 
@@ -314,8 +286,6 @@ static const CGFloat kDevOverlayButtonMargin = 8;
 
 + (void)removeOverlay
 {
-    [devOverlayPill removeFromSuperview];
-    devOverlayPill = nil;
     devOverlayButton = nil;
     devOverlayBackdrop = nil;
     devOverlayWindow.hidden = YES;
@@ -362,7 +332,6 @@ static const CGFloat kDevOverlayButtonMargin = 8;
         [[DevOverlayPassthroughWindow alloc] initWithWindowScene:activeScene];
     overlayWindow.windowLevel      = UIWindowLevelAlert - 1;
     overlayWindow.backgroundColor  = [UIColor clearColor];
-    overlayWindow.outsideTapHandler = ^{ [DevOverlay dismissPill]; };
 
     UIView *passthroughView          = [[UIView alloc] init];
     passthroughView.backgroundColor  = [UIColor clearColor];
@@ -386,6 +355,8 @@ static const CGFloat kDevOverlayButtonMargin = 8;
     backdrop.layer.cornerRadius     = side / 2.0;
     backdrop.layer.cornerCurve      = kCACornerCurveContinuous;
     backdrop.layer.masksToBounds    = YES;
+    backdrop.layer.borderWidth      = 1.0 / UIScreen.mainScreen.scale;
+    backdrop.layer.borderColor      = [UIColor.labelColor colorWithAlphaComponent:0.18].CGColor;
     backdrop.userInteractionEnabled = NO;
 
     UIVisualEffectView *blur = [[UIVisualEffectView alloc]
@@ -401,13 +372,13 @@ static const CGFloat kDevOverlayButtonMargin = 8;
     button.backgroundColor = UIColor.clearColor;
 
     UIImageSymbolConfiguration *symbolConfig =
-        [UIImageSymbolConfiguration configurationWithPointSize:18
+        [UIImageSymbolConfiguration configurationWithPointSize:15
                                                         weight:UIImageSymbolWeightRegular];
-    [button setImage:[UIImage systemImageNamed:@"wrench.and.screwdriver.fill"
+    [button setImage:[UIImage systemImageNamed:@"wrench"
                               withConfiguration:symbolConfig]
              forState:UIControlStateNormal];
     [button addTarget:self
-                  action:@selector(toggleButtonTapped)
+                  action:@selector(showDeveloperMenu)
         forControlEvents:UIControlEventTouchUpInside];
 
     UIPanGestureRecognizer *pan =
@@ -526,12 +497,6 @@ static const CGFloat kDevOverlayButtonMargin = 8;
     {
         case UIGestureRecognizerStateBegan:
         {
-            if (devOverlayPill)
-            {
-                [devOverlayPill removeFromSuperview];
-                devOverlayPill = nil;
-            }
-
             [self growOverlayWindow];
             [gesture setTranslation:CGPointZero inView:devOverlayWindow];
             devOverlayDragStartCenter = devOverlayButtonCenter;
@@ -562,227 +527,78 @@ static const CGFloat kDevOverlayButtonMargin = 8;
     }
 }
 
-+ (void)toggleButtonTapped
++ (void)showDeveloperMenu
 {
-    if (devOverlayPill)
-    {
-        [self dismissPill];
-    }
-    else
-    {
-        [self showPill];
-    }
-}
+    BOOL messageBubblesEnabled = [[ChatUI getMessageBubblesEnabled] boolValue];
+    float currentRadius = [ChatUI getCurrentAvatarRadius];
+    BOOL isDefaultRadius = currentRadius < 0;
+    NSString *radiusTitle = isDefaultRadius
+                                ? @"Avatar Radius: Circular"
+                                : [NSString stringWithFormat:@"Avatar Radius: %.0fpt", currentRadius];
+    UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Developer"
+                                                                       message:nil
+                                                                preferredStyle:UIAlertControllerStyleAlert];
 
-+ (void)showPill
-{
-    if (devOverlayPill || !devOverlayButton)
+    [menu addAction:[UIAlertAction actionWithTitle:messageBubblesEnabled ? @"Message Bubbles: On"
+                                                                              : @"Message Bubbles: Off"
+                                                   style:UIAlertActionStyleDefault
+                                                 handler:^(__unused UIAlertAction *action) {
+                                                     [ChatUI setMessageBubblesEnabled:@(!messageBubblesEnabled)];
+                                                 }]];
+    [menu addAction:[UIAlertAction actionWithTitle:radiusTitle
+                                               style:UIAlertActionStyleDefault
+                                             handler:^(__unused UIAlertAction *action) {
+                                                 if (isDefaultRadius)
+                                                 {
+                                                     [ChatUI setAvatarCornerRadius:avatarRadiusPresets.firstObject];
+                                                 }
+                                                 else
+                                                 {
+                                                     NSUInteger index = [self indexOfClosestPreset:avatarRadiusPresets
+                                                                                           toValue:currentRadius];
+                                                     if (index + 1 < avatarRadiusPresets.count)
+                                                     {
+                                                         [ChatUI setAvatarCornerRadius:avatarRadiusPresets[index + 1]];
+                                                     }
+                                                     else
+                                                     {
+                                                         [ChatUI resetAvatarCornerRadius];
+                                                     }
+                                                 }
+                                             }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Send Test Notification"
+                                               style:UIAlertActionStyleDefault
+                                             handler:^(__unused UIAlertAction *action) {
+                                                 [self sendTestNotification];
+                                             }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Reload Bundle"
+                                               style:UIAlertActionStyleDefault
+                                             handler:^(__unused UIAlertAction *action) {
+                                                 [Utilities reloadApp];
+                                             }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Edit Settings JSON"
+                                               style:UIAlertActionStyleDefault
+                                             handler:^(__unused UIAlertAction *action) {
+                                                 [self presentSettingsEditor];
+                                             }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Open Unbound Toolbox"
+                                               style:UIAlertActionStyleDefault
+                                             handler:^(__unused UIAlertAction *action) {
+                                                 [Toolbox showToolboxMenu];
+                                             }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Cancel"
+                                               style:UIAlertActionStyleCancel
+                                             handler:nil]];
+
+    UIViewController *presenter = discordKeyWindow.rootViewController;
+    while (presenter.presentedViewController)
+    {
+        presenter = presenter.presentedViewController;
+    }
+    if (!presenter)
         return;
 
-    [self growOverlayWindow];
-
-    UIView *pill = [self buildPillView];
-    [devOverlayButton.superview insertSubview:pill belowSubview:devOverlayButton];
-
-    [self positionPill:pill withWidth:250];
-    pill.alpha     = 0;
-    pill.transform = CGAffineTransformMakeScale(0.92, 0.92);
-
-    devOverlayPill = pill;
-
-    [UIView animateWithDuration:0.18
-                          delay:0
-         usingSpringWithDamping:0.85
-          initialSpringVelocity:0.4
-                        options:UIViewAnimationOptionCurveEaseOut
-                     animations:^{
-                         pill.alpha     = 1;
-                         pill.transform = CGAffineTransformIdentity;
-                     }
-                     completion:nil];
-}
-
-+ (void)dismissPill
-{
-    if (!devOverlayPill)
-        return;
-
-    UIView *pill    = devOverlayPill;
-    devOverlayPill  = nil;
-
-    [UIView animateWithDuration:0.15
-        animations:^{
-            pill.alpha     = 0;
-            pill.transform = CGAffineTransformMakeScale(0.92, 0.92);
-        }
-        completion:^(BOOL finished) {
-            [pill removeFromSuperview];
-            [self shrinkOverlayWindow];
-        }];
-}
-
-+ (void)refreshPill
-{
-    if (!devOverlayPill)
-        return;
-
-    CGFloat pillWidth = devOverlayPill.frame.size.width;
-    UIView *oldPill   = devOverlayPill;
-    [oldPill removeFromSuperview];
-
-    UIView *newPill = [self buildPillView];
-    [devOverlayButton.superview insertSubview:newPill belowSubview:devOverlayButton];
-
-    [self positionPill:newPill withWidth:pillWidth];
-    devOverlayPill = newPill;
-}
-
-+ (void)positionPill:(UIView *)pill withWidth:(CGFloat)pillWidth
-{
-    CGSize fitSize =
-        [pill systemLayoutSizeFittingSize:CGSizeMake(pillWidth, UILayoutFittingCompressedSize.height)
-             withHorizontalFittingPriority:UILayoutPriorityRequired
-                   verticalFittingPriority:UILayoutPriorityFittingSizeLevel];
-
-    CGRect        bounds      = devOverlayWindow.bounds;
-    CGRect        buttonFrame = devOverlayButton.frame;
-    UIEdgeInsets  insets      = discordKeyWindow.safeAreaInsets;
-    const CGFloat gap         = 12;
-
-    CGFloat minX = insets.left + gap;
-    CGFloat maxX = bounds.size.width - insets.right - gap - pillWidth;
-    CGFloat x    = CGRectGetMaxX(buttonFrame) - pillWidth;
-    x            = MIN(MAX(x, minX), MAX(minX, maxX));
-
-    CGFloat minY = insets.top + gap;
-    CGFloat maxY = bounds.size.height - insets.bottom - gap - fitSize.height;
-    CGFloat y    = CGRectGetMinY(buttonFrame) - fitSize.height - gap;
-    if (y < minY)
-    {
-        y = CGRectGetMaxY(buttonFrame) + gap;
-    }
-    y = MIN(MAX(y, minY), MAX(minY, maxY));
-
-    pill.frame = CGRectMake(x, y, pillWidth, fitSize.height);
-}
-
-#pragma mark - Pill construction
-
-+ (UIView *)buildPillView
-{
-    UIVisualEffectView *container = [[UIVisualEffectView alloc]
-        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
-    container.layer.cornerRadius  = 16;
-    container.layer.cornerCurve   = kCACornerCurveContinuous;
-    container.layer.masksToBounds = YES;
-
-    UIStackView *stack                                 = [[UIStackView alloc] init];
-    stack.axis                                         = UILayoutConstraintAxisVertical;
-    stack.spacing                                       = 2;
-    stack.layoutMarginsRelativeArrangement              = YES;
-    stack.layoutMargins                                 = UIEdgeInsetsMake(0, 6, 0, 6);
-    stack.translatesAutoresizingMaskIntoConstraints     = NO;
-    [container.contentView addSubview:stack];
-    [NSLayoutConstraint activateConstraints:@[
-        [stack.topAnchor constraintEqualToAnchor:container.contentView.topAnchor constant:8],
-        [stack.bottomAnchor constraintEqualToAnchor:container.contentView.bottomAnchor constant:-8],
-        [stack.leadingAnchor constraintEqualToAnchor:container.contentView.leadingAnchor],
-        [stack.trailingAnchor constraintEqualToAnchor:container.contentView.trailingAnchor],
-    ]];
-
-    NSArray<UIView *> *rows = @[
-        [self bubbleToggleRow], [self avatarRadiusCycleRow], [self notificationTestRow],
-        [self reloadBundleRow], [self editSettingsRow], [self openToolboxRow]
-    ];
-    for (UIView *row in rows)
-    {
-        [stack addArrangedSubview:row];
-    }
-
-    return container;
-}
-
-+ (DevOverlayRowButton *)rowWithTitle:(NSString *)title
-                           systemImage:(NSString *)imageName
-                                  isOn:(BOOL)isOn
-                        dismissesOnTap:(BOOL)dismissesOnTap
-                                action:(void (^)(void))action
-{
-    DevOverlayRowButton *row                          = [DevOverlayRowButton buttonWithType:UIButtonTypeCustom];
-    row.translatesAutoresizingMaskIntoConstraints      = NO;
-    [row.heightAnchor constraintEqualToConstant:44].active = YES;
-    row.rowAction                                      = action;
-    row.dismissesOnTap                                  = dismissesOnTap;
-    row.layer.cornerRadius                              = 10;
-    row.layer.cornerCurve                               = kCACornerCurveContinuous;
-    row.layer.masksToBounds                             = YES;
-
-    UIImageSymbolConfiguration *cfg =
-        [UIImageSymbolConfiguration configurationWithPointSize:15 weight:UIImageSymbolWeightMedium];
-    UIImageView *icon = [[UIImageView alloc]
-        initWithImage:[UIImage systemImageNamed:imageName withConfiguration:cfg]];
-    icon.tintColor   = UIColor.labelColor;
-    icon.contentMode = UIViewContentModeCenter;
-    [icon.widthAnchor constraintEqualToConstant:20].active = YES;
-
-    UILabel *label     = [[UILabel alloc] init];
-    label.text          = title;
-    label.font          = [UIFont systemFontOfSize:14];
-    label.textColor     = UIColor.labelColor;
-    label.numberOfLines = 1;
-    label.lineBreakMode = NSLineBreakByTruncatingTail;
-    [label setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
-                                            forAxis:UILayoutConstraintAxisHorizontal];
-
-    UIImageView *checkmark = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"checkmark"]];
-    checkmark.tintColor    = UIColor.systemBlueColor;
-    checkmark.hidden       = !isOn;
-    checkmark.contentMode  = UIViewContentModeCenter;
-    [checkmark.widthAnchor constraintEqualToConstant:16].active = YES;
-
-    UIStackView *content = [[UIStackView alloc] initWithArrangedSubviews:@[ icon, label, checkmark ]];
-    content.axis                                      = UILayoutConstraintAxisHorizontal;
-    content.alignment                                  = UIStackViewAlignmentCenter;
-    content.spacing                                    = 10;
-    content.userInteractionEnabled                     = NO;
-    content.translatesAutoresizingMaskIntoConstraints  = NO;
-    [row addSubview:content];
-    [NSLayoutConstraint activateConstraints:@[
-        [content.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:14],
-        [content.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-14],
-        [content.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
-    ]];
-
-    [row addTarget:self action:@selector(rowTapped:) forControlEvents:UIControlEventTouchUpInside];
-    return row;
-}
-
-+ (void)rowTapped:(DevOverlayRowButton *)sender
-{
-    void (^rowAction)(void) = sender.rowAction;
-    BOOL shouldDismiss       = sender.dismissesOnTap;
-
-    if (shouldDismiss)
-    {
-        [self dismissPill];
-    }
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (discordKeyWindow && !discordKeyWindow.isKeyWindow)
-        {
-            [discordKeyWindow makeKeyWindow];
-        }
-
-        if (rowAction)
-        {
-            rowAction();
-        }
-
-        if (!shouldDismiss)
-        {
-            [self refreshPill];
-        }
-    });
+    [presenter presentViewController:menu animated:YES completion:nil];
 }
 
 + (NSUInteger)indexOfClosestPreset:(NSArray<NSNumber *> *)presets toValue:(float)value
@@ -801,63 +617,6 @@ static const CGFloat kDevOverlayButtonMargin = 8;
     return bestIndex;
 }
 
-#pragma mark - Row builders
-
-+ (DevOverlayRowButton *)bubbleToggleRow
-{
-    BOOL enabled = [[ChatUI getMessageBubblesEnabled] boolValue];
-    return [self rowWithTitle:@"Message Bubbles"
-                   systemImage:@"bubble.left.and.bubble.right"
-                          isOn:enabled
-                dismissesOnTap:NO
-                        action:^{
-                            [ChatUI setMessageBubblesEnabled:@(!enabled)];
-                        }];
-}
-
-+ (DevOverlayRowButton *)avatarRadiusCycleRow
-{
-    float    current   = [ChatUI getCurrentAvatarRadius];
-    BOOL     isDefault = current < 0;
-    NSString *label    = isDefault ? @"Avatar Radius: Circular"
-                                    : [NSString stringWithFormat:@"Avatar Radius: %.0fpt", current];
-
-    return [self rowWithTitle:label
-                   systemImage:@"person.crop.circle"
-                          isOn:NO
-                dismissesOnTap:NO
-                        action:^{
-                            if (isDefault)
-                            {
-                                [ChatUI setAvatarCornerRadius:avatarRadiusPresets.firstObject];
-                            }
-                            else
-                            {
-                                NSUInteger idx =
-                                    [self indexOfClosestPreset:avatarRadiusPresets toValue:current];
-                                if (idx + 1 < avatarRadiusPresets.count)
-                                {
-                                    [ChatUI setAvatarCornerRadius:avatarRadiusPresets[idx + 1]];
-                                }
-                                else
-                                {
-                                    [ChatUI resetAvatarCornerRadius];
-                                }
-                            }
-                        }];
-}
-
-+ (DevOverlayRowButton *)notificationTestRow
-{
-    return [self rowWithTitle:@"Send Test Notification"
-                   systemImage:@"bell.badge"
-                          isOn:NO
-                dismissesOnTap:NO
-                        action:^{
-                            [self sendTestNotification];
-                        }];
-}
-
 + (void)sendTestNotification
 {
     NSString *identifier = [PluginAPI showNotification:@"Unbound Dev Overlay"
@@ -869,39 +628,6 @@ static const CGFloat kDevOverlayButtonMargin = 8;
     {
         [Logger error:LOG_CATEGORY_TOOLBOX format:@"DevOverlay: test notification failed to schedule"];
     }
-}
-
-+ (DevOverlayRowButton *)openToolboxRow
-{
-    return [self rowWithTitle:@"Open Unbound Toolbox"
-                   systemImage:@"wrench.and.screwdriver"
-                          isOn:NO
-                dismissesOnTap:YES
-                        action:^{
-                            [Toolbox showToolboxMenu];
-                        }];
-}
-
-+ (DevOverlayRowButton *)reloadBundleRow
-{
-    return [self rowWithTitle:@"Reload Bundle"
-                   systemImage:@"arrow.triangle.2.circlepath"
-                          isOn:NO
-                dismissesOnTap:YES
-                        action:^{
-                            [Utilities reloadApp];
-                        }];
-}
-
-+ (DevOverlayRowButton *)editSettingsRow
-{
-    return [self rowWithTitle:@"Edit Settings JSON"
-                   systemImage:@"doc.text"
-                          isOn:NO
-                dismissesOnTap:YES
-                        action:^{
-                            [self presentSettingsEditor];
-                        }];
 }
 
 + (void)presentSettingsEditor
