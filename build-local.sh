@@ -288,6 +288,26 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+if [ -z "$DEBUG_ARG" ]; then
+	if [ "$(./tools/attestation_enabled.sh)" = "1" ]; then
+		VERIFY_DIR=$(mktemp -d)
+		EXPECTED_KEY=$(mktemp)
+		EXPECTED_KEY_PEM=$(mktemp)
+		trap 'rm -rf "$VERIFY_DIR"; rm -f "$EXPECTED_KEY" "$EXPECTED_KEY_PEM"' EXIT
+		unzip -q "$OUTPUT_IPA" -d "$VERIFY_DIR"
+		openssl base64 -d -A -in tools/attestation_public_key.b64 -out "$EXPECTED_KEY"
+		openssl pkey -pubin -inform DER -in "$EXPECTED_KEY" -out "$EXPECTED_KEY_PEM" 2>/dev/null
+		VERIFY_DYLIB=$(find "$VERIFY_DIR/Payload" -type f -name "Unbound.dylib" -print -quit)
+		if [ -z "$VERIFY_DYLIB" ] || ! python3 tools/macho_attest.py verify "$VERIFY_DYLIB" --public-key "$EXPECTED_KEY_PEM"; then
+			print_error "Final IPA contains an invalid embedded tweak attestation"
+			exit 1
+		fi
+		print_success "Verified embedded tweak attestation in final IPA"
+	else
+		print_status "No attestation key available; final IPA will warn at runtime"
+	fi
+fi
+
 deactivate
 
 print_status "Cleaning up..."
@@ -370,8 +390,8 @@ if [ "$BUILD_SIMULATOR" = "1" ] && [ "$UNAME" = "Darwin" ]; then
         fi
         if ! python3 tools/macho_attest.py sign "$SIMULATOR_DYLIB" --private-key "$KEY_FILE" --commit-hash "$COMMIT_HASH" --package-version "$PACKAGE_VERSION" || \
             ! codesign -f -s - "$SIMULATOR_DYLIB" || \
-            ! python3 tools/macho_attest.py verify "$SIMULATOR_DYLIB" --public-key "$EXPECTED_KEY_PEM" || \
-            ! codesign -f -s - "$TEMP_DIR/Payload/Discord.app"; then
+            ! codesign -f -s - "$TEMP_DIR/Payload/Discord.app" || \
+            ! python3 tools/macho_attest.py verify "$SIMULATOR_DYLIB" --public-key "$EXPECTED_KEY_PEM"; then
             print_error "Failed to attest the simulator dylib"
             rm -rf "$TEMP_DIR"
             exit 1

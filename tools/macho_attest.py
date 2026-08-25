@@ -63,6 +63,7 @@ def parse_thin(data):
         raise AttestationError("load commands are truncated")
     section = None
     code_signature = None
+    linkedit_vmsize = None
     linkedit_filesize = None
     offset = commands_start
     for _ in range(ncmds):
@@ -77,6 +78,7 @@ def parse_thin(data):
                 raise AttestationError("segment command is truncated")
             segment_name = data[offset + 8 : offset + 24].split(b"\0", 1)[0]
             if segment_name == b"__LINKEDIT":
+                linkedit_vmsize = offset + 32
                 linkedit_filesize = offset + 48
             section_count = read_u32(data, offset + 64)
             sections_end = offset + 72 + section_count * 80
@@ -116,6 +118,7 @@ def parse_thin(data):
         "cpu_subtype": cpu_subtype,
         "section": section,
         "code_signature": code_signature,
+        "linkedit_vmsize": linkedit_vmsize,
         "linkedit_filesize": linkedit_filesize,
         "boundary": boundary,
     }
@@ -171,6 +174,12 @@ def canonical_slice(slice_data):
         if command_offset + 16 > len(canonical):
             raise AttestationError("code signature command is outside canonical data")
         canonical[command_offset + 8 : command_offset + 16] = b"\0" * 8
+    # Re-signers can grow the mapped __LINKEDIT range when the new blob is larger.
+    if info["linkedit_vmsize"] is not None:
+        field = info["linkedit_vmsize"]
+        if field + 8 > len(canonical):
+            raise AttestationError("__LINKEDIT command is outside canonical data")
+        canonical[field : field + 8] = b"\0" * 8
     if info["linkedit_filesize"] is not None:
         field = info["linkedit_filesize"]
         if field + 8 > len(canonical):

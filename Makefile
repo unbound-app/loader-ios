@@ -44,7 +44,7 @@ before-all::
 after-stage::
 	find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete
 	find $(THEOS_STAGING_DIR) -type f \( -name "signature.bin" -o -name "public_key.der" \) -delete
-	if [ "$(DEBUG)" != "1" ] && [ "$(shell ./tools/attestation_enabled.sh)" = "1" ]; then \
+	if [ "$(ATTESTATION_ENABLED)" = "1" ] && [ "$(shell ./tools/attestation_enabled.sh)" = "1" ]; then \
 		key_file=$$(mktemp); \
 		expected_key=$$(mktemp); \
 		actual_key=$$(mktemp); \

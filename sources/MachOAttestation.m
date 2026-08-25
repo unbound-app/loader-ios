@@ -24,6 +24,7 @@ typedef struct
     size_t        sectionOffset;
     size_t        sectionSize;
     size_t        codeSignatureCommand;
+    size_t        linkeditVmsize;
     size_t        linkeditFilesize;
     bool          hasCodeSignature;
     bool          hasLinkedit;
@@ -132,6 +133,7 @@ static bool parseSlice(const uint8_t *bytes, size_t length, AttestationSliceInfo
             if (namesEqual(bytes, length, commandOffset + offsetof(struct segment_command_64, segname), "__LINKEDIT"))
             {
                 result->hasLinkedit = true;
+                result->linkeditVmsize = commandOffset + offsetof(struct segment_command_64, vmsize);
                 result->linkeditFilesize = commandOffset + offsetof(struct segment_command_64, filesize);
             }
             size_t sectionOffset = commandOffset + sizeof(struct segment_command_64);
@@ -289,7 +291,10 @@ static NSData *canonicalDigest(const uint8_t *slice, const AttestationSliceInfo 
     {
         return nil;
     }
-    if (info->hasLinkedit && !zeroRange(canonical, info->linkeditFilesize, 8))
+    // Re-signers can grow the mapped __LINKEDIT range when the new blob is larger.
+    if (info->hasLinkedit &&
+        (!zeroRange(canonical, info->linkeditFilesize, 8) ||
+         !zeroRange(canonical, info->linkeditVmsize, 8)))
     {
         return nil;
     }

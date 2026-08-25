@@ -101,6 +101,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Test attestation through macOS re-signing
+        run: python3 tools/test_macho_attest_codesign.py
+
       - name: Check cache
         run: echo upstream_heads=`git ls-remote https://github.com/theos/theos | head -n 1 | cut -f 1`-`git ls-remote https://github.com/theos/sdks | head -n 1 | cut -f 1` >> $GITHUB_ENV
 
@@ -291,6 +294,34 @@ jobs:
             fi
           fi
 
+      - name: Check embedded tweak attestation
+        run: |
+          set -euo pipefail
+          verification_dir=$(mktemp -d)
+          unzip -q "${{ env.APP_NAME }}.ipa" -d "$verification_dir"
+
+          expected_key=$(mktemp)
+          expected_key_pem=$(mktemp)
+          trap 'rm -f "$expected_key" "$expected_key_pem"; rm -rf "$verification_dir"' EXIT
+          openssl base64 -d -A -in tools/attestation_public_key.b64 -out "$expected_key"
+          openssl pkey -pubin -inform DER -in "$expected_key" -out "$expected_key_pem" 2>/dev/null
+
+          dylib_count=0
+          verified_count=0
+          while IFS= read -r -d '' dylib; do
+            dylib_count=$((dylib_count + 1))
+            if python3 tools/macho_attest.py verify "$dylib" --public-key "$expected_key_pem"; then
+              verified_count=$((verified_count + 1))
+            else
+              echo "::warning::Embedded tweak attestation is unavailable or invalid; continuing so the runtime warning is shown"
+            fi
+          done < <(find "$verification_dir/Payload" -type f -name 'Unbound.dylib' -print0)
+          if [ "$dylib_count" -eq 0 ]; then
+            echo "::warning::No embedded Unbound.dylib was found to attest"
+          elif [ "$verified_count" -ne "$dylib_count" ]; then
+            echo "::warning::The IPA will be distributed without a valid embedded attestation"
+          fi
+
       - name: Upload ipa as artifact
         id: upload-ipa
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -374,8 +405,8 @@ jobs:
           test -n "$dylib"
           python3 tools/macho_attest.py sign "$dylib" --private-key "$key_file" --commit-hash "$commit_hash" --package-version "$package_version"
           codesign -f -s - "$dylib"
-          python3 tools/macho_attest.py verify "$dylib" --public-key "$expected_key_pem"
           codesign -f -s - Payload/Discord.app
+          python3 tools/macho_attest.py verify "$dylib" --public-key "$expected_key_pem"
 
       - name: Create zip archive
         run: |
