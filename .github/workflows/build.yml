@@ -92,49 +92,49 @@ jobs:
       ATTESTATION_PK: ${{ secrets.ATTESTATION_PK }}
 
     steps:
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           submodules: recursive
 
-      - name: Test attestation through macOS re-signing
+      - name: test attestation through macOS re-signing
         run: python3 tools/test_macho_attest_codesign.py
 
-      - name: Check cache
+      - name: check cache
         run: echo upstream_heads=`git ls-remote https://github.com/theos/theos | head -n 1 | cut -f 1`-`git ls-remote https://github.com/theos/sdks | head -n 1 | cut -f 1` >> $GITHUB_ENV
 
-      - name: Use cache
+      - name: use cache
         id: cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ github.workspace }}/theos
           key: ${{ runner.os }}-${{ env.upstream_heads }}
 
-      - name: Trust Homebrew tap
+      - name: trust Homebrew tap
         run: |
           if brew tap | grep -Fxq 'aws/tap'; then
             brew trust aws/tap
           fi
 
-      - name: Prepare Theos
+      - name: prepare Theos
         uses: Randomblock1/theos-action@4e23d15886bca77b5f7c462a82567e0de33ebe0b
 
-      - name: Build package
+      - name: build package
         run: gmake package
 
-      - name: Upload rootless package
+      - name: upload rootless package
         id: upload-deb
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rootless package
           path: packages/*.deb
 
-      - name: Attest rootless package
+      - name: attest rootless package
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: packages/*.deb
 
-      - name: Set deb filename
+      - name: set deb filename
         id: set-deb-filename
         run: |
           DEB_FILE=$(ls packages/*.deb)
@@ -142,7 +142,7 @@ jobs:
           echo "filename=$DEB_FILENAME" >> $GITHUB_OUTPUT
 
   resolve-source-ipa:
-    name: Resolve source IPA
+    name: resolve source ipa
     if: *only_build_check
     runs-on: ubuntu-latest
     timeout-minutes: 50
@@ -152,10 +152,10 @@ jobs:
       version: ${{ steps.resolve.outputs.version }}
       cache_hit: ${{ steps.resolve.outputs.cache_hit }}
     steps:
-      - name: Checkout resolver
+      - name: checkout resolver
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - name: Resolve and download source IPA
+      - name: resolve and download source ipa
         id: resolve
         env:
           DKRYPT_API_KEY: ${{ secrets.DKRYPT_API_KEY }}
@@ -189,7 +189,7 @@ jobs:
             echo "cache_hit=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload source IPA
+      - name: upload source ipa
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: source ipa
@@ -210,12 +210,12 @@ jobs:
       ipa_filename: ${{ steps.set-ipa-filename.outputs.filename }}
 
     steps:
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           submodules: recursive
 
-      - name: Select Xcode Version
+      - name: select Xcode Version
         run: |
           set -euo pipefail
           selected_developer_dir=""
@@ -229,30 +229,30 @@ jobs:
           sudo xcode-select --switch "$selected_developer_dir"
           xcodebuild -version
 
-      - name: Download build artifacts
+      - name: download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           merge-multiple: true
 
-      - name: Setup Go
+      - name: setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           cache: false
           go-version: 'stable'
 
-      - name: Clone patcher
+      - name: clone patcher
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: unbound-app/patcher-ios
           path: patcher-ios
 
-      - name: Build and run patcher
+      - name: build and run patcher
         run: |
           cd patcher-ios
           go build -o patcher
           ./patcher -i ../discord.ipa -o ../patched.ipa
 
-      - name: Update ShareToDiscord Info.plist
+      - name: update ShareToDiscord Info.plist
         if: inputs.add_extensions == true
         run: |
           INFO_PLIST="extensions/ShareToDiscord/Share/Info.plist"
@@ -260,7 +260,7 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :URLScheme string unbound" "$INFO_PLIST"
           echo "Updated ShareToDiscord Info.plist - Changed URLScheme to 'unbound'"
 
-      - name: Build Extensions
+      - name: build Extensions
         if: inputs.add_extensions == true
         run: |
           if [ "${{ needs.resolve-source-ipa.outputs.is_testflight }}" == true ]; then
@@ -304,15 +304,15 @@ jobs:
             ONLY_ACTIVE_ARCH=NO | xcbeautify
           cd ../../
 
-      - name: Extract app name
+      - name: extract app name
         run: |
           NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
           echo "APP_NAME=$NAME" >> $GITHUB_ENV
 
-      - name: Install cyan
+      - name: install cyan
         run: pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip Pillow
 
-      - name: Inject tweak (and extensions)
+      - name: inject tweak (and extensions)
         run: |
           if [ "${{ inputs.add_extensions }}" == true ]; then
             if [ "${{ needs.resolve-source-ipa.outputs.is_testflight }}" == true ]; then
@@ -328,7 +328,7 @@ jobs:
             fi
           fi
 
-      - name: Check embedded tweak attestation
+      - name: check embedded tweak attestation
         run: |
           set -euo pipefail
           verification_dir=$(mktemp -d)
@@ -356,19 +356,19 @@ jobs:
             echo "::warning::The IPA will be distributed without a valid embedded attestation"
           fi
 
-      - name: Upload ipa as artifact
+      - name: upload ipa as artifact
         id: upload-ipa
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ipa
           path: ${{ env.APP_NAME }}.ipa
 
-      - name: Attest IPA
+      - name: attest IPA
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: ${{ env.APP_NAME }}.ipa
 
-      - name: Set ipa filename
+      - name: set ipa filename
         id: set-ipa-filename
         run: echo "filename=${{ env.APP_NAME }}.ipa" >> $GITHUB_OUTPUT
 
@@ -389,36 +389,36 @@ jobs:
       simulator_filename: ${{ steps.set-simulator-filename.outputs.filename }}
 
     steps:
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - name: Download ipa artifact
+      - name: download ipa artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: ipa
 
-      - name: Extract app name
+      - name: extract app name
         run: |
           NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
           echo "APP_NAME=$NAME" >> $GITHUB_ENV
 
-      - name: Extract IPA
+      - name: extract IPA
         run: |
           unzip -q ${{ env.APP_NAME }}.ipa
           ls -la Payload/
 
-      - name: Download simforge
+      - name: download simforge
         run: |
           curl -L -o simforge https://github.com/EthanArbuckle/simforge/releases/latest/download/simforge
           sudo chmod +x simforge
 
-      - name: Convert for iOS Simulator
+      - name: convert for iOS Simulator
         run: |
           ./simforge convert Payload/Discord.app
           codesign -f -s - Payload/Discord.app/Frameworks/* || true
           codesign -f -s - Payload/Discord.app
 
-      - name: Re-attest converted tweak
+      - name: re-attest converted tweak
         run: |
           if [ "$(./tools/attestation_enabled.sh)" != "1" ]; then
             exit 0
@@ -442,25 +442,25 @@ jobs:
           codesign -f -s - Payload/Discord.app
           python3 tools/macho_attest.py verify "$dylib" --public-key "$expected_key_pem"
 
-      - name: Create zip archive
+      - name: create zip archive
         run: |
           cd Payload
           zip -r ../unbound-ios-simulator.zip Discord.app
           cd ..
 
-      - name: Upload iOS Simulator artifact
+      - name: upload iOS Simulator artifact
         id: upload-simulator
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ios-simulator
           path: unbound-ios-simulator.zip
 
-      - name: Attest iOS Simulator artifact
+      - name: attest iOS Simulator artifact
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: unbound-ios-simulator.zip
 
-      - name: Set simulator filename
+      - name: set simulator filename
         id: set-simulator-filename
         run: echo "filename=unbound-ios-simulator.zip" >> $GITHUB_OUTPUT
 
@@ -473,15 +473,15 @@ jobs:
     needs: [build-tweak, build-ipa, build-simulator, resolve-source-ipa]
 
     steps:
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - name: Download build artifacts
+      - name: download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           merge-multiple: true
 
-      - name: Extract Discord Version
+      - name: extract Discord Version
         run: |
           IPA_FILE="${{ needs.build-ipa.outputs.ipa_filename }}"
           test -n "$IPA_FILE"
@@ -496,7 +496,7 @@ jobs:
           
           echo "DISCORD_VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Create GitHub Release
+      - name: create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
         with:
@@ -534,33 +534,33 @@ jobs:
     env:
       GPG_KEY: ${{ secrets.GPG_KEY }}
     steps:
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - name: Download deb artifact
+      - name: download deb artifact
         if: inputs.only_app_repo != true && inputs.only_apt_repo != true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: rootless package
           path: apt-repo/repo/debs
 
-      - name: Download latest release deb
+      - name: download latest release deb
         if: inputs.only_apt_repo == true
         run: |
           mkdir -p apt-repo/repo/debs
           gh release download --repo ${{ github.repository }} --pattern '*arm64.deb' --dir apt-repo/repo/debs --clobber
 
-      - name: Capture new deb filename
+      - name: capture new deb filename
         if: inputs.only_app_repo != true
         run: echo "NEW_DEB_FILENAME=$(basename $(ls apt-repo/repo/debs/*.deb))" >> $GITHUB_ENV
 
-      - name: Download ipa artifact
+      - name: download ipa artifact
         if: inputs.only_app_repo != true && inputs.only_apt_repo != true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: ipa
 
-      - name: Download latest release ipa
+      - name: download latest release ipa
         if: inputs.only_app_repo == true
         env:
           VERSION_SELECTOR: ${{ inputs.version }}
@@ -588,7 +588,7 @@ jobs:
             fi
           fi
 
-      - name: Restore live site state
+      - name: restore live site state
         run: |
           PACKAGE_ID=$(grep '^Package:' control | cut -d ' ' -f 2)
           mkdir -p "apt-repo/repo/depictions/web/$PACKAGE_ID" apt-repo/repo/debs
@@ -623,7 +623,7 @@ jobs:
             echo "No live Packages file found, starting fresh"
           fi
 
-      - name: Update app-repo.json
+      - name: update app-repo.json
         if: inputs.only_apt_repo != true
         env:
           VERSION_SELECTOR: ${{ inputs.version }}
@@ -665,7 +665,7 @@ jobs:
           fi
           mv temp.json apt-repo/repo/app-repo.json
 
-      - name: Update depiction version
+      - name: update depiction version
         if: inputs.only_app_repo != true
         run: |
           DEB_FILE="apt-repo/repo/debs/${{ env.NEW_DEB_FILENAME }}"
@@ -679,16 +679,16 @@ jobs:
             echo "Warning: no web depiction at $INFO_XML for $PACKAGE_ID"
           fi
 
-      - name: Install apt-ftparchive & compressors
+      - name: install apt-ftparchive & compressors
         run: sudo apt-get update && sudo apt-get install -y apt-utils xz-utils zstd bzip2 lz4 gzip gnupg
 
-      - name: Import GPG key
+      - name: import GPG key
         if: ${{ env.GPG_KEY != '' }}
         run: |
           echo "$GPG_KEY" | gpg --import
           echo "GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format LONG | grep sec | cut -d'/' -f2 | cut -d' ' -f1)" >> $GITHUB_ENV
 
-      - name: Update repository
+      - name: update repository
         working-directory: apt-repo
         env:
           GPG_KEY_ID: ${{ env.GPG_KEY_ID }}
@@ -696,15 +696,15 @@ jobs:
           chmod +x update-repo.sh
           ./update-repo.sh
 
-      - name: Setup Pages
+      - name: setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
 
-      - name: Upload Pages artifact
+      - name: upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
           path: apt-repo/repo
           retention-days: 90
 
-      - name: Deploy to GitHub Pages
+      - name: deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128
