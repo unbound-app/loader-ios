@@ -67,6 +67,10 @@ If you've already installed theos, you can run `$THEOS/bin/update-theos` to make
 
 The resulting `.deb` file will be in the `packages` folder.
 
+### GitHub Actions builds
+
+Manual runs of **Build Unbound** accept an optional `version` selector. Leave it blank to resolve the latest stable Discord App Store build through dkrypt, enter a stable selector such as `342` or `234.2`, or enter a TestFlight selector such as `342_109440`. The workflow reports cache/decrypt progress and verifies the retained IPA's size and SHA-256 before building. PR and remote-deploy callers continue to use their supplied `ipa_url` inputs.
+
 </details>
 
 ## Live reload (HMR)
