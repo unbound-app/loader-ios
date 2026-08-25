@@ -483,7 +483,10 @@ jobs:
 
       - name: Extract Discord Version
         run: |
-          unzip -q *.ipa
+          IPA_FILE="${{ needs.build-ipa.outputs.ipa_filename }}"
+          test -n "$IPA_FILE"
+          test -f "$IPA_FILE"
+          unzip -q "$IPA_FILE"
           VERSION=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleShortVersionString | cut -d '"' -f 4)
           
           if [[ "${{ needs.resolve-source-ipa.outputs.is_testflight }}" == true ]]; then
