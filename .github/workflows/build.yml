@@ -11,7 +11,7 @@ on:
     inputs:
       version:
         default: ""
-        description: "App Store version/build selector (blank = latest stable)"
+        description: "Discord app version"
         required: false
         type: string
       release:
