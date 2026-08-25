@@ -1,9 +1,9 @@
 *.ipa
-.theos
+.theos/
 .DS_Store
-packages
-.tools-cache
-patcher-ios
+packages/
+.tools-cache/
+patcher-ios/
 private_key.pem
 attestation_private.pem
-.claude/worktrees
+.claude/worktrees/
