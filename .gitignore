@@ -2,7 +2,7 @@
 .theos
 .DS_Store
 packages
-venv
+.tools-cache
 patcher-ios
 private_key.pem
 attestation_private.pem

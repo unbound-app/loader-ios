@@ -45,7 +45,7 @@ Builds can be found in the [Releases](https://github.com/unbound-app/loader-ios/
 
 > If you want to revert the `xcode-select` change, run `sudo xcode-select -switch /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk`
 
-2. Install the required dependencies. You can do this by running `brew install make ldid` in your terminal. If you do not have brew installed, follow the instructions at the [Homebrew installation page](https://brew.sh/).
+2. Install Xcode command-line tools, GNU make, and ldid. You can do this by running `brew install make ldid` in your terminal. If you do not have brew installed, follow the instructions at the [Homebrew installation page](https://brew.sh/). The build tool provisions pinned patcher, cyan, and simulator dependencies into `.tools-cache`.
 
 3. Setup your gnu make path:
 
@@ -63,7 +63,13 @@ If you've already installed theos, you can run `$THEOS/bin/update-theos` to make
 
 5. Clone this repository via `git clone git@github.com:unbound-app/loader-ios.git` and `cd` into it.
 
-6. To build, you can run `make package`.
+6. To build the complete package, run:
+
+```bash
+go run ./tools build all
+```
+
+Pass `--ipa /path/to/Discord.ipa` when the source IPA is not the only `.ipa` in the repository root. Use `--extensions exclude` to omit extensions or `--simulator` to create the simulator archive. `go run ./tools doctor` checks host dependencies. For a tweak-only build, `make package` remains available.
 
 The resulting `.deb` file will be in the `packages` folder.
 

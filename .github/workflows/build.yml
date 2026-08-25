@@ -97,8 +97,14 @@ jobs:
         with:
           submodules: recursive
 
-      - name: test attestation through macOS re-signing
-        run: python3 tools/test_macho_attest_codesign.py
+      - name: setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          cache: false
+          go-version-file: go.mod
+
+      - name: test tools
+        run: go test ./...
 
       - name: check cache
         run: echo upstream_heads=`git ls-remote https://github.com/theos/theos | head -n 1 | cut -f 1`-`git ls-remote https://github.com/theos/sdks | head -n 1 | cut -f 1` >> $GITHUB_ENV
@@ -120,7 +126,7 @@ jobs:
         uses: Randomblock1/theos-action@4e23d15886bca77b5f7c462a82567e0de33ebe0b
 
       - name: build package
-        run: gmake package
+        run: go run ./tools build tweak --configuration release --non-interactive
 
       - name: upload rootless package
         id: upload-deb
@@ -155,6 +161,12 @@ jobs:
       - name: checkout resolver
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
+      - name: setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          cache: false
+          go-version-file: go.mod
+
       - name: resolve and download source ipa
         id: resolve
         env:
@@ -163,30 +175,16 @@ jobs:
           INPUT_IPA_URL: ${{ inputs.ipa_url }}
           INPUT_IS_TESTFLIGHT: ${{ inputs.is_testflight }}
         run: |
-          set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            python3 tools/fetch_dkrypt_ipa.py \
+            go run ./tools fetch \
               --base-url https://ipa.dylib.dev \
               --bundle-id com.hammerandchisel.discord \
               --version "$INPUT_VERSION" \
               --output discord.ipa
           else
-            test -n "$INPUT_IPA_URL"
-            for attempt in 1 2 3; do
-              if curl --fail --location --output discord.ipa "$INPUT_IPA_URL"; then
-                break
-              fi
-              rm -f discord.ipa
-              if [ "$attempt" -lt 3 ]; then
-                sleep 15
-              else
-                exit 1
-              fi
-            done
-            echo "channel=$([[ "$INPUT_IS_TESTFLIGHT" == true ]] && echo testflight || echo appstore)" >> "$GITHUB_OUTPUT"
-            echo "is_testflight=$([[ "$INPUT_IS_TESTFLIGHT" == true ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-            echo "version=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
-            echo "cache_hit=false" >> "$GITHUB_OUTPUT"
+            channel=appstore
+            if [ "$INPUT_IS_TESTFLIGHT" = true ]; then channel=testflight; fi
+            go run ./tools fetch --source-url "$INPUT_IPA_URL" --channel "$channel" --version "$INPUT_VERSION" --output discord.ipa
           fi
 
       - name: upload source ipa
@@ -238,123 +236,19 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           cache: false
-          go-version: 'stable'
-
-      - name: clone patcher
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: unbound-app/patcher-ios
-          path: patcher-ios
-
-      - name: build and run patcher
-        run: |
-          cd patcher-ios
-          go build -o patcher
-          ./patcher -i ../discord.ipa -o ../patched.ipa
-
-      - name: update ShareToDiscord Info.plist
-        if: inputs.add_extensions == true
-        run: |
-          INFO_PLIST="extensions/ShareToDiscord/Share/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :URLScheme unbound" "$INFO_PLIST" 2>/dev/null || \
-          /usr/libexec/PlistBuddy -c "Add :URLScheme string unbound" "$INFO_PLIST"
-          echo "Updated ShareToDiscord Info.plist - Changed URLScheme to 'unbound'"
-
-      - name: build Extensions
-        if: inputs.add_extensions == true
-        run: |
-          if [ "${{ needs.resolve-source-ipa.outputs.is_testflight }}" == true ]; then
-            SAFARI_EXT_BUNDLE_ID="com.hammerandchisel.discord.testflight.OpenInDiscord"
-            SHARE_EXT_BUNDLE_ID="com.hammerandchisel.discord.testflight.Share"
-          else
-            SAFARI_EXT_BUNDLE_ID="com.hammerandchisel.discord.OpenInDiscord"
-            SHARE_EXT_BUNDLE_ID="com.hammerandchisel.discord.Share"
-          fi
-          
-          cd extensions/OpenInDiscord
-          xcodebuild build \
-            -target "OpenInDiscord Extension" \
-            -configuration Release \
-            -sdk iphoneos \
-            CONFIGURATION_BUILD_DIR="build" \
-            PRODUCT_NAME="OpenInDiscord" \
-            PRODUCT_BUNDLE_IDENTIFIER="$SAFARI_EXT_BUNDLE_ID" \
-            PRODUCT_MODULE_NAME="OpenInDiscordExt" \
-            SKIP_INSTALL=NO \
-            DEVELOPMENT_TEAM="" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO | xcbeautify
-          
-          cd ../ShareToDiscord
-          xcodebuild build \
-            -target "Share" \
-            -configuration Release \
-            -sdk iphoneos \
-            CONFIGURATION_BUILD_DIR="build" \
-            PRODUCT_NAME="Share" \
-            PRODUCT_BUNDLE_IDENTIFIER="$SHARE_EXT_BUNDLE_ID" \
-            PRODUCT_MODULE_NAME="Share" \
-            SKIP_INSTALL=NO \
-            DEVELOPMENT_TEAM="" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO | xcbeautify
-          cd ../../
+          go-version-file: go.mod
 
       - name: extract app name
         run: |
           NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
           echo "APP_NAME=$NAME" >> $GITHUB_ENV
 
-      - name: install cyan
-        run: pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip Pillow
-
-      - name: inject tweak (and extensions)
+      - name: build IPA
+        env:
+          BUILD_CHANNEL: ${{ needs.resolve-source-ipa.outputs.channel }}
+          BUILD_EXTENSIONS: ${{ inputs.add_extensions == true && 'include' || 'exclude' }}
         run: |
-          if [ "${{ inputs.add_extensions }}" == true ]; then
-            if [ "${{ needs.resolve-source-ipa.outputs.is_testflight }}" == true ]; then
-              cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex extensions/ShareToDiscord/build/Share.appex
-            else
-              cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb extensions/OpenInDiscord/build/OpenInDiscord.appex extensions/ShareToDiscord/build/Share.appex
-            fi
-          else
-            if [ "${{ needs.resolve-source-ipa.outputs.is_testflight }}" == true ]; then
-              cyan -duwsgq -b "com.hammerandchisel.discord.testflight" -i discord.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
-            else
-              cyan -duwsgq -i patched.ipa -o ${{ env.APP_NAME }}.ipa -f *.deb
-            fi
-          fi
-
-      - name: check embedded tweak attestation
-        run: |
-          set -euo pipefail
-          verification_dir=$(mktemp -d)
-          unzip -q "${{ env.APP_NAME }}.ipa" -d "$verification_dir"
-
-          expected_key=$(mktemp)
-          expected_key_pem=$(mktemp)
-          trap 'rm -f "$expected_key" "$expected_key_pem"; rm -rf "$verification_dir"' EXIT
-          openssl base64 -d -A -in tools/attestation_public_key.b64 -out "$expected_key"
-          openssl pkey -pubin -inform DER -in "$expected_key" -out "$expected_key_pem" 2>/dev/null
-
-          dylib_count=0
-          verified_count=0
-          while IFS= read -r -d '' dylib; do
-            dylib_count=$((dylib_count + 1))
-            if python3 tools/macho_attest.py verify "$dylib" --public-key "$expected_key_pem"; then
-              verified_count=$((verified_count + 1))
-            else
-              echo "::warning::Embedded tweak attestation is unavailable or invalid; continuing so the runtime warning is shown"
-            fi
-          done < <(find "$verification_dir/Payload" -type f -name 'Unbound.dylib' -print0)
-          if [ "$dylib_count" -eq 0 ]; then
-            echo "::warning::No embedded Unbound.dylib was found to attest"
-          elif [ "$verified_count" -ne "$dylib_count" ]; then
-            echo "::warning::The IPA will be distributed without a valid embedded attestation"
-          fi
+          go run ./tools build ipa --ipa discord.ipa --deb "$(find . -maxdepth 1 -name '*.deb' -print -quit)" --channel "$BUILD_CHANNEL" --extensions "$BUILD_EXTENSIONS" --output "${APP_NAME}.ipa" --non-interactive
 
       - name: upload ipa as artifact
         id: upload-ipa
@@ -392,6 +286,12 @@ jobs:
       - name: checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
+      - name: setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          cache: false
+          go-version-file: go.mod
+
       - name: download ipa artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -402,51 +302,8 @@ jobs:
           NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
           echo "APP_NAME=$NAME" >> $GITHUB_ENV
 
-      - name: extract IPA
-        run: |
-          unzip -q ${{ env.APP_NAME }}.ipa
-          ls -la Payload/
-
-      - name: download simforge
-        run: |
-          curl -L -o simforge https://github.com/EthanArbuckle/simforge/releases/latest/download/simforge
-          sudo chmod +x simforge
-
-      - name: convert for iOS Simulator
-        run: |
-          ./simforge convert Payload/Discord.app
-          codesign -f -s - Payload/Discord.app/Frameworks/* || true
-          codesign -f -s - Payload/Discord.app
-
-      - name: re-attest converted tweak
-        run: |
-          if [ "$(./tools/attestation_enabled.sh)" != "1" ]; then
-            exit 0
-          fi
-          key_file=$(mktemp)
-          expected_key=$(mktemp)
-          actual_key=$(mktemp)
-          expected_key_pem=$(mktemp)
-          trap 'rm -f "$key_file" "$expected_key" "$actual_key" "$expected_key_pem"' EXIT
-          printf "%s" "$ATTESTATION_PK" | tr -d '\r' > "$key_file"
-          openssl base64 -d -A -in tools/attestation_public_key.b64 -out "$expected_key"
-          openssl pkey -pubin -inform DER -in "$expected_key" -out "$expected_key_pem" 2>/dev/null
-          openssl ec -in "$key_file" -pubout -outform DER -out "$actual_key" 2>/dev/null
-          cmp -s "$expected_key" "$actual_key"
-          commit_hash=$(git rev-parse HEAD)
-          package_version=$(grep '^Version:' control | cut -d ' ' -f 2)
-          dylib=$(find Payload/Discord.app -type f -name 'Unbound.dylib' -print -quit)
-          test -n "$dylib"
-          python3 tools/macho_attest.py sign "$dylib" --private-key "$key_file" --commit-hash "$commit_hash" --package-version "$package_version"
-          codesign -f -s - "$dylib"
-          codesign -f -s - Payload/Discord.app
-          python3 tools/macho_attest.py verify "$dylib" --public-key "$expected_key_pem"
-
-      - name: create zip archive
-        run: |
-          cd Payload
-          zip -r ../unbound-ios-simulator.zip Discord.app
-          cd ..
+      - name: build simulator
+        run: go run ./tools build simulator --ipa "${APP_NAME}.ipa" --output unbound-ios-simulator.zip --configuration release --non-interactive
 
       - name: upload iOS Simulator artifact
         id: upload-simulator
@@ -631,7 +488,7 @@ jobs:
           set -euo pipefail
           APP_FILE=$(ls *.ipa)
           unzip -q "$APP_FILE"
-          VERSION=$(python3 -c "import plistlib; print(plistlib.load(open('Payload/Discord.app/Info.plist','rb'))['CFBundleShortVersionString'])")
+          VERSION=$(plutil -extract CFBundleShortVersionString raw -o - Payload/Discord.app/Info.plist)
 
           if [ "${{ inputs.only_app_repo }}" == true ]; then
             if [[ "$VERSION_SELECTOR" == *_* ]]; then
@@ -644,7 +501,7 @@ jobs:
           fi
 
           if [[ "$IS_TESTFLIGHT" == true ]]; then
-            BUILD=$(python3 -c "import plistlib; print(plistlib.load(open('Payload/Discord.app/Info.plist','rb'))['CFBundleVersion'])")
+            BUILD=$(plutil -extract CFBundleVersion raw -o - Payload/Discord.app/Info.plist)
             VERSION="${VERSION}_${BUILD}"
             APP_INDEX=1
           else

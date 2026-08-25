@@ -33,6 +33,10 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
 
 SHELL := /bin/bash
+TOOLS ?= $(TOOLS_COMMAND)
+ifeq ($(strip $(TOOLS)),)
+TOOLS := go run ./tools
+endif
 
 before-all::
 	@$(MAKE) clean
@@ -42,29 +46,6 @@ before-all::
 	fi
 
 after-stage::
-	find $(THEOS_STAGING_DIR) -name ".DS_Store" -delete
-	find $(THEOS_STAGING_DIR) -type f \( -name "signature.bin" -o -name "public_key.der" \) -delete
-	if [ "$(ATTESTATION_ENABLED)" = "1" ] && [ "$(shell ./tools/attestation_enabled.sh)" = "1" ]; then \
-		key_file=$$(mktemp); \
-		expected_key=$$(mktemp); \
-		actual_key=$$(mktemp); \
-		expected_key_pem=$$(mktemp); \
-		trap 'rm -f "$$key_file" "$$expected_key" "$$actual_key" "$$expected_key_pem"' EXIT; \
-		if [ -n "$$ATTESTATION_PK" ]; then \
-			printf "%s" "$$ATTESTATION_PK" | tr -d '\r' > "$$key_file"; \
-		elif [ -f "attestation_private.pem" ]; then \
-			cp "attestation_private.pem" "$$key_file"; \
-		fi; \
-		openssl base64 -d -A -in tools/attestation_public_key.b64 -out "$$expected_key"; \
-		openssl pkey -pubin -inform DER -in "$$expected_key" -out "$$expected_key_pem" 2>/dev/null; \
-		openssl ec -in "$$key_file" -pubout -outform DER -out "$$actual_key" 2>/dev/null; \
-		cmp -s "$$expected_key" "$$actual_key" || { echo "attestation private key does not match the pinned public key"; exit 1; }; \
-		dylib=$$(find "$(THEOS_STAGING_DIR)" -type f -name "Unbound.dylib" -print -quit); \
-		[ -n "$$dylib" ] || { echo "staged Unbound.dylib not found"; exit 1; }; \
-		python3 tools/macho_attest.py sign "$$dylib" --private-key "$$key_file" --commit-hash "$(COMMIT_HASH)" --package-version "$(THEOS_PACKAGE_BASE_VERSION)"; \
-		python3 tools/macho_attest.py verify "$$dylib" --public-key "$$expected_key_pem"; \
-		ldid -S "$$dylib"; \
-		python3 tools/macho_attest.py verify "$$dylib" --public-key "$$expected_key_pem"; \
-	fi
+	$(TOOLS) attest stage --staging-dir "$(THEOS_STAGING_DIR)" --commit-hash "$(COMMIT_HASH)" --package-version "$(THEOS_PACKAGE_BASE_VERSION)"
 
 after-package::
