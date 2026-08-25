@@ -23,6 +23,7 @@ DEFAULT_BUNDLE_ID = "com.hammerandchisel.discord"
 DEFAULT_TIMEOUT_SECONDS = 45 * 60
 POLL_INTERVAL_SECONDS = 10
 RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
+HTTP_USER_AGENT = "loader-ios-dkrypt/1.0 (+https://github.com/unbound-app/loader-ios)"
 
 
 class DkryptError(RuntimeError):
@@ -69,6 +70,7 @@ def _request_json(
         method=method,
         headers={
             "Accept": "application/json",
+            "User-Agent": HTTP_USER_AGENT,
             "Authorization": f"Bearer {api_key}",
             **({"Content-Type": "application/json"} if payload is not None else {}),
         },
@@ -170,7 +172,14 @@ def _download_and_verify(
     *,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> None:
-    request = Request(url, headers={"Authorization": f"Bearer {api_key}", "Accept": "application/octet-stream"})
+    request = Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/octet-stream",
+            "User-Agent": HTTP_USER_AGENT,
+        },
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.unlink(missing_ok=True)
     temporary_path = output_path.with_name(f".{output_path.name}.{uuid.uuid4().hex}.part")
