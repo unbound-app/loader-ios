@@ -333,6 +333,12 @@ jobs:
       - name: checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
+      - name: setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          cache: false
+          go-version-file: go.mod
+
       - name: download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -343,11 +349,11 @@ jobs:
           IPA_FILE="${{ needs.build-ipa.outputs.ipa_filename }}"
           test -n "$IPA_FILE"
           test -f "$IPA_FILE"
-          unzip -q "$IPA_FILE"
-          VERSION=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleShortVersionString | cut -d '"' -f 4)
+          IPA_INFO=$(go run ./tools ipa-info --ipa "$IPA_FILE")
+          VERSION=$(printf '%s\n' "$IPA_INFO" | jq -r '.version')
           
           if [[ "${{ needs.resolve-source-ipa.outputs.is_testflight }}" == true ]]; then
-            BUILD=$(plutil -p Payload/Discord.app/Info.plist | grep CFBundleVersion | cut -d '"' -f 4)
+            BUILD=$(printf '%s\n' "$IPA_INFO" | jq -r '.build')
             VERSION="${VERSION}_${BUILD}"
           fi
           
@@ -393,6 +399,12 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          cache: false
+          go-version-file: go.mod
 
       - name: download deb artifact
         if: inputs.only_app_repo != true && inputs.only_apt_repo != true
@@ -487,8 +499,8 @@ jobs:
         run: |
           set -euo pipefail
           APP_FILE=$(ls *.ipa)
-          unzip -q "$APP_FILE"
-          VERSION=$(plutil -extract CFBundleShortVersionString raw -o - Payload/Discord.app/Info.plist)
+          IPA_INFO=$(go run ./tools ipa-info --ipa "$APP_FILE")
+          VERSION=$(printf '%s\n' "$IPA_INFO" | jq -r '.version')
 
           if [ "${{ inputs.only_app_repo }}" == true ]; then
             if [[ "$VERSION_SELECTOR" == *_* ]]; then
@@ -501,7 +513,7 @@ jobs:
           fi
 
           if [[ "$IS_TESTFLIGHT" == true ]]; then
-            BUILD=$(plutil -extract CFBundleVersion raw -o - Payload/Discord.app/Info.plist)
+            BUILD=$(printf '%s\n' "$IPA_INFO" | jq -r '.build')
             VERSION="${VERSION}_${BUILD}"
             APP_INDEX=1
           else

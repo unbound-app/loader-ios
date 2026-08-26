@@ -25,6 +25,8 @@ func run(args []string) error {
 	switch args[0] {
 	case "fetch":
 		return runFetch(args[1:])
+	case "ipa-info":
+		return runIPAInfo(args[1:])
 	case "attest":
 		return runAttest(args[1:])
 	case "build":
@@ -43,8 +45,9 @@ func run(args []string) error {
 }
 
 func printUsage() {
-	fmt.Println("usage: go run ./tools <build|fetch|attest|doctor>")
+	fmt.Println("usage: go run ./tools <build|fetch|ipa-info|attest|doctor>")
 	fmt.Println("       go run ./tools build <tweak|ipa|simulator|all> [flags]")
+	fmt.Println("       go run ./tools ipa-info --ipa <path>")
 	fmt.Println("       go run ./tools attest <enabled|stage|sign|verify> [flags]")
 }
 
