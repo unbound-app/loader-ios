@@ -631,7 +631,7 @@ func zipList(path string, runner commandRunner, root string) ([]string, error) {
 }
 
 func zipDirectory(payload, output string, runner commandRunner, root string) error {
-	return runner(filepath.Dir(payload), "zip", []string{"-q", "-r", output, "Discord.app"}, os.Environ(), os.Stdout, os.Stderr)
+	return runner(payload, "zip", []string{"-q", "-r", output, "Discord.app"}, os.Environ(), os.Stdout, os.Stderr)
 }
 
 func copyTree(source, destination string) error {

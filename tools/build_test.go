@@ -40,3 +40,31 @@ func TestProvisionSimforgeUsesBuiltProduct(t *testing.T) {
 		t.Fatalf("unexpected provisioning commands: %#v", calls)
 	}
 }
+
+func TestZipDirectoryRunsFromPayload(t *testing.T) {
+	payload := filepath.Join(t.TempDir(), "Payload")
+	output := filepath.Join(t.TempDir(), "simulator.zip")
+	var gotRoot string
+	var gotName string
+	var gotArgs []string
+	runner := func(root, name string, args []string, env []string, stdout, stderr io.Writer) error {
+		gotRoot = root
+		gotName = name
+		gotArgs = append([]string(nil), args...)
+		return nil
+	}
+
+	if err := zipDirectory(payload, output, runner, t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if gotRoot != payload {
+		t.Fatalf("unexpected zip working directory: %s", gotRoot)
+	}
+	if gotName != "zip" {
+		t.Fatalf("unexpected zip command: %s", gotName)
+	}
+	expected := []string{"-q", "-r", output, "Discord.app"}
+	if !reflect.DeepEqual(gotArgs, expected) {
+		t.Fatalf("unexpected zip arguments: %#v", gotArgs)
+	}
+}
