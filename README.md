@@ -71,6 +71,8 @@ go run ./tools build all
 
 Pass `--ipa /path/to/Discord.ipa` when the source IPA is not the only `.ipa` in the repository root. Use `--extensions exclude` to omit extensions or `--simulator` to create the simulator archive. `go run ./tools doctor` checks host dependencies. For a tweak-only build, `make package` remains available.
 
+Repository-dispatched builds use the `DKRYPT_API_KEY` Actions secret to download authenticated dkrypt artifacts. The remote-deploy workflow defaults to `https://ipa.dylib.dev`; set the repository variable `DKRYPT_BASE_URL` when using another dkrypt deployment. Manual and external IPA source downloads do not send that secret.
+
 The resulting `.deb` file will be in the `packages` folder.
 
 </details>

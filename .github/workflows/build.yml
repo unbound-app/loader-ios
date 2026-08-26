@@ -41,6 +41,12 @@ on:
       is_testflight:
         default: false
         type: boolean
+      authenticated_source:
+        default: false
+        type: boolean
+      dkrypt_base_url:
+        default: "https://ipa.dylib.dev"
+        type: string
       add_extensions:
         default: true
         type: boolean
@@ -174,6 +180,8 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_IPA_URL: ${{ inputs.ipa_url }}
           INPUT_IS_TESTFLIGHT: ${{ inputs.is_testflight }}
+          INPUT_AUTHENTICATED_SOURCE: ${{ inputs.authenticated_source }}
+          INPUT_DKRYPT_BASE_URL: ${{ inputs.dkrypt_base_url }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             go run ./tools fetch \
@@ -184,7 +192,7 @@ jobs:
           else
             channel=appstore
             if [ "$INPUT_IS_TESTFLIGHT" = true ]; then channel=testflight; fi
-            go run ./tools fetch --source-url "$INPUT_IPA_URL" --channel "$channel" --version "$INPUT_VERSION" --output discord.ipa
+            go run ./tools fetch --base-url "$INPUT_DKRYPT_BASE_URL" --source-url "$INPUT_IPA_URL" --authenticated-source "$INPUT_AUTHENTICATED_SOURCE" --channel "$channel" --version "$INPUT_VERSION" --output discord.ipa
           fi
 
       - name: upload source ipa

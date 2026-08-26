@@ -213,7 +213,7 @@ func buildIPA(options buildOptions, runner commandRunner) error {
 	input := options.ipa
 	if strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://") {
 		input = filepath.Join(work, "source.ipa")
-		if err := downloadDirect(options.ipa, input); err != nil {
+		if err := downloadDirect(options.ipa, "", input); err != nil {
 			return err
 		}
 	}
