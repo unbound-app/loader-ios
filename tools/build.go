@@ -472,9 +472,10 @@ func provisionCyan(root string, runner commandRunner) (string, error) {
 
 func provisionSimforge(root string, runner commandRunner) (string, error) {
 	cache := filepath.Join(root, ".tools-cache", "simforge-"+simforgeCommit)
-	binary := filepath.Join(cache, "simforge")
-	if executableExists(binary) {
-		return binary, nil
+	derivedData := filepath.Join(cache, "derived-data")
+	product := filepath.Join(derivedData, "Build", "Products", "Release", "simforge")
+	if executableExists(product) {
+		return product, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(cache), 0o755); err != nil {
 		return "", err
@@ -485,18 +486,13 @@ func provisionSimforge(root string, runner commandRunner) (string, error) {
 	if err := runner(cache, "git", []string{"checkout", "--detach", simforgeCommit}, os.Environ(), os.Stdout, os.Stderr); err != nil {
 		return "", err
 	}
-	derivedData := filepath.Join(cache, "derived-data")
 	if err := runner(cache, "xcodebuild", []string{"-project", "simforge.xcodeproj", "-scheme", "simforge", "-configuration", "Release", "-derivedDataPath", derivedData, "build"}, os.Environ(), os.Stdout, os.Stderr); err != nil {
 		return "", err
 	}
-	product := filepath.Join(derivedData, "Build", "Products", "Release", "simforge")
-	if err := runner(cache, "cp", []string{product, binary}, os.Environ(), os.Stdout, os.Stderr); err != nil {
-		return "", err
+	if !executableExists(product) {
+		return "", fmt.Errorf("simforge build did not produce executable: %s", product)
 	}
-	if err := os.Chmod(binary, 0o755); err != nil {
-		return "", err
-	}
-	return binary, nil
+	return product, nil
 }
 
 func buildExtensions(options buildOptions, work string, runner commandRunner) ([]string, error) {
