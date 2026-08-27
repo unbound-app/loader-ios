@@ -192,7 +192,10 @@ jobs:
           else
             channel=appstore
             if [ "$INPUT_IS_TESTFLIGHT" = true ]; then channel=testflight; fi
-            go run ./tools fetch --base-url "$INPUT_DKRYPT_BASE_URL" --source-url "$INPUT_IPA_URL" --authenticated-source "$INPUT_AUTHENTICATED_SOURCE" --channel "$channel" --version "$INPUT_VERSION" --output discord.ipa
+            fetch_args=(--base-url "$INPUT_DKRYPT_BASE_URL" --source-url "$INPUT_IPA_URL")
+            if [ "$INPUT_AUTHENTICATED_SOURCE" = true ]; then fetch_args+=(--authenticated-source); fi
+            fetch_args+=(--channel "$channel" --version "$INPUT_VERSION" --output discord.ipa)
+            go run ./tools fetch "${fetch_args[@]}"
           fi
 
       - name: upload source ipa
