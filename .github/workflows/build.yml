@@ -183,7 +183,7 @@ jobs:
           INPUT_AUTHENTICATED_SOURCE: ${{ inputs.authenticated_source }}
           INPUT_DKRYPT_BASE_URL: ${{ inputs.dkrypt_base_url }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ -z "$INPUT_IPA_URL" ]; then
             go run ./tools fetch \
               --base-url https://ipa.dylib.dev \
               --bundle-id com.hammerandchisel.discord \
