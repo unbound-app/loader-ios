@@ -48,7 +48,7 @@ before-all::
 		git submodule update --init --recursive || exit 1; \
 	fi
 
-	@tools/build-libffi.sh "$(LIBFFI_ARCHIVE)" "$(LIBFFI_HEADERS)"
+	@$(TOOLS) libffi-build --archive "$(LIBFFI_ARCHIVE)" --include "$(LIBFFI_HEADERS)"
 
 after-stage::
 	$(TOOLS) attest stage --staging-dir "$(THEOS_STAGING_DIR)" --commit-hash "$(COMMIT_HASH)" --package-version "$(THEOS_PACKAGE_BASE_VERSION)"

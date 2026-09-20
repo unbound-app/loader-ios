@@ -31,6 +31,8 @@ func run(args []string) error {
 		return runAttest(args[1:])
 	case "build":
 		return runBuild(args[1:])
+	case "libffi-build":
+		return runLibFFIBuild(args[1:])
 	case "doctor":
 		return runDoctor(args[1:])
 	case "version":
@@ -45,8 +47,9 @@ func run(args []string) error {
 }
 
 func printUsage() {
-	fmt.Println("usage: go run ./tools <build|fetch|ipa-info|attest|doctor>")
+	fmt.Println("usage: go run ./tools <build|libffi-build|fetch|ipa-info|attest|doctor>")
 	fmt.Println("       go run ./tools build <tweak|ipa|simulator|all> [flags]")
+	fmt.Println("       go run ./tools libffi-build --archive <path> --include <path>")
 	fmt.Println("       go run ./tools ipa-info --ipa <path>")
 	fmt.Println("       go run ./tools attest <enabled|stage|sign|verify> [flags]")
 }

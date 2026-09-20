@@ -104,6 +104,7 @@ static NSDictionary<NSString *, NSDictionary<NSString *, id> *> *nativeFeatureMe
             @"chat.messageBubbles" : @{@"introduced" : @"2.0.0"},
             @"toolbox.menu" : @{@"introduced" : @"2.0.0"},
             @"native.evaluateBytecode" : @{@"introduced" : @"2.1.0"},
+            @"native.pluginApi" : @{@"introduced" : @"2.5.2"},
             @"themes.native" : @{@"introduced" : @"2.2.0"},
         };
     });
