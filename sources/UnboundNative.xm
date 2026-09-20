@@ -333,7 +333,10 @@ void registerNativeInterop(Runtime &runtime)
 {
     @autoreleasepool
     {
+        registerNativePluginBridge(runtime);
         Object interop(runtime);
+        interop.setProperty(runtime, "nativePlugin",
+                            runtime.global().getProperty(runtime, "UnboundNativePlugin"));
 
 
         interop.setProperty(

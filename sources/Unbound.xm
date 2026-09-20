@@ -111,6 +111,7 @@ static void injectModulesPatch(jsi::Runtime &runtime)
 
 static void injectUnboundPreBundle(jsi::Runtime &runtime)
 {
+    unbound::setNativePluginRuntimeExecutor(gInstance);
     unbound::registerNativeInterop(runtime);
 
     if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO])

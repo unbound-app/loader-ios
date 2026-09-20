@@ -7,3 +7,6 @@
 [submodule "extensions/ShareToDiscord"]
 	path = extensions/ShareToDiscord
 	url = https://github.com/castdrian/ShareToDiscord
+[submodule "vendor/libffi"]
+	path = vendor/libffi
+	url = https://github.com/libffi/libffi.git

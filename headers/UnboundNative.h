@@ -6,6 +6,7 @@
 #import "ChatUI.h"
 #import "JSI.h"
 #import "Logger.h"
+#import "NativePluginBridge.h"
 #import "PluginAPI.h"
 #import "Toolbox.h"
 #import "Utilities.h"
