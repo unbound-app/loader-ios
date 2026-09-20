@@ -1841,7 +1841,7 @@ static Value getIvar(Runtime &runtime, const Value *args, size_t count)
     const char *type = ivar_getTypeEncoding(ivar);
     uint8_t *address = (uint8_t *) (__bridge void *) object + ivar_getOffset(ivar);
     char code = normalizedType(type);
-    if (!type || !*type || code == '?')
+    if (!type || !*type)
     {
         return objcResult(runtime, object_getIvar(object, ivar));
     }
