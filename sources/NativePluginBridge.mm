@@ -240,10 +240,36 @@ static Value objcResult(Runtime &runtime, id value)
         return [JSI fromObjC:value runtime:runtime];
     }
 
-    if ([value isKindOfClass:[NSNumber class]] || [value isKindOfClass:[NSArray class]] ||
-        [value isKindOfClass:[NSDictionary class]])
+    if ([value isKindOfClass:[NSNumber class]])
     {
         return [JSI fromObjC:value runtime:runtime];
+    }
+
+    if ([value isKindOfClass:[NSArray class]])
+    {
+        NSArray *array = (NSArray *) value;
+        Array result(runtime, array.count);
+        for (NSUInteger index = 0; index < array.count; index++)
+        {
+            result.setValueAtIndex(runtime, index, objcResult(runtime, array[index]));
+        }
+        return result;
+    }
+
+    if ([value isKindOfClass:[NSDictionary class]])
+    {
+        NSDictionary *dictionary = (NSDictionary *) value;
+        Object result(runtime);
+        for (id key in dictionary)
+        {
+            if (![key isKindOfClass:[NSString class]])
+            {
+                continue;
+            }
+            result.setProperty(runtime, ((NSString *) key).UTF8String,
+                               objcResult(runtime, dictionary[key]));
+        }
+        return result;
     }
 
     return Object::createFromHostObject(runtime, std::make_shared<ObjCHandleHost>(value));
