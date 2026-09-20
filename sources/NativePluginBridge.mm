@@ -9,6 +9,7 @@
 #import <cstdint>
 #import <cstring>
 #import <functional>
+#import <exception>
 #import <memory>
 #import <mutex>
 #import <sstream>
@@ -150,6 +151,9 @@ struct FFICallArgument {
     id object;
     void *pointer;
 };
+
+static FFITypeSpec ffiType(Runtime &runtime, const std::string &name);
+static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vector<uint8_t> &bytes);
 
 static std::mutex gFFIMutex;
 static std::unordered_map<std::string, std::shared_ptr<FFITypeDefinition>> gFFITypes;
@@ -443,39 +447,60 @@ static Value returnValue(Runtime &runtime, NSInvocation *invocation, NSMethodSig
         return Value(value);
     }
 
-    if (code == 'c' || code == 'C')
+    if (code == 'c')
     {
-        unsigned char value = 0;
+        int8_t value = 0;
         [invocation getReturnValue:&value];
         return Value((double) value);
     }
 
-    if (code == 's' || code == 'S')
+    if (code == 'C')
     {
-        unsigned short value = 0;
+        uint8_t value = 0;
         [invocation getReturnValue:&value];
         return Value((double) value);
     }
 
-    if (code == 'i' || code == 'I' || code == 'l' || code == 'L')
+    if (code == 's')
     {
-        unsigned long value = 0;
+        int16_t value = 0;
         [invocation getReturnValue:&value];
         return Value((double) value);
     }
 
-    if (code == 'q')
+    if (code == 'S')
     {
-        long long value = 0;
+        uint16_t value = 0;
         [invocation getReturnValue:&value];
-        return Value(runtime, BigInt::fromInt64(runtime, value));
+        return Value((double) value);
     }
 
-    if (code == 'Q')
+    if (code == 'i')
     {
-        unsigned long long value = 0;
+        int32_t value = 0;
         [invocation getReturnValue:&value];
-        return Value(runtime, BigInt::fromUint64(runtime, value));
+        return Value((double) value);
+    }
+
+    if (code == 'I')
+    {
+        uint32_t value = 0;
+        [invocation getReturnValue:&value];
+        return Value((double) value);
+    }
+
+    if (code == 'l' || code == 'q')
+    {
+        int64_t value = 0;
+        [invocation getReturnValue:&value];
+        return Value(runtime, BigInt::fromInt64(runtime, (int64_t) value));
+    }
+
+    if (code == 'L' || code == 'Q')
+    {
+        uint64_t value = 0;
+        [invocation getReturnValue:&value];
+        return Value(runtime, BigInt::fromUint64(runtime, (uint64_t) value));
     }
 
     if (code == 'f')
@@ -511,7 +536,7 @@ static void setInvocationArgument(Runtime &runtime, NSInvocation *invocation, NS
     const char *type = [signature getArgumentTypeAtIndex:index];
     char code = normalizedType(type);
 
-    if (code == '@' || code == '#' || code == ':')
+    if (code == '@')
     {
         retained.push_back(object == [NSNull null] ? nil : object);
         id argument = retained.back();
@@ -519,9 +544,40 @@ static void setInvocationArgument(Runtime &runtime, NSInvocation *invocation, NS
         return;
     }
 
+    if (code == '#')
+    {
+        Class argument = object && object_isClass(object) ? object : Nil;
+        [invocation setArgument:&argument atIndex:index];
+        return;
+    }
+
+    if (code == ':')
+    {
+        SEL argument = NULL;
+        if ([object isKindOfClass:[NSString class]])
+        {
+            argument = NSSelectorFromString((NSString *) object);
+        }
+        else if ([object isKindOfClass:[NSValue class]])
+        {
+            argument = (SEL) [(NSValue *) object pointerValue];
+        }
+        [invocation setArgument:&argument atIndex:index];
+        return;
+    }
+
     if (code == '^' || code == '*')
     {
-        void *pointer = [object isKindOfClass:[NSValue class]] ? [(NSValue *) object pointerValue] : nullptr;
+        void *pointer = nullptr;
+        if (code == '*' && [object isKindOfClass:[NSString class]])
+        {
+            retained.push_back(object);
+            pointer = (void *) [(NSString *) object UTF8String];
+        }
+        else if ([object isKindOfClass:[NSValue class]])
+        {
+            pointer = [(NSValue *) object pointerValue];
+        }
         [invocation setArgument:&pointer atIndex:index];
         return;
     }
@@ -562,11 +618,75 @@ static void setInvocationArgument(Runtime &runtime, NSInvocation *invocation, NS
         return;
     }
 
-    if (code == 'c' || code == 'C' || code == 's' || code == 'S' || code == 'i' || code == 'I' ||
-        code == 'l' || code == 'L')
+    if (code == 'c')
     {
-        long long argument = [object respondsToSelector:@selector(longLongValue)] ? [object longLongValue] : 0;
-        storage.emplace_back(sizeof(long long));
+        int8_t argument = [object respondsToSelector:@selector(charValue)] ? [object charValue] : 0;
+        storage.emplace_back(sizeof(argument));
+        memcpy(storage.back().data(), &argument, sizeof(argument));
+        [invocation setArgument:storage.back().data() atIndex:index];
+        return;
+    }
+
+    if (code == 'C')
+    {
+        uint8_t argument = [object respondsToSelector:@selector(unsignedCharValue)] ? [object unsignedCharValue] : 0;
+        storage.emplace_back(sizeof(argument));
+        memcpy(storage.back().data(), &argument, sizeof(argument));
+        [invocation setArgument:storage.back().data() atIndex:index];
+        return;
+    }
+
+    if (code == 's')
+    {
+        int16_t argument = [object respondsToSelector:@selector(shortValue)] ? [object shortValue] : 0;
+        storage.emplace_back(sizeof(argument));
+        memcpy(storage.back().data(), &argument, sizeof(argument));
+        [invocation setArgument:storage.back().data() atIndex:index];
+        return;
+    }
+
+    if (code == 'S')
+    {
+        uint16_t argument = [object respondsToSelector:@selector(unsignedShortValue)] ? [object unsignedShortValue] : 0;
+        storage.emplace_back(sizeof(argument));
+        memcpy(storage.back().data(), &argument, sizeof(argument));
+        [invocation setArgument:storage.back().data() atIndex:index];
+        return;
+    }
+
+    if (code == 'i')
+    {
+        int32_t argument = [object respondsToSelector:@selector(intValue)] ? [object intValue] : 0;
+        storage.emplace_back(sizeof(argument));
+        memcpy(storage.back().data(), &argument, sizeof(argument));
+        [invocation setArgument:storage.back().data() atIndex:index];
+        return;
+    }
+
+    if (code == 'I')
+    {
+        uint32_t argument = [object respondsToSelector:@selector(unsignedIntValue)] ? [object unsignedIntValue] : 0;
+        storage.emplace_back(sizeof(argument));
+        memcpy(storage.back().data(), &argument, sizeof(argument));
+        [invocation setArgument:storage.back().data() atIndex:index];
+        return;
+    }
+
+    if (code == 'l' || code == 'q')
+    {
+        int64_t argument = [object respondsToSelector:@selector(longLongValue)] ? [object longLongValue] : 0;
+        storage.emplace_back(sizeof(argument));
+        memcpy(storage.back().data(), &argument, sizeof(argument));
+        [invocation setArgument:storage.back().data() atIndex:index];
+        return;
+    }
+
+    if (code == 'L' || code == 'Q')
+    {
+        uint64_t argument = [object respondsToSelector:@selector(unsignedLongLongValue)]
+                                ? [object unsignedLongLongValue]
+                                : 0;
+        storage.emplace_back(sizeof(argument));
         memcpy(storage.back().data(), &argument, sizeof(argument));
         [invocation setArgument:storage.back().data() atIndex:index];
         return;
@@ -627,6 +747,340 @@ static Value invokeObject(Runtime &runtime, id target, SEL selector, NSArray *ar
 
     [invocation invoke];
     return returnValue(runtime, invocation, signature);
+}
+
+static std::string nativeFFITypeName(const char *encoding)
+{
+    char code = normalizedType(encoding);
+    switch (code)
+    {
+        case 'v':
+            return "void";
+        case '@':
+            return "object";
+        case '#':
+            return "class";
+        case ':':
+            return "selector";
+        case '^':
+        case '*':
+            return "pointer";
+        case 'B':
+            return "bool";
+        case 'c':
+            return "i8";
+        case 'C':
+            return "u8";
+        case 's':
+            return "i16";
+        case 'S':
+            return "u16";
+        case 'i':
+            return "i32";
+        case 'I':
+            return "u32";
+        case 'l':
+            return "i64";
+        case 'L':
+            return "u64";
+        case 'q':
+            return "i64";
+        case 'Q':
+            return "u64";
+        case 'f':
+            return "float";
+        case 'd':
+            return "double";
+        case '{':
+        {
+            std::string value(encoding ?: "");
+            if (value.find("_NSRange") != std::string::npos)
+            {
+                return "struct:NSRange";
+            }
+            if (value.find("CGPoint") != std::string::npos)
+            {
+                return "struct:CGPoint";
+            }
+            if (value.find("CGSize") != std::string::npos)
+            {
+                return "struct:CGSize";
+            }
+            if (value.find("CGRect") != std::string::npos)
+            {
+                return "struct:CGRect";
+            }
+            if (value.find("UIEdgeInsets") != std::string::npos)
+            {
+                return "struct:UIEdgeInsets";
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    return std::string();
+}
+
+static void setSuperFFIArgument(Runtime &runtime, const char *encoding, id object,
+                                 FFICallArgument &argument, std::vector<id> &retained)
+{
+    char code = normalizedType(encoding);
+    id value = object == [NSNull null] ? @0 : object;
+    if (code == '@' || code == '#')
+    {
+        id retainedValue = object == [NSNull null] ? nil : object;
+        retained.push_back(retainedValue);
+        argument.pointer = (__bridge void *) retainedValue;
+        return;
+    }
+    if (code == ':')
+    {
+        if ([value isKindOfClass:[NSString class]])
+        {
+            argument.pointer = (void *) sel_registerName([(NSString *) value UTF8String]);
+        }
+        else if ([value isKindOfClass:[NSValue class]])
+        {
+            argument.pointer = [(NSValue *) value pointerValue];
+        }
+        return;
+    }
+    if (code == '^' || code == '*')
+    {
+        if (code == '*' && [value isKindOfClass:[NSString class]])
+        {
+            argument.string = [(NSString *) value UTF8String] ?: "";
+            argument.pointer = (void *) argument.string.c_str();
+        }
+        else if ([value isKindOfClass:[NSValue class]])
+        {
+            argument.pointer = [(NSValue *) value pointerValue];
+        }
+        return;
+    }
+    if (code == 'B')
+    {
+        bool scalar = [value boolValue];
+        argument.bytes.resize(sizeof(scalar));
+        memcpy(argument.bytes.data(), &scalar, sizeof(scalar));
+        return;
+    }
+    if (code == 'c' || code == 'C')
+    {
+        uint8_t scalar = code == 'c' ? (uint8_t) [value charValue] : [value unsignedCharValue];
+        argument.bytes.resize(sizeof(scalar));
+        memcpy(argument.bytes.data(), &scalar, sizeof(scalar));
+        return;
+    }
+    if (code == 's' || code == 'S')
+    {
+        uint16_t scalar = code == 's' ? (uint16_t) [value shortValue] : [value unsignedShortValue];
+        argument.bytes.resize(sizeof(scalar));
+        memcpy(argument.bytes.data(), &scalar, sizeof(scalar));
+        return;
+    }
+    if (code == 'i' || code == 'I')
+    {
+        uint32_t scalar = code == 'i' ? (uint32_t) [value intValue] : [value unsignedIntValue];
+        argument.bytes.resize(sizeof(scalar));
+        memcpy(argument.bytes.data(), &scalar, sizeof(scalar));
+        return;
+    }
+    if (code == 'l' || code == 'L' || code == 'q' || code == 'Q')
+    {
+        uint64_t scalar = code == 'l' || code == 'q' ? (uint64_t) [value longLongValue]
+                                                       : [value unsignedLongLongValue];
+        argument.bytes.resize(sizeof(scalar));
+        memcpy(argument.bytes.data(), &scalar, sizeof(scalar));
+        return;
+    }
+    if (code == 'f')
+    {
+        float scalar = [value floatValue];
+        argument.bytes.resize(sizeof(scalar));
+        memcpy(argument.bytes.data(), &scalar, sizeof(scalar));
+        return;
+    }
+    if (code == 'd')
+    {
+        double scalar = [value doubleValue];
+        argument.bytes.resize(sizeof(scalar));
+        memcpy(argument.bytes.data(), &scalar, sizeof(scalar));
+        return;
+    }
+    if (code == '{')
+    {
+        NSUInteger size = 0;
+        NSUInteger alignment = 0;
+        NSGetSizeAndAlignment(encoding, &size, &alignment);
+        if (![value isKindOfClass:[NSValue class]])
+        {
+            throw JSError(runtime, "Native super struct argument expected");
+        }
+        argument.bytes.resize(size);
+        [(NSValue *) value getValue:argument.bytes.data() size:size];
+        return;
+    }
+    throw JSError(runtime, "Unsupported native super argument type");
+}
+
+static Value invokeSuperObject(Runtime &runtime, id target, Class currentClass, SEL selector,
+                               NSArray *arguments)
+{
+    if (!target || !currentClass || !selector)
+    {
+        throw JSError(runtime, "Invalid native Objective-C super target");
+    }
+
+    Class superclass = class_getSuperclass(currentClass);
+    Method method = superclass ? class_getInstanceMethod(superclass, selector) : NULL;
+    if (!method)
+    {
+        throw JSError(runtime, "Objective-C super selector is not available");
+    }
+
+    NSMethodSignature *signature = [NSMethodSignature signatureWithObjCTypes:method_getTypeEncoding(method)];
+    NSUInteger expected = signature.numberOfArguments >= 2 ? signature.numberOfArguments - 2 : 0;
+    if (expected != arguments.count)
+    {
+        throw JSError(runtime, "Objective-C super argument count does not match the method signature");
+    }
+
+    std::vector<FFITypeSpec> types;
+    std::vector<FFICallArgument> values(arguments.count + 2);
+    std::vector<void *> argumentValues(arguments.count + 2);
+    std::vector<ffi_type *> ffiTypes;
+    std::vector<id> retained;
+    types.reserve(arguments.count);
+    ffiTypes.reserve(arguments.count + 2);
+    retained.reserve(arguments.count);
+
+    struct objc_super superInfo = {target, currentClass};
+    values[0].pointer = &superInfo;
+    values[1].pointer = selector;
+    ffiTypes.push_back(&ffi_type_pointer);
+    ffiTypes.push_back(&ffi_type_pointer);
+    argumentValues[0] = &values[0].pointer;
+    argumentValues[1] = &values[1].pointer;
+
+    for (NSUInteger index = 0; index < arguments.count; index++)
+    {
+        const char *encoding = [signature getArgumentTypeAtIndex:index + 2];
+        std::string name = nativeFFITypeName(encoding);
+        if (name.empty())
+        {
+            throw JSError(runtime, "Unsupported native super argument type encoding");
+        }
+        types.push_back(ffiType(runtime, name));
+        setSuperFFIArgument(runtime, encoding, arguments[index], values[index + 2], retained);
+        ffiTypes.push_back(types.back().type);
+        if (name == "object" || name == "class" || name == "selector" || name == "pointer")
+        {
+            argumentValues[index + 2] = &values[index + 2].pointer;
+        }
+        else
+        {
+            argumentValues[index + 2] = values[index + 2].bytes.data();
+        }
+    }
+
+    std::string resultName = nativeFFITypeName(signature.methodReturnType);
+    if (resultName.empty())
+    {
+        throw JSError(runtime, "Unsupported native super return type encoding");
+    }
+    FFITypeSpec result = ffiType(runtime, resultName);
+    ffi_cif cif{};
+    if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned) ffiTypes.size(), result.type, ffiTypes.data()) != FFI_OK)
+    {
+        throw JSError(runtime, "Native Objective-C super signature could not be prepared");
+    }
+
+    std::vector<uint8_t> output(std::max<size_t>(result.type->size, sizeof(void *)));
+    ffi_call(&cif, reinterpret_cast<void (*)(void)>(objc_msgSendSuper),
+             resultName == "void" ? nullptr : output.data(), argumentValues.data());
+    return ffiResult(runtime, result, output);
+}
+
+static Value invokeWithThreadPolicy(Runtime &runtime, id target, SEL selector, NSArray *arguments,
+                                    const Value *options)
+{
+    std::string policy = "current";
+    if (options && options->isObject())
+    {
+        Value thread = options->asObject(runtime).getProperty(runtime, "thread");
+        if (thread.isString())
+        {
+            policy = [JSI toNSString:thread runtime:runtime].UTF8String;
+        }
+    }
+    if (policy == "current" || ([NSThread isMainThread] && policy == "main"))
+    {
+        return invokeObject(runtime, target, selector, arguments);
+    }
+    if (policy != "main")
+    {
+        throw JSError(runtime, "Unsupported native thread policy");
+    }
+
+    __block Value result = Value::undefined();
+    __block std::exception_ptr failure;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        try
+        {
+            result = invokeObject(runtime, target, selector, arguments);
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+    });
+    if (failure)
+    {
+        std::rethrow_exception(failure);
+    }
+    return std::move(result);
+}
+
+static Value invokeSuperWithThreadPolicy(Runtime &runtime, id target, Class currentClass, SEL selector,
+                                         NSArray *arguments, const Value *options)
+{
+    std::string policy = "current";
+    if (options && options->isObject())
+    {
+        Value thread = options->asObject(runtime).getProperty(runtime, "thread");
+        if (thread.isString())
+        {
+            policy = [JSI toNSString:thread runtime:runtime].UTF8String;
+        }
+    }
+    if (policy == "current" || ([NSThread isMainThread] && policy == "main"))
+    {
+        return invokeSuperObject(runtime, target, currentClass, selector, arguments);
+    }
+    if (policy != "main")
+    {
+        throw JSError(runtime, "Unsupported native thread policy");
+    }
+
+    __block Value result = Value::undefined();
+    __block std::exception_ptr failure;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        try
+        {
+            result = invokeSuperObject(runtime, target, currentClass, selector, arguments);
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+    });
+    if (failure)
+    {
+        std::rethrow_exception(failure);
+    }
+    return std::move(result);
 }
 
 static NSArray *argumentArray(Runtime &runtime, const Value *args, size_t count, size_t start)
@@ -724,12 +1178,18 @@ static void dispatchVoidHook(id object, SEL selector)
         ((void (*)(id, SEL)) dispatcher->original)(object, selector);
     }
 
-    if (!dispatcher || dispatcher->hooks.empty() || !gRuntimeExecutorInstance)
+    if (!dispatcher || !gRuntimeExecutorInstance)
     {
         return;
     }
 
-    for (const std::shared_ptr<HookState> &state : dispatcher->hooks)
+    std::vector<std::shared_ptr<HookState>> hooks;
+    {
+        std::lock_guard<std::mutex> lock(gHookMutex);
+        hooks = dispatcher->hooks;
+    }
+
+    for (const std::shared_ptr<HookState> &state : hooks)
     {
         if (!state->active || !state->after)
         {
@@ -834,7 +1294,10 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
     state->identifier = gNextHookIdentifier.fetch_add(1);
     state->after = std::make_shared<Function>(afterValue.asObject(runtime).getFunction(runtime));
     state->dispatcher = dispatcher;
-    dispatcher->hooks.push_back(state);
+    {
+        std::lock_guard<std::mutex> lock(gHookMutex);
+        dispatcher->hooks.push_back(state);
+    }
     return Object::createFromHostObject(runtime, std::make_shared<HookTokenHost>(state));
 }
 
@@ -1094,8 +1557,25 @@ static void setFFIArgument(Runtime &runtime, const Value &value, const FFITypeSp
         return;
     }
 
-    if (spec.name == "pointer" || spec.name == "object" || spec.name == "class" ||
-        spec.name == "selector")
+    if (spec.name == "selector")
+    {
+        if (value.isString())
+        {
+            NSString *name = [JSI toNSString:value runtime:runtime];
+            argument.pointer = (void *) NSSelectorFromString(name);
+        }
+        else if (value.isObject())
+        {
+            Object object = value.asObject(runtime);
+            if (object.isHostObject<PointerHost>(runtime))
+            {
+                argument.pointer = object.getHostObject<PointerHost>(runtime)->value();
+            }
+        }
+        return;
+    }
+
+    if (spec.name == "pointer" || spec.name == "object" || spec.name == "class")
     {
         argument.pointer = (__bridge void *) objcValue(runtime, value);
         if (!argument.pointer && value.isObject())
@@ -1180,11 +1660,17 @@ static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vec
         const char *string = *(const char *const *) bytes.data();
         return string ? String::createFromUtf8(runtime, string) : Value::null();
     }
-    if (spec.name == "object" || spec.name == "class" || spec.name == "selector")
+    if (spec.name == "object" || spec.name == "class")
     {
         __unsafe_unretained id object = nil;
         memcpy(&object, bytes.data(), sizeof(object));
         return objcResult(runtime, object);
+    }
+    if (spec.name == "selector")
+    {
+        SEL selector = NULL;
+        memcpy(&selector, bytes.data(), sizeof(selector));
+        return selector ? String::createFromUtf8(runtime, sel_getName(selector)) : Value::null();
     }
     if (spec.name == "pointer")
     {
@@ -1335,27 +1821,101 @@ static Value getIvar(Runtime &runtime, const Value *args, size_t count)
         memcpy(&value, address, sizeof(value));
         return objcResult(runtime, value);
     }
+
+    if (code == '#')
+    {
+        Class value = Nil;
+        memcpy(&value, address, sizeof(value));
+        return objcResult(runtime, value);
+    }
+
+    if (code == ':')
+    {
+        SEL value = NULL;
+        memcpy(&value, address, sizeof(value));
+        return value ? String::createFromUtf8(runtime, sel_getName(value)) : Value::null();
+    }
+
+    if (code == '^' || code == '*')
+    {
+        void *value = nullptr;
+        memcpy(&value, address, sizeof(value));
+        return pointerResult(runtime, value);
+    }
+
     if (code == 'B')
     {
-        return Value(*(bool *) address);
+        bool value = false;
+        memcpy(&value, address, sizeof(value));
+        return Value(value);
     }
     if (code == 'f')
     {
-        return Value((double) *(float *) address);
+        float value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value((double) value);
     }
     if (code == 'd')
     {
-        return Value(*(double *) address);
+        double value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value(value);
     }
-    if (code == 'q' || code == 'Q')
+    if (code == 'c')
     {
-        long long value = *(long long *) address;
-        return code == 'q' ? Value(runtime, BigInt::fromInt64(runtime, value))
-                           : Value(runtime, BigInt::fromUint64(runtime, (uint64_t) value));
+        int8_t value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value((double) value);
     }
-    if (code == 'i' || code == 'l' || code == 's' || code == 'c')
+    if (code == 'C')
     {
-        return Value((double) *(long long *) address);
+        uint8_t value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value((double) value);
+    }
+    if (code == 's')
+    {
+        int16_t value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value((double) value);
+    }
+    if (code == 'S')
+    {
+        uint16_t value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value((double) value);
+    }
+    if (code == 'i')
+    {
+        int32_t value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value((double) value);
+    }
+    if (code == 'I')
+    {
+        uint32_t value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value((double) value);
+    }
+    if (code == 'l' || code == 'q')
+    {
+        int64_t value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value(runtime, BigInt::fromInt64(runtime, value));
+    }
+    if (code == 'L' || code == 'Q')
+    {
+        uint64_t value = 0;
+        memcpy(&value, address, sizeof(value));
+        return Value(runtime, BigInt::fromUint64(runtime, value));
+    }
+    if (code == '{')
+    {
+        NSUInteger size = 0;
+        NSUInteger alignment = 0;
+        NSGetSizeAndAlignment(ivar_getTypeEncoding(ivar), &size, &alignment);
+        return structResult(runtime, [NSString stringWithUTF8String:type] ?: @"",
+                            [NSValue value:address withObjCType:type]);
     }
     throw JSError(runtime, "Unsupported ivar type");
 }
@@ -1378,32 +1938,152 @@ static Value setIvar(Runtime &runtime, const Value *args, size_t count)
     uint8_t *address = (uint8_t *) (__bridge void *) object + ivar_getOffset(ivar);
     char code = normalizedType(ivar_getTypeEncoding(ivar));
     id value = valueToObjC(runtime, args[2]);
+    id scalarValue = value == [NSNull null] ? @0 : value;
     if (code == '@')
     {
         object_setIvar(object, ivar, value == [NSNull null] ? nil : value);
         return Value::undefined();
     }
+
+    if (code == '#')
+    {
+        Class argument = value != [NSNull null] && object_isClass(value) ? value : Nil;
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+
+    if (code == ':')
+    {
+        SEL argument = NULL;
+        if ([value isKindOfClass:[NSString class]])
+        {
+            argument = NSSelectorFromString((NSString *) value);
+        }
+        else if ([value isKindOfClass:[NSValue class]])
+        {
+            argument = (SEL) [(NSValue *) value pointerValue];
+        }
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+
+    if (code == '^' || code == '*')
+    {
+        void *argument = [value isKindOfClass:[NSValue class]] ? [(NSValue *) value pointerValue] : nullptr;
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+
     if (code == 'B')
     {
-        *(bool *) address = [value boolValue];
+        bool argument = [scalarValue boolValue];
+        memcpy(address, &argument, sizeof(argument));
         return Value::undefined();
     }
     if (code == 'f')
     {
-        *(float *) address = [value floatValue];
+        float argument = [scalarValue floatValue];
+        memcpy(address, &argument, sizeof(argument));
         return Value::undefined();
     }
     if (code == 'd')
     {
-        *(double *) address = [value doubleValue];
+        double argument = [scalarValue doubleValue];
+        memcpy(address, &argument, sizeof(argument));
         return Value::undefined();
     }
-    if (code == 'q' || code == 'Q' || code == 'i' || code == 'l' || code == 's' || code == 'c')
+    if (code == 'c')
     {
-        *(long long *) address = [value longLongValue];
+        int8_t argument = [scalarValue charValue];
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+    if (code == 'C')
+    {
+        uint8_t argument = [scalarValue unsignedCharValue];
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+    if (code == 's')
+    {
+        int16_t argument = [scalarValue shortValue];
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+    if (code == 'S')
+    {
+        uint16_t argument = [scalarValue unsignedShortValue];
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+    if (code == 'i')
+    {
+        int32_t argument = [scalarValue intValue];
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+    if (code == 'I')
+    {
+        uint32_t argument = [scalarValue unsignedIntValue];
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+    if (code == 'l' || code == 'q')
+    {
+        int64_t argument = [scalarValue longLongValue];
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+    if (code == 'L' || code == 'Q')
+    {
+        uint64_t argument = [scalarValue unsignedLongLongValue];
+        memcpy(address, &argument, sizeof(argument));
+        return Value::undefined();
+    }
+    if (code == '{')
+    {
+        if (![value isKindOfClass:[NSValue class]])
+        {
+            throw JSError(runtime, "Native struct ivar value expected");
+        }
+        NSUInteger size = 0;
+        NSUInteger alignment = 0;
+        NSGetSizeAndAlignment(ivar_getTypeEncoding(ivar), &size, &alignment);
+        [(NSValue *) value getValue:address size:size];
         return Value::undefined();
     }
     throw JSError(runtime, "Unsupported ivar type");
+}
+
+static objc_AssociationPolicy associationPolicy(Runtime &runtime, const Value *value)
+{
+    if (!value || !value->isString())
+    {
+        return OBJC_ASSOCIATION_RETAIN_NONATOMIC;
+    }
+
+    NSString *name = [JSI toNSString:*value runtime:runtime];
+    if ([name isEqualToString:@"assign"])
+    {
+        return OBJC_ASSOCIATION_ASSIGN;
+    }
+    if ([name isEqualToString:@"retain"])
+    {
+        return OBJC_ASSOCIATION_RETAIN;
+    }
+    if ([name isEqualToString:@"copy"])
+    {
+        return OBJC_ASSOCIATION_COPY;
+    }
+    if ([name isEqualToString:@"copyNonatomic"])
+    {
+        return OBJC_ASSOCIATION_COPY_NONATOMIC;
+    }
+    if ([name isEqualToString:@"retainNonatomic"])
+    {
+        return OBJC_ASSOCIATION_RETAIN_NONATOMIC;
+    }
+    throw JSError(runtime, "Unsupported native association policy");
 }
 
 static void installObjC(Runtime &runtime, Object &objc)
@@ -1462,8 +2142,16 @@ static void installObjC(Runtime &runtime, Object &objc)
         }));
 
     objc.setProperty(runtime, "callSuper", makeFunction(
-        "callSuper", 3, runtime, [](Runtime &rt, const Value &, const Value *, size_t) -> Value {
-            throw JSError(rt, "objc.callSuper is not available in ABI v1");
+        "callSuper", 3, runtime, [](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+            if (count < 3)
+            {
+                throw JSError(rt, "objc.callSuper expects an object, class, and selector");
+            }
+            id object = objcValue(rt, args[0]);
+            Class cls = classFromValue(rt, args[1]);
+            NSString *selectorName = [JSI toNSString:args[2] runtime:rt];
+            return invokeSuperObject(rt, object, cls, NSSelectorFromString(selectorName),
+                                     argumentArray(rt, args, count, 3));
         }));
 
     objc.setProperty(runtime, "invoke", makeFunction(
@@ -1480,12 +2168,27 @@ static void installObjC(Runtime &runtime, Object &objc)
             }
             id object = objcValue(rt, args[0]);
             NSString *selectorName = [JSI toNSString:args[1] runtime:rt];
-            return invokeObject(rt, object, NSSelectorFromString(selectorName), arguments);
+            return invokeWithThreadPolicy(rt, object, NSSelectorFromString(selectorName), arguments,
+                                          count > 3 ? &args[3] : nullptr);
         }));
 
     objc.setProperty(runtime, "invokeSuper", makeFunction(
-        "invokeSuper", 4, runtime, [](Runtime &rt, const Value &, const Value *, size_t) -> Value {
-            throw JSError(rt, "objc.invokeSuper is not available in ABI v1");
+        "invokeSuper", 4, runtime, [](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+            if (count < 4 || !args[3].isObject() || !args[3].asObject(rt).isArray(rt))
+            {
+                throw JSError(rt, "objc.invokeSuper expects an object, class, selector, and argument array");
+            }
+            id object = objcValue(rt, args[0]);
+            Class cls = classFromValue(rt, args[1]);
+            NSString *selectorName = [JSI toNSString:args[2] runtime:rt];
+            Array array = args[3].asObject(rt).asArray(rt);
+            NSMutableArray *arguments = [NSMutableArray arrayWithCapacity:array.size(rt)];
+            for (size_t index = 0; index < array.size(rt); index++)
+            {
+                [arguments addObject:valueToObjC(rt, array.getValueAtIndex(rt, index)) ?: [NSNull null]];
+            }
+            return invokeSuperWithThreadPolicy(rt, object, cls, NSSelectorFromString(selectorName), arguments,
+                                               count > 4 ? &args[4] : nullptr);
         }));
 
     objc.setProperty(runtime, "getIvar", makeFunction("getIvar", 2, runtime, getIvar));
@@ -1523,7 +2226,7 @@ static void installObjC(Runtime &runtime, Object &objc)
             const void *key = args[1].asObject(rt).getHostObject<AssociationKeyHost>(rt)->key();
             id value = valueToObjC(rt, args[2]);
             objc_setAssociatedObject(object, key, value == [NSNull null] ? nil : value,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                                     associationPolicy(rt, count > 3 ? &args[3] : nullptr));
             return Value::undefined();
         }));
 
