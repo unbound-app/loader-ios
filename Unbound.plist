@@ -4,9 +4,9 @@
 <dict>
 	<key>Filter</key>
 	<dict>
-		<key>Executables</key>
+		<key>Bundles</key>
 		<array>
-			<string>Discord</string>
+			<string>com.hammerandchisel.discord</string>
 		</array>
 	</dict>
 </dict>
