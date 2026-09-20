@@ -25,6 +25,9 @@ for arch in ('arm64', 'arm64e'):
     platform.arch = arch
     platform.target = f'{arch}-apple-ios'
     platform.directory = f'darwin_ios_{arch}'
+    if arch == 'arm64e':
+        platform.target = 'arm64-apple-ios'
+        platform.version_min = f'{platform.version_min} -arch arm64e'
     module['copy_src_platform_files'](platform)
     module['build_target'](platform, headers)
     subprocess.check_call(['make', '-C', f'build_iphoneos-{arch}', '-j4', 'libffi.la'])
