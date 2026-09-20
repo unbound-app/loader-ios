@@ -4,9 +4,10 @@
 #import "HotReload.h"
 #import "JSI.h"
 #import "LoaderShared.h"
+#import "NativePluginBridge.h"
 #import "RCTHost.h"
 #import "Unbound.h"
-#import "UnboundNative.h"
+#import "NativePlatform.h"
 
 #import <substrate.h>
 
@@ -112,7 +113,8 @@ static void injectModulesPatch(jsi::Runtime &runtime)
 static void injectUnboundPreBundle(jsi::Runtime &runtime)
 {
     unbound::setNativePluginRuntimeExecutor(gInstance);
-    unbound::registerNativeInterop(runtime);
+    unbound::registerNativePluginBridge(runtime);
+    unbound::registerNativePlatform(runtime);
 
     if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO])
     {

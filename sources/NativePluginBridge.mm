@@ -2313,7 +2313,7 @@ void registerNativePluginBridge(Runtime &runtime)
     installFFI(runtime, ffi);
     bridge.setProperty(runtime, "ffi", std::move(ffi));
 
-    runtime.global().setProperty(runtime, "UnboundNativePlugin", std::move(bridge));
+    runtime.global().setProperty(runtime, "UnboundNative", std::move(bridge));
 }
 
 }

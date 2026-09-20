@@ -11,9 +11,6 @@
 + (NSNumber *)getAvatarCornerRadius;
 + (void)resetAvatarCornerRadius;
 + (float)getCurrentAvatarRadius;
-+ (void)setMentionAvatars:(NSDictionary<NSString *, NSArray<NSDictionary<NSString *, id> *> *> *)mentions
-             showAtSymbol:(BOOL)showAtSymbol;
-+ (void)clearMentionAvatars;
 
 + (void)setMessageBubblesEnabled:(NSNumber *)enabled;
 + (void)setMessageBubblesEnabled:(NSNumber *)enabled
