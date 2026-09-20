@@ -154,8 +154,6 @@ static void prepareUnboundLoading(id instance)
     gInstance = instance;
     gUnboundBundleIsReady = NO;
     gBundleExecutionScheduled.store(false);
-    [FileSystem init];
-    [Settings init];
     dispatch_async(dispatch_get_main_queue(), ^{ [DevOverlay refreshOverlay]; });
 
     if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES])
@@ -434,6 +432,9 @@ static void retryRCTInstanceHooks(NSUInteger attempt)
 
 %ctor
 {
+    [FileSystem init];
+    [Settings init];
+
     if (![Utilities isRNNewArchEnabled])
     {
         dispatch_async(dispatch_get_main_queue(), ^{
