@@ -9,29 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
-
-const libFFIPython = `import collections
-import runpy
-import subprocess
-
-module = runpy.run_path('generate-darwin-source-and-headers.py')
-headers = collections.defaultdict(set)
-module['copy_files']('src', 'darwin_common/src', pattern='*.c')
-module['copy_files']('include', 'darwin_common/include', pattern='*.h')
-
-for arch in ('arm64', 'arm64e'):
-    platform = type(f'ios_device_{arch}_platform', (module['ios_device_arm64_platform'],), {})
-    platform.arch = arch
-    platform.target = f'{arch}-apple-ios'
-    platform.directory = f'darwin_ios_{arch}'
-    if arch == 'arm64e':
-        platform.target = 'arm64-apple-ios'
-        platform.version_min = f'{platform.version_min} -arch arm64e'
-    module['copy_src_platform_files'](platform)
-    module['build_target'](platform, headers)
-    subprocess.check_call(['make', '-C', f'build_iphoneos-{arch}', '-j4', 'libffi.la'])
-`
 
 func runLibFFIBuild(args []string) error {
 	set := flag.NewFlagSet("libffi-build", flag.ContinueOnError)
@@ -75,7 +54,16 @@ func runLibFFIBuild(args []string) error {
 	if err := runCommand(buildPath, nil, os.Stdout, os.Stderr, "autoreconf", "-i", "-f", "-v"); err != nil {
 		return err
 	}
-	if err := runCommand(buildPath, nil, os.Stdout, os.Stderr, "python3", "-c", libFFIPython); err != nil {
+	buildMachine, err := commandOutput(buildPath, "uname", "-m")
+	if err != nil {
+		return err
+	}
+	for _, arch := range []string{"arm64", "arm64e"} {
+		if err := buildLibFFIArch(buildPath, strings.TrimSpace(string(buildMachine)), arch); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(buildPath, "include"), 0o755); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
@@ -99,6 +87,26 @@ func runLibFFIBuild(args []string) error {
 		}
 	}
 	return nil
+}
+
+func buildLibFFIArch(root, buildMachine, arch string) error {
+	buildDirectory := filepath.Join(root, "build_iphoneos-"+arch)
+	if err := os.MkdirAll(buildDirectory, 0o755); err != nil {
+		return err
+	}
+	configure := exec.Command("../configure", "--host=arm64-apple-ios", "--build="+buildMachine+"-apple-darwin")
+	configure.Dir = buildDirectory
+	configure.Env = append(os.Environ(),
+		"CC=xcrun -sdk iphoneos clang -target arm64-apple-ios",
+		"LD=xcrun -sdk iphoneos ld -target arm64-apple-ios",
+		"CFLAGS=-miphoneos-version-min=7.0 -fembed-bitcode -arch "+arch,
+	)
+	configure.Stdout = os.Stdout
+	configure.Stderr = os.Stderr
+	if err := configure.Run(); err != nil {
+		return fmt.Errorf("configure %s failed: %w", arch, err)
+	}
+	return runCommand(root, nil, os.Stdout, os.Stderr, "make", "-C", buildDirectory, "-j4", "libffi.la")
 }
 
 func commandOutput(dir, name string, args ...string) ([]byte, error) {
