@@ -14,6 +14,7 @@
 #import <mutex>
 #import <sstream>
 #import <string>
+#import <thread>
 #import <unordered_map>
 #import <vector>
 
@@ -93,19 +94,58 @@ private:
     __strong id value_;
 };
 
+struct FFITypeDefinition {
+    ffi_type type{};
+    std::vector<ffi_type *> elements;
+};
+
+struct FFITypeSpec {
+    std::string name;
+    ffi_type *type;
+};
+
+struct FFISignature {
+    FFITypeSpec result;
+    std::vector<FFITypeSpec> arguments;
+};
+
+struct FFICallArgument {
+    std::vector<uint8_t> bytes;
+    std::string string;
+    id object;
+    void *pointer;
+};
+
+struct HookSignature {
+    FFITypeSpec result;
+    std::vector<FFITypeSpec> arguments;
+    std::vector<ffi_type *> argumentTypes;
+    ffi_cif cif{};
+};
+
 struct HookState;
+struct HookDispatcher;
 
 struct HookDispatcher {
     Class cls;
     SEL selector;
     IMP original;
+    std::shared_ptr<HookSignature> signature;
+    ffi_closure *closure = nullptr;
+    void *code = nullptr;
     std::vector<std::shared_ptr<HookState>> hooks;
+    std::atomic_uint activeCalls{0};
+    std::atomic_bool retired{false};
+    std::atomic_bool closureReleased{false};
 };
 
 struct HookState {
     uint64_t identifier;
+    std::shared_ptr<Function> before;
     std::shared_ptr<Function> after;
+    std::shared_ptr<Function> replace;
     std::weak_ptr<HookDispatcher> dispatcher;
+    bool once = false;
     std::atomic_bool active{true};
 };
 
@@ -129,36 +169,17 @@ static std::mutex gHookMutex;
 static std::unordered_map<std::string, std::shared_ptr<HookDispatcher>> gDispatchers;
 static std::atomic_uint64_t gNextHookIdentifier{1};
 static __weak id gRuntimeExecutorInstance = nil;
-
-struct FFITypeDefinition {
-    ffi_type type{};
-    std::vector<ffi_type *> elements;
-};
-
-struct FFITypeSpec {
-    std::string name;
-    ffi_type *type;
-};
-
-struct FFISignature {
-    FFITypeSpec result;
-    std::vector<FFITypeSpec> arguments;
-};
-
-struct FFICallArgument {
-    std::vector<uint8_t> bytes;
-    std::string string;
-    id object;
-    void *pointer;
-};
+static Runtime *gNativePluginRuntime = nullptr;
+static std::thread::id gNativePluginRuntimeThread;
 
 static FFITypeSpec ffiType(Runtime &runtime, const std::string &name);
 static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vector<uint8_t> &bytes);
+static void releaseHookClosure(const std::shared_ptr<HookDispatcher> &dispatcher);
+static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
+static Value makeHook(Runtime &runtime, const Value *args, size_t count);
 
 static std::mutex gFFIMutex;
 static std::unordered_map<std::string, std::shared_ptr<FFITypeDefinition>> gFFITypes;
-
-static void dispatchVoidHook(id object, SEL selector);
 
 static Value makeFunction(const char *name, unsigned int argCount, Runtime &runtime,
                           const HostFunctionType &handler)
@@ -1177,93 +1198,28 @@ static void removeHook(const std::shared_ptr<HookState> &state)
         return;
     }
 
-    std::lock_guard<std::mutex> lock(gHookMutex);
-    auto iterator = std::find(dispatcher->hooks.begin(), dispatcher->hooks.end(), state);
-    if (iterator != dispatcher->hooks.end())
-    {
-        dispatcher->hooks.erase(iterator);
-    }
-
-    if (!dispatcher->hooks.empty())
-    {
-        return;
-    }
-
-    Method method = class_getInstanceMethod(dispatcher->cls, dispatcher->selector);
-    if (method && method_getImplementation(method) == (IMP) dispatchVoidHook)
-    {
-        method_setImplementation(method, dispatcher->original);
-    }
-
-    gDispatchers.erase(hookKey(dispatcher->cls, dispatcher->selector));
-}
-
-static void dispatchVoidHook(id object, SEL selector)
-{
-    std::shared_ptr<HookDispatcher> dispatcher;
+    bool retired = false;
     {
         std::lock_guard<std::mutex> lock(gHookMutex);
-        auto iterator = gDispatchers.find(hookKey(object_getClass(object), selector));
-        if (iterator == gDispatchers.end())
+        auto iterator = std::find(dispatcher->hooks.begin(), dispatcher->hooks.end(), state);
+        if (iterator != dispatcher->hooks.end())
         {
-            Class cls = object_getClass(object);
-            while (cls && iterator == gDispatchers.end())
+            dispatcher->hooks.erase(iterator);
+        }
+
+        if (dispatcher->hooks.empty() && !dispatcher->retired.exchange(true))
+        {
+            Method method = class_getInstanceMethod(dispatcher->cls, dispatcher->selector);
+            if (method && method_getImplementation(method) == (IMP) dispatcher->code)
             {
-                iterator = gDispatchers.find(hookKey(cls, selector));
-                cls = class_getSuperclass(cls);
+                method_setImplementation(method, dispatcher->original);
             }
-        }
-        if (iterator != gDispatchers.end())
-        {
-            dispatcher = iterator->second;
+            gDispatchers.erase(hookKey(dispatcher->cls, dispatcher->selector));
+            retired = true;
         }
     }
 
-    if (dispatcher && dispatcher->original)
-    {
-        ((void (*)(id, SEL)) dispatcher->original)(object, selector);
-    }
-
-    if (!dispatcher || !gRuntimeExecutorInstance)
-    {
-        return;
-    }
-
-    std::vector<std::shared_ptr<HookState>> hooks;
-    {
-        std::lock_guard<std::mutex> lock(gHookMutex);
-        hooks = dispatcher->hooks;
-    }
-
-    for (const std::shared_ptr<HookState> &state : hooks)
-    {
-        if (!state->active || !state->after)
-        {
-            continue;
-        }
-
-        id retainedObject = object;
-        std::shared_ptr<Function> callback = state->after;
-        [gRuntimeExecutorInstance callFunctionOnBufferedRuntimeExecutor:
-            [retainedObject, selector, callback](Runtime &runtime) {
-                try
-                {
-                    Object context(runtime);
-                    context.setProperty(runtime, "self",
-                                        Object::createFromHostObject(
-                                            runtime, std::make_shared<ObjCHandleHost>(retainedObject)));
-                    context.setProperty(runtime, "selector",
-                                        String::createFromUtf8(runtime, sel_getName(selector)));
-                    context.setProperty(runtime, "args", Array(runtime, 0));
-                    callback->call(runtime, context);
-                }
-                catch (const std::exception &exception)
-                {
-                    [Logger error:LOG_CATEGORY_PLUGINS
-                            format:@"Native plugin hook failed: %s", exception.what()];
-                }
-            }];
-    }
+    if (retired) releaseHookClosure(dispatcher);
 }
 
 Value HookTokenHost::get(Runtime &runtime, const PropNameID &name)
@@ -1284,67 +1240,6 @@ Value HookTokenHost::get(Runtime &runtime, const PropNameID &name)
         return Value(state_ && state_->active.load());
     }
     return Value::undefined();
-}
-
-static Value makeHook(Runtime &runtime, const Value *args, size_t count)
-{
-    if (count < 3 || !args[0].isString() || !args[1].isString() || !args[2].isObject())
-    {
-        throw JSError(runtime, "objc.hook expects a class, selector, and handlers");
-    }
-
-    NSString *className = [JSI toNSString:args[0] runtime:runtime];
-    NSString *selectorName = [JSI toNSString:args[1] runtime:runtime];
-    Class cls = NSClassFromString(className);
-    SEL selector = NSSelectorFromString(selectorName);
-    Method method = class_getInstanceMethod(cls, selector);
-    if (!cls || !method)
-    {
-        throw JSError(runtime, "Objective-C hook target is unavailable");
-    }
-
-    const char *encoding = method_getTypeEncoding(method);
-    if (normalizedType(encoding) != 'v' || method_getNumberOfArguments(method) != 2)
-    {
-        throw JSError(runtime, "v@:-only hooks are supported in native plugin ABI v1");
-    }
-
-    Object handlers = args[2].asObject(runtime);
-    Value afterValue = handlers.getProperty(runtime, "after");
-    if (!afterValue.isObject() || !afterValue.asObject(runtime).isFunction(runtime))
-    {
-        throw JSError(runtime, "objc.hook requires an after handler for v@ selectors");
-    }
-
-    std::shared_ptr<HookDispatcher> dispatcher;
-    std::string key = hookKey(cls, selector);
-    {
-        std::lock_guard<std::mutex> lock(gHookMutex);
-        auto iterator = gDispatchers.find(key);
-        if (iterator == gDispatchers.end())
-        {
-            dispatcher = std::make_shared<HookDispatcher>();
-            dispatcher->cls = cls;
-            dispatcher->selector = selector;
-            dispatcher->original = method_getImplementation(method);
-            method_setImplementation(method, (IMP) dispatchVoidHook);
-            gDispatchers[key] = dispatcher;
-        }
-        else
-        {
-            dispatcher = iterator->second;
-        }
-    }
-
-    auto state = std::make_shared<HookState>();
-    state->identifier = gNextHookIdentifier.fetch_add(1);
-    state->after = std::make_shared<Function>(afterValue.asObject(runtime).getFunction(runtime));
-    state->dispatcher = dispatcher;
-    {
-        std::lock_guard<std::mutex> lock(gHookMutex);
-        dispatcher->hooks.push_back(state);
-    }
-    return Object::createFromHostObject(runtime, std::make_shared<HookTokenHost>(state));
 }
 
 static const char *structEncoding(const std::string &name)
@@ -1667,6 +1562,195 @@ static void setFFIArgument(Runtime &runtime, const Value &value, const FFITypeSp
     setFFIScalar(runtime, value, spec.name, argument);
 }
 
+struct HookInvocation {
+    std::shared_ptr<HookDispatcher> dispatcher;
+    std::vector<std::vector<uint8_t>> arguments;
+    std::vector<uint8_t> originalResult;
+    std::atomic_bool originalRequested{false};
+};
+
+struct RuntimeCallState {
+    explicit RuntimeCallState(std::function<void(Runtime &)> callback)
+        : callback(std::move(callback)), semaphore(dispatch_semaphore_create(0))
+    {
+    }
+
+    std::function<void(Runtime &)> callback;
+    std::exception_ptr failure;
+    dispatch_semaphore_t semaphore;
+};
+
+static std::shared_ptr<HookInvocation> hookInvocation(const std::shared_ptr<HookDispatcher> &dispatcher,
+                                                      void **arguments)
+{
+    auto invocation = std::make_shared<HookInvocation>();
+    invocation->dispatcher = dispatcher;
+    invocation->arguments.reserve(dispatcher->signature->arguments.size());
+    for (const FFITypeSpec &spec : dispatcher->signature->arguments)
+    {
+        size_t size = std::max<size_t>(spec.type->size, sizeof(void *));
+        invocation->arguments.emplace_back(size);
+        if (spec.type->size)
+        {
+            memcpy(invocation->arguments.back().data(), arguments[invocation->arguments.size() - 1],
+                   spec.type->size);
+        }
+    }
+    return invocation;
+}
+
+static void copyHookResult(const std::shared_ptr<HookInvocation> &invocation, void *returnValue)
+{
+    if (invocation->dispatcher->signature->result.name == "void" || !returnValue)
+    {
+        invocation->originalResult.clear();
+        return;
+    }
+
+    size_t size = std::max<size_t>(invocation->dispatcher->signature->result.type->size, sizeof(void *));
+    invocation->originalResult.resize(size);
+    memcpy(invocation->originalResult.data(), returnValue,
+           invocation->dispatcher->signature->result.type->size);
+}
+
+static Object hookContext(Runtime &runtime, const std::shared_ptr<HookInvocation> &invocation,
+                          id object, SEL selector)
+{
+    Object context(runtime);
+    context.setProperty(runtime, "self",
+                        Object::createFromHostObject(runtime, std::make_shared<ObjCHandleHost>(object)));
+    context.setProperty(runtime, "selector",
+                        String::createFromUtf8(runtime, sel_getName(selector)));
+
+    size_t explicitCount = invocation->dispatcher->signature->arguments.size() - 2;
+    Array values(runtime, explicitCount);
+    for (size_t index = 0; index < explicitCount; index++)
+    {
+        values.setValueAtIndex(
+            runtime, index,
+            ffiResult(runtime, invocation->dispatcher->signature->arguments[index + 2],
+                      invocation->arguments[index + 2]));
+    }
+    context.setProperty(runtime, "args", std::move(values));
+
+    auto original = invocation;
+    context.setProperty(
+        runtime, "original",
+        Function::createFromHostFunction(
+            runtime, PropNameID::forUtf8(runtime, "original"), 0,
+            [original](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+                original->originalRequested.store(true);
+                if (original->originalResult.empty() &&
+                    original->dispatcher->signature->result.name != "void")
+                {
+                    return Value::undefined();
+                }
+                return ffiResult(rt, original->dispatcher->signature->result, original->originalResult);
+            }));
+    return context;
+}
+
+static bool executeRuntimeSynchronously(std::function<void(Runtime &)> callback)
+{
+    id instance = gRuntimeExecutorInstance;
+    if (!instance)
+    {
+        return false;
+    }
+
+    if (gNativePluginRuntime && std::this_thread::get_id() == gNativePluginRuntimeThread)
+    {
+        callback(*gNativePluginRuntime);
+        return true;
+    }
+
+    auto state = std::make_shared<RuntimeCallState>(std::move(callback));
+    [instance callFunctionOnBufferedRuntimeExecutor:[state](Runtime &runtime) {
+        @autoreleasepool
+        {
+            try
+            {
+                state->callback(runtime);
+            }
+            catch (...)
+            {
+                state->failure = std::current_exception();
+            }
+            dispatch_semaphore_signal(state->semaphore);
+        }
+    }];
+
+    if (dispatch_semaphore_wait(state->semaphore,
+                                dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC)) != 0)
+    {
+        return false;
+    }
+    if (state->failure)
+    {
+        std::rethrow_exception(state->failure);
+    }
+    return true;
+}
+
+static void executeRuntimeAsynchronously(std::function<void(Runtime &)> callback)
+{
+    id instance = gRuntimeExecutorInstance;
+    if (!instance)
+    {
+        return;
+    }
+
+    [instance callFunctionOnBufferedRuntimeExecutor:[callback = std::move(callback)](Runtime &runtime) {
+        @autoreleasepool
+        {
+            try
+            {
+                callback(runtime);
+            }
+            catch (const std::exception &exception)
+            {
+                [Logger error:LOG_CATEGORY_PLUGINS
+                        format:@"Native plugin hook failed: %s", exception.what()];
+            }
+        }
+    }];
+}
+
+static void invokeHookOriginal(const std::shared_ptr<HookDispatcher> &dispatcher, void **arguments,
+                               void *returnValue)
+{
+    ffi_call(&dispatcher->signature->cif, reinterpret_cast<void (*)(void)>(dispatcher->original),
+             dispatcher->signature->result.name == "void" ? nullptr : returnValue, arguments);
+}
+
+static bool setHookReturn(Runtime &runtime, const FFITypeSpec &spec, const Value &value,
+                          void *returnValue)
+{
+    if (spec.name == "void")
+    {
+        return true;
+    }
+    if (!returnValue)
+    {
+        return false;
+    }
+
+    FFICallArgument argument{};
+    setFFIArgument(runtime, value, spec, argument);
+    if (spec.name == "cstring" || spec.name == "pointer" || spec.name == "object" ||
+        spec.name == "class" || spec.name == "selector")
+    {
+        memcpy(returnValue, &argument.pointer, sizeof(argument.pointer));
+        return true;
+    }
+    if (argument.bytes.size() < spec.type->size)
+    {
+        return false;
+    }
+    memcpy(returnValue, argument.bytes.data(), spec.type->size);
+    return true;
+}
+
 static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vector<uint8_t> &bytes)
 {
     if (spec.name == "void")
@@ -1814,6 +1898,315 @@ static Value ffiCallValue(Runtime &runtime, const Value *args, size_t count)
         throw JSError(runtime, "Native FFI argument count does not match the signature");
     }
     return ffiCall(runtime, address, signature, args + 2);
+}
+
+static void releaseHookClosure(const std::shared_ptr<HookDispatcher> &dispatcher)
+{
+    if (!dispatcher || !dispatcher->retired || dispatcher->activeCalls.load() != 0 ||
+        dispatcher->closureReleased.exchange(true))
+    {
+        return;
+    }
+
+    ffi_closure *closure = dispatcher->closure;
+    dispatcher->closure = nullptr;
+    if (closure)
+    {
+        ffi_closure_free(closure);
+    }
+}
+
+static std::shared_ptr<HookDispatcher> findHookDispatcher(id object, SEL selector)
+{
+    std::lock_guard<std::mutex> lock(gHookMutex);
+    auto iterator = gDispatchers.find(hookKey(object_getClass(object), selector));
+    if (iterator == gDispatchers.end())
+    {
+        Class cls = object_getClass(object);
+        while (cls && iterator == gDispatchers.end())
+        {
+            iterator = gDispatchers.find(hookKey(cls, selector));
+            cls = class_getSuperclass(cls);
+        }
+    }
+    if (iterator == gDispatchers.end())
+    {
+        return nullptr;
+    }
+
+    iterator->second->activeCalls.fetch_add(1);
+    return iterator->second;
+}
+
+struct HookCallGuard {
+    explicit HookCallGuard(std::shared_ptr<HookDispatcher> dispatcher)
+        : dispatcher(std::move(dispatcher))
+    {
+    }
+
+    ~HookCallGuard()
+    {
+        if (dispatcher->activeCalls.fetch_sub(1) == 1)
+        {
+            releaseHookClosure(dispatcher);
+        }
+    }
+
+    std::shared_ptr<HookDispatcher> dispatcher;
+};
+
+static void logHookFailure(const std::exception &exception)
+{
+    [Logger error:LOG_CATEGORY_PLUGINS format:@"Native plugin hook failed: %s", exception.what()];
+}
+
+static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, void *userData)
+{
+    __unsafe_unretained id object = nil;
+    memcpy(&object, arguments[0], sizeof(object));
+    SEL selector = *reinterpret_cast<SEL *>(arguments[1]);
+    auto dispatcher = findHookDispatcher(object, selector);
+    if (!dispatcher)
+    {
+        return;
+    }
+
+    HookCallGuard guard(dispatcher);
+    if (dispatcher.get() != userData)
+    {
+        return;
+    }
+    auto invocation = hookInvocation(dispatcher, arguments);
+
+    std::vector<std::shared_ptr<HookState>> hooks;
+    {
+        std::lock_guard<std::mutex> lock(gHookMutex);
+        hooks = dispatcher->hooks;
+    }
+
+    bool replacementApplied = false;
+    bool originalCalled = false;
+    std::vector<std::shared_ptr<HookState>> onceHooks;
+
+    for (const std::shared_ptr<HookState> &state : hooks)
+    {
+        if (!state->active)
+        {
+            continue;
+        }
+
+        if (state->before)
+        {
+            try
+            {
+                executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
+                    Object context = hookContext(runtime, invocation, object, selector);
+                    state->before->call(runtime, context);
+                });
+            }
+            catch (const std::exception &exception)
+            {
+                logHookFailure(exception);
+            }
+        }
+
+        if (invocation->originalRequested.exchange(false) && !originalCalled)
+        {
+            invokeHookOriginal(dispatcher, arguments, returnValue);
+            copyHookResult(invocation, returnValue);
+            originalCalled = true;
+        }
+
+        if (state->replace)
+        {
+            try
+            {
+                bool completed = executeRuntimeSynchronously(
+                    [invocation, object, selector, state, returnValue](Runtime &runtime) {
+                        Object context = hookContext(runtime, invocation, object, selector);
+                        Value result = state->replace->call(runtime, context);
+                        if (!setHookReturn(runtime, invocation->dispatcher->signature->result, result,
+                                           returnValue))
+                        {
+                            throw JSError(runtime, "Native hook replacement returned an unsupported value");
+                        }
+                    });
+                if (completed)
+                {
+                    replacementApplied = true;
+                    copyHookResult(invocation, returnValue);
+                }
+            }
+            catch (const std::exception &exception)
+            {
+                logHookFailure(exception);
+            }
+        }
+
+        if (state->once)
+        {
+            onceHooks.push_back(state);
+        }
+    }
+
+    if (!originalCalled && !replacementApplied)
+    {
+        invokeHookOriginal(dispatcher, arguments, returnValue);
+        copyHookResult(invocation, returnValue);
+    }
+
+    for (const std::shared_ptr<HookState> &state : hooks)
+    {
+        if (!state->active || !state->after)
+        {
+            continue;
+        }
+
+        std::shared_ptr<Function> callback = state->after;
+        executeRuntimeAsynchronously([invocation, object, selector, callback](Runtime &runtime) {
+            Object context = hookContext(runtime, invocation, object, selector);
+            callback->call(runtime, context);
+        });
+    }
+
+    for (const std::shared_ptr<HookState> &state : onceHooks)
+    {
+        removeHook(state);
+    }
+}
+
+static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, void *userData)
+{
+    @autoreleasepool
+    {
+        dispatchFFIHookBody(cif, returnValue, arguments, userData);
+    }
+}
+
+static Value makeHook(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count < 3 || !args[0].isString() || !args[1].isString() || !args[2].isObject())
+    {
+        throw JSError(runtime, "objc.hook expects a class, selector, and handlers");
+    }
+
+    NSString *className = [JSI toNSString:args[0] runtime:runtime];
+    NSString *selectorName = [JSI toNSString:args[1] runtime:runtime];
+    Class cls = NSClassFromString(className);
+    SEL selector = NSSelectorFromString(selectorName);
+    Method method = class_getInstanceMethod(cls, selector);
+    if (!cls || !method)
+    {
+        throw JSError(runtime, "Objective-C hook target is unavailable");
+    }
+
+    NSMethodSignature *methodSignature =
+        [NSMethodSignature signatureWithObjCTypes:method_getTypeEncoding(method)];
+    auto signature = std::make_shared<HookSignature>();
+    std::string resultName = nativeFFITypeName(methodSignature.methodReturnType);
+    if (resultName.empty())
+    {
+        throw JSError(runtime, "Unsupported native hook return type encoding");
+    }
+    signature->result = ffiType(runtime, resultName);
+    for (NSUInteger index = 0; index < methodSignature.numberOfArguments; index++)
+    {
+        std::string name = nativeFFITypeName([methodSignature getArgumentTypeAtIndex:index]);
+        if (name.empty())
+        {
+            throw JSError(runtime, "Unsupported native hook argument type encoding");
+        }
+        signature->arguments.push_back(ffiType(runtime, name));
+        signature->argumentTypes.push_back(signature->arguments.back().type);
+    }
+    if (ffi_prep_cif(&signature->cif, FFI_DEFAULT_ABI,
+                     (unsigned) signature->argumentTypes.size(), signature->result.type,
+                     signature->argumentTypes.data()) != FFI_OK)
+    {
+        throw JSError(runtime, "Native hook signature could not be prepared");
+    }
+
+    Object handlers = args[2].asObject(runtime);
+    auto functionFor = [&](const char *name) -> std::shared_ptr<Function> {
+        Value value = handlers.getProperty(runtime, name);
+        if (value.isUndefined() || value.isNull())
+        {
+            return nullptr;
+        }
+        if (!value.isObject() || !value.asObject(runtime).isFunction(runtime))
+        {
+            throw JSError(runtime, "Native hook handlers must be functions");
+        }
+        return std::make_shared<Function>(value.asObject(runtime).getFunction(runtime));
+    };
+
+    std::shared_ptr<Function> before = functionFor("before");
+    std::shared_ptr<Function> after = functionFor("after");
+    std::shared_ptr<Function> replace = functionFor("replace");
+    if (!before && !after && !replace)
+    {
+        throw JSError(runtime, "objc.hook requires at least one handler");
+    }
+
+    bool once = false;
+    if (count > 3 && args[3].isObject())
+    {
+        Value onceValue = args[3].asObject(runtime).getProperty(runtime, "once");
+        once = onceValue.isBool() && onceValue.getBool();
+    }
+
+    std::shared_ptr<HookDispatcher> dispatcher;
+    std::string key = hookKey(cls, selector);
+    {
+        std::lock_guard<std::mutex> lock(gHookMutex);
+        auto iterator = gDispatchers.find(key);
+        if (iterator == gDispatchers.end())
+        {
+            dispatcher = std::make_shared<HookDispatcher>();
+            dispatcher->cls = cls;
+            dispatcher->selector = selector;
+            dispatcher->original = method_getImplementation(method);
+            dispatcher->signature = signature;
+            dispatcher->closure = (ffi_closure *) ffi_closure_alloc(sizeof(ffi_closure),
+                                                                      &dispatcher->code);
+            if (!dispatcher->closure ||
+                ffi_prep_closure_loc(dispatcher->closure, &dispatcher->signature->cif,
+                                     dispatchFFIHook, dispatcher.get(), dispatcher->code) != FFI_OK)
+            {
+                if (dispatcher->closure) ffi_closure_free(dispatcher->closure);
+                throw JSError(runtime, "Native hook closure could not be prepared");
+            }
+            method_setImplementation(method, (IMP) dispatcher->code);
+            gDispatchers[key] = dispatcher;
+        }
+        else
+        {
+            dispatcher = iterator->second;
+            if (dispatcher->signature->result.name != signature->result.name ||
+                dispatcher->signature->arguments.size() != signature->arguments.size())
+            {
+                throw JSError(runtime, "Native hook signature changed while hooks are active");
+            }
+            if (method_getImplementation(method) != (IMP) dispatcher->code)
+            {
+                dispatcher->original = method_getImplementation(method);
+                method_setImplementation(method, (IMP) dispatcher->code);
+            }
+        }
+    }
+
+    auto state = std::make_shared<HookState>();
+    state->identifier = gNextHookIdentifier.fetch_add(1);
+    state->before = std::move(before);
+    state->after = std::move(after);
+    state->replace = std::move(replace);
+    state->once = once;
+    state->dispatcher = dispatcher;
+    {
+        std::lock_guard<std::mutex> lock(gHookMutex);
+        dispatcher->hooks.push_back(state);
+    }
+    return Object::createFromHostObject(runtime, std::make_shared<HookTokenHost>(state));
 }
 
 static Value ffiSymbol(Runtime &runtime, const Value *args, size_t count)
@@ -2351,6 +2744,8 @@ void setNativePluginRuntimeExecutor(id instance)
 
 void registerNativePluginBridge(Runtime &runtime)
 {
+    gNativePluginRuntime = &runtime;
+    gNativePluginRuntimeThread = std::this_thread::get_id();
     Object bridge(runtime);
     bridge.setProperty(runtime, "apiVersion", String::createFromUtf8(runtime, kNativePluginApiVersion));
     bridge.setProperty(runtime, "abiVersion", String::createFromUtf8(runtime, kNativePluginAbiVersion));

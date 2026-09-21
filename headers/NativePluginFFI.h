@@ -38,6 +38,14 @@ typedef struct {
     unsigned aarch64_nfixedargs;
 } ffi_cif;
 
+typedef struct {
+    void *trampoline_table;
+    void *trampoline_table_entry;
+    ffi_cif *cif;
+    void (*fun)(ffi_cif *, void *, void **, void *);
+    void *user_data;
+} ffi_closure;
+
 enum {
     FFI_TYPE_VOID = 0,
     FFI_TYPE_INT = 1,
@@ -71,6 +79,11 @@ extern ffi_type ffi_type_pointer;
 ffi_status ffi_prep_cif(ffi_cif *cif, ffi_abi abi, unsigned int nargs, ffi_type *rtype,
                         ffi_type **atypes);
 void ffi_call(ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue);
+void *ffi_closure_alloc(size_t size, void **code);
+void ffi_closure_free(void *closure);
+ffi_status ffi_prep_closure_loc(ffi_closure *closure, ffi_cif *cif,
+                                void (*fun)(ffi_cif *, void *, void **, void *), void *user_data,
+                                void *codeloc);
 
 #ifdef __cplusplus
 }
