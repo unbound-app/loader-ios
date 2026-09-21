@@ -176,6 +176,7 @@ static FFITypeSpec ffiType(Runtime &runtime, const std::string &name);
 static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vector<uint8_t> &bytes);
 static void releaseHookClosure(const std::shared_ptr<HookDispatcher> &dispatcher);
 static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
+static void dispatchVoidHook(id object, SEL selector);
 static Value makeHook(Runtime &runtime, const Value *args, size_t count);
 
 static std::mutex gFFIMutex;
@@ -2083,6 +2084,118 @@ static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, v
     }
 }
 
+static void dispatchVoidHook(id object, SEL selector)
+{
+    @autoreleasepool
+    {
+        auto dispatcher = findHookDispatcher(object, selector);
+        if (!dispatcher)
+        {
+            return;
+        }
+
+        HookCallGuard guard(dispatcher);
+        void *arguments[] = {&object, &selector};
+        auto invocation = hookInvocation(dispatcher, arguments);
+
+        std::vector<std::shared_ptr<HookState>> hooks;
+        {
+            std::lock_guard<std::mutex> lock(gHookMutex);
+            hooks = dispatcher->hooks;
+        }
+
+        bool replacementApplied = false;
+        bool originalCalled = false;
+        std::vector<std::shared_ptr<HookState>> onceHooks;
+
+        for (const std::shared_ptr<HookState> &state : hooks)
+        {
+            if (!state->active)
+            {
+                continue;
+            }
+
+            if (state->before)
+            {
+                try
+                {
+                    executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
+                        Object context = hookContext(runtime, invocation, object, selector);
+                        state->before->call(runtime, context);
+                    });
+                }
+                catch (const std::exception &exception)
+                {
+                    logHookFailure(exception);
+                }
+            }
+
+            if (invocation->originalRequested.exchange(false) && !originalCalled)
+            {
+                invokeHookOriginal(dispatcher, arguments, nullptr);
+                copyHookResult(invocation, nullptr);
+                originalCalled = true;
+            }
+
+            if (state->replace)
+            {
+                try
+                {
+                    bool completed = executeRuntimeSynchronously(
+                        [invocation, object, selector, state](Runtime &runtime) {
+                            Object context = hookContext(runtime, invocation, object, selector);
+                            Value result = state->replace->call(runtime, context);
+                            if (!setHookReturn(runtime, invocation->dispatcher->signature->result, result,
+                                               nullptr))
+                            {
+                                throw JSError(runtime, "Native hook replacement returned an unsupported value");
+                            }
+                        });
+                    if (completed)
+                    {
+                        replacementApplied = true;
+                        copyHookResult(invocation, nullptr);
+                    }
+                }
+                catch (const std::exception &exception)
+                {
+                    logHookFailure(exception);
+                }
+            }
+
+            if (state->once)
+            {
+                onceHooks.push_back(state);
+            }
+        }
+
+        if (!originalCalled && !replacementApplied)
+        {
+            invokeHookOriginal(dispatcher, arguments, nullptr);
+            copyHookResult(invocation, nullptr);
+        }
+
+        for (const std::shared_ptr<HookState> &state : hooks)
+        {
+            if (!state->active || !state->after)
+            {
+                continue;
+            }
+
+            std::shared_ptr<Function> callback = state->after;
+            executeRuntimeAsynchronously([invocation, object, selector, callback](Runtime &runtime) {
+                Object context = hookContext(runtime, invocation, object, selector);
+                callback->call(runtime, context);
+            });
+        }
+
+        for (const std::shared_ptr<HookState> &state : onceHooks)
+        {
+            removeHook(state);
+        }
+    }
+}
+
 static Value makeHook(Runtime &runtime, const Value *args, size_t count)
 {
     if (count < 3 || !args[0].isString() || !args[1].isString() || !args[2].isObject())
@@ -2167,14 +2280,21 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
             dispatcher->selector = selector;
             dispatcher->original = method_getImplementation(method);
             dispatcher->signature = signature;
-            dispatcher->closure = (ffi_closure *) ffi_closure_alloc(sizeof(ffi_closure),
-                                                                      &dispatcher->code);
-            if (!dispatcher->closure ||
-                ffi_prep_closure_loc(dispatcher->closure, &dispatcher->signature->cif,
-                                     dispatchFFIHook, dispatcher.get(), dispatcher->code) != FFI_OK)
+            if (signature->result.name == "void" && signature->arguments.size() == 2)
             {
-                if (dispatcher->closure) ffi_closure_free(dispatcher->closure);
-                throw JSError(runtime, "Native hook closure could not be prepared");
+                dispatcher->code = (void *) dispatchVoidHook;
+            }
+            else
+            {
+                dispatcher->closure = (ffi_closure *) ffi_closure_alloc(sizeof(ffi_closure),
+                                                                          &dispatcher->code);
+                if (!dispatcher->closure ||
+                    ffi_prep_closure_loc(dispatcher->closure, &dispatcher->signature->cif,
+                                         dispatchFFIHook, dispatcher.get(), dispatcher->code) != FFI_OK)
+                {
+                    if (dispatcher->closure) ffi_closure_free(dispatcher->closure);
+                    throw JSError(runtime, "Native hook closure could not be prepared");
+                }
             }
             method_setImplementation(method, (IMP) dispatcher->code);
             gDispatchers[key] = dispatcher;

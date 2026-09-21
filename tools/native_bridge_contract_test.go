@@ -47,6 +47,7 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"ffi_closure_alloc",
 		"ffi_prep_closure_loc",
 		"dispatchFFIHook",
+		"dispatchVoidHook",
 		"invokeHookOriginal",
 	} {
 		if !strings.Contains(sourceText, symbol) {
