@@ -1,6 +1,7 @@
 #import "NativePluginBridge.h"
 
 #import <dlfcn.h>
+#import <mach/mach.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -201,6 +202,28 @@ static Value makeFunction(const char *name, unsigned int argCount, Runtime &runt
 static std::string hookKey(Class cls, SEL selector)
 {
     return std::string(class_getName(cls)) + ":" + sel_getName(selector);
+}
+
+static bool isExecutableAddress(void *address)
+{
+    if (!address)
+    {
+        return false;
+    }
+
+    vm_address_t region = reinterpret_cast<vm_address_t>(address);
+    vm_size_t size = 0;
+    vm_region_basic_info_data_64_t info{};
+    mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+    mach_port_t object = MACH_PORT_NULL;
+    kern_return_t result = vm_region_64(
+        mach_task_self(), &region, &size, VM_REGION_BASIC_INFO_64,
+        reinterpret_cast<vm_region_info_t>(&info), &count, &object);
+    if (object != MACH_PORT_NULL)
+    {
+        mach_port_deallocate(mach_task_self(), object);
+    }
+    return result == KERN_SUCCESS && (info.protection & VM_PROT_EXECUTE) != 0;
 }
 
 static char normalizedType(const char *type)
@@ -2280,20 +2303,24 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
             dispatcher->selector = selector;
             dispatcher->original = method_getImplementation(method);
             dispatcher->signature = signature;
-            if (signature->result.name == "void" && signature->arguments.size() == 2)
+            if (signature->result.name == "void")
             {
+                if (signature->arguments.size() != 2)
+                {
+                    throw JSError(runtime, "Native hook signature is unsupported on this device");
+                }
                 dispatcher->code = (void *) dispatchVoidHook;
             }
             else
             {
                 dispatcher->closure = (ffi_closure *) ffi_closure_alloc(sizeof(ffi_closure),
                                                                           &dispatcher->code);
-                if (!dispatcher->closure ||
+                if (!dispatcher->closure || !isExecutableAddress(dispatcher->code) ||
                     ffi_prep_closure_loc(dispatcher->closure, &dispatcher->signature->cif,
                                          dispatchFFIHook, dispatcher.get(), dispatcher->code) != FFI_OK)
                 {
                     if (dispatcher->closure) ffi_closure_free(dispatcher->closure);
-                    throw JSError(runtime, "Native hook closure could not be prepared");
+                    throw JSError(runtime, "Native hook closure is unavailable on this device");
                 }
             }
             method_setImplementation(method, (IMP) dispatcher->code);
