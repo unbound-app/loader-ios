@@ -564,9 +564,15 @@ static void setInvocationArgument(Runtime &runtime, NSInvocation *invocation, NS
 
     if (code == '@')
     {
-        retained.push_back(object == [NSNull null] ? nil : object);
-        id argument = retained.back();
-        [invocation setArgument:&argument atIndex:index];
+        id argument = object == [NSNull null] ? nil : object;
+        if ([object isKindOfClass:[NSValue class]] &&
+            strncmp([(NSValue *) object objCType], "^", 1) == 0)
+        {
+            argument = (__bridge id) [(NSValue *) object pointerValue];
+        }
+        retained.push_back(argument);
+        id retainedArgument = retained.back();
+        [invocation setArgument:&retainedArgument atIndex:index];
         return;
     }
 
