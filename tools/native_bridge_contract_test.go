@@ -48,10 +48,14 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"ffi_prep_closure_loc",
 		"dispatchFFIHook",
 		"dispatchVoidHook",
+		"isExecutableAddress",
 		"invokeHookOriginal",
 	} {
 		if !strings.Contains(sourceText, symbol) {
 			t.Fatalf("native hook symbol %q is missing from the loader", symbol)
 		}
+	}
+	if !strings.Contains(sourceText, "Native hook closure is unavailable on this device") {
+		t.Fatal("native hook closure fail-closed diagnostic is missing from the loader")
 	}
 }
