@@ -26,7 +26,7 @@ $(TWEAK_NAME)_CFLAGS = $(COMMON_FLAGS)
 $(TWEAK_NAME)_CCFLAGS = $(COMMON_FLAGS) -I$(LIBFFI_HEADERS) -std=c++20
 # Resolve JSI/TurboModule symbols from Discord's React dylib at load time.
 $(TWEAK_NAME)_LDFLAGS = -undefined dynamic_lookup $(LIBFFI_ARCHIVE)
-$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation AuthenticationServices UniformTypeIdentifiers UserNotifications Security SafariServices AVKit AVFoundation CoreHaptics
+$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation AuthenticationServices UniformTypeIdentifiers UserNotifications Security SafariServices AVFoundation CoreHaptics
 
 BUNDLE_NAME = UnboundResources
 $(BUNDLE_NAME)_INSTALL_PATH = "/Library/Application\ Support/"

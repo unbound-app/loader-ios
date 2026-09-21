@@ -566,11 +566,6 @@ static const CGFloat kDevOverlayButtonMargin = 8;
                                                      }
                                                  }
                                              }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Send Test Notification"
-                                               style:UIAlertActionStyleDefault
-                                             handler:^(__unused UIAlertAction *action) {
-                                                 [self sendTestNotification];
-                                             }]];
     [menu addAction:[UIAlertAction actionWithTitle:@"Reload Bundle"
                                                style:UIAlertActionStyleDefault
                                              handler:^(__unused UIAlertAction *action) {
@@ -615,19 +610,6 @@ static const CGFloat kDevOverlayButtonMargin = 8;
         }
     }
     return bestIndex;
-}
-
-+ (void)sendTestNotification
-{
-    NSString *identifier = [PluginAPI showNotification:@"Unbound Dev Overlay"
-                                                    body:@"Test notification fired from the dev overlay"
-                                               timeDelay:@3
-                                            soundEnabled:@YES
-                                              identifier:@"dev-overlay-test"];
-    if (!identifier.length)
-    {
-        [Logger error:LOG_CATEGORY_TOOLBOX format:@"DevOverlay: test notification failed to schedule"];
-    }
 }
 
 + (void)presentSettingsEditor

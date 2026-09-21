@@ -1245,7 +1245,7 @@ static void dispatchVoidHook(id object, SEL selector)
                 }
                 catch (const std::exception &exception)
                 {
-                    [Logger error:LOG_CATEGORY_PLUGINAPI
+                    [Logger error:LOG_CATEGORY_PLUGINS
                             format:@"Native plugin hook failed: %s", exception.what()];
                 }
             }];

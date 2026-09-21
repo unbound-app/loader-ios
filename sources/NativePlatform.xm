@@ -1,7 +1,6 @@
 #import "NativePlatform.h"
 
 #import "JSI.h"
-#import "PluginAPI.h"
 #import "Utilities.h"
 
 using namespace facebook;
@@ -125,55 +124,6 @@ void registerNativePlatform(Runtime &runtime)
 
         platform.setProperty(runtime, "app", std::move(app));
 
-        Object notifications(runtime);
-
-        notifications.setProperty(
-            runtime, "show",
-            [JSI makeFunction:"show"
-                     argCount:5
-                      runtime:runtime
-                      handler:[](Runtime &rt, const Value &, const Value *args,
-                                 size_t count) -> Value {
-                          NSString *title = (count > 0) ? [JSI toNSString:args[0] runtime:rt] : nil;
-                          NSString *body = (count > 1) ? [JSI toNSString:args[1] runtime:rt] : nil;
-                          NSNumber *scheduledTime =
-                              (count > 2 && args[2].isNumber()) ? @(args[2].getNumber()) : @(1);
-                          NSNumber *soundEnabled =
-                              (count > 3) ? @([JSI toBool:args[3] runtime:rt fallback:YES]) : @(YES);
-                          NSString *notificationId =
-                              (count > 4) ? [JSI toNSString:args[4] runtime:rt] : nil;
-                          NSString *identifier = [PluginAPI
-                              showNotification:(title ?: @"Notification")
-                                          body:(body ?: @"")
-                                     timeDelay:scheduledTime
-                                  soundEnabled:soundEnabled
-                                    identifier:(notificationId ?: [[NSUUID UUID] UUIDString])];
-                          return [JSI fromObjC:identifier runtime:rt];
-                      }]);
-
-        platform.setProperty(runtime, "notifications", std::move(notifications));
-
-        Object pip(runtime);
-
-        pip.setProperty(
-            runtime, "playVideo",
-            [JSI makeFunction:"playVideo"
-                     argCount:1
-                      runtime:runtime
-                      handler:[](Runtime &rt, const Value &, const Value *args,
-                                 size_t count) -> Value {
-                          NSString *videoURL =
-                              (count > 0) ? [JSI toNSString:args[0] runtime:rt] : nil;
-                          if (!videoURL || videoURL.length == 0)
-                          {
-                              return Value::null();
-                          }
-
-                          NSString *pid = [PluginAPI playPiPVideo:videoURL];
-                          return [JSI fromObjC:pid runtime:rt];
-                      }]);
-
-        platform.setProperty(runtime, "pip", std::move(pip));
         runtime.global().setProperty(runtime, "UnboundPlatform", std::move(platform));
     }
 }
