@@ -50,6 +50,12 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"dispatchVoidHook",
 		"isExecutableAddress",
 		"invokeHookOriginal",
+		"prepareFFICif",
+		"valueToData",
+		"structResult",
+		"objc_setAssociatedObject",
+		"BigInt::fromInt64",
+		"BigInt::fromUint64",
 	} {
 		if !strings.Contains(sourceText, symbol) {
 			t.Fatalf("native hook symbol %q is missing from the loader", symbol)
@@ -57,5 +63,14 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	}
 	if !strings.Contains(sourceText, "Native hook closure is unavailable on this device") {
 		t.Fatal("native hook closure fail-closed diagnostic is missing from the loader")
+	}
+	if !strings.Contains(sourceText, "Native hook original() cannot cross runtime threads") {
+		t.Fatal("native hook original thread safety diagnostic is missing from the loader")
+	}
+	if strings.Contains(sourceText, "originalRequested") {
+		t.Fatal("native hook original invocation still uses deferred return semantics")
+	}
+	if !strings.Contains(sourceText, "gFFICifs") {
+		t.Fatal("native FFI call interface cache is missing from the loader")
 	}
 }

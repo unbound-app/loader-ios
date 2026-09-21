@@ -120,7 +120,6 @@ struct FFICallArgument {
 struct HookSignature {
     FFITypeSpec result;
     std::vector<FFITypeSpec> arguments;
-    std::vector<ffi_type *> argumentTypes;
     ffi_cif cif{};
 };
 
@@ -174,14 +173,25 @@ static Runtime *gNativePluginRuntime = nullptr;
 static std::thread::id gNativePluginRuntimeThread;
 
 static FFITypeSpec ffiType(Runtime &runtime, const std::string &name);
+static ffi_cif prepareFFICif(Runtime &runtime, const FFITypeSpec &result,
+                             const std::vector<FFITypeSpec> &arguments);
 static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vector<uint8_t> &bytes);
 static void releaseHookClosure(const std::shared_ptr<HookDispatcher> &dispatcher);
 static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
 static void dispatchVoidHook(id object, SEL selector);
 static Value makeHook(Runtime &runtime, const Value *args, size_t count);
+static void invokeHookOriginal(const std::shared_ptr<HookDispatcher> &dispatcher, void **arguments,
+                               void *returnValue);
 
 static std::mutex gFFIMutex;
 static std::unordered_map<std::string, std::shared_ptr<FFITypeDefinition>> gFFITypes;
+struct CachedFFICif {
+    ffi_cif cif{};
+    std::vector<ffi_type *> arguments;
+};
+
+static std::mutex gFFICifMutex;
+static std::unordered_map<std::string, std::shared_ptr<CachedFFICif>> gFFICifs;
 
 static Value makeFunction(const char *name, unsigned int argCount, Runtime &runtime,
                           const HostFunctionType &handler)
@@ -1041,17 +1051,13 @@ static Value invokeSuperObject(Runtime &runtime, id target, Class currentClass, 
     std::vector<FFITypeSpec> types;
     std::vector<FFICallArgument> values(arguments.count + 2);
     std::vector<void *> argumentValues(arguments.count + 2);
-    std::vector<ffi_type *> ffiTypes;
     std::vector<id> retained;
     types.reserve(arguments.count);
-    ffiTypes.reserve(arguments.count + 2);
     retained.reserve(arguments.count);
 
     struct objc_super superInfo = {target, currentClass};
     values[0].pointer = &superInfo;
     values[1].pointer = selector;
-    ffiTypes.push_back(&ffi_type_pointer);
-    ffiTypes.push_back(&ffi_type_pointer);
     argumentValues[0] = &values[0].pointer;
     argumentValues[1] = &values[1].pointer;
 
@@ -1065,7 +1071,6 @@ static Value invokeSuperObject(Runtime &runtime, id target, Class currentClass, 
         }
         types.push_back(ffiType(runtime, name));
         setSuperFFIArgument(runtime, encoding, arguments[index], values[index + 2], retained);
-        ffiTypes.push_back(types.back().type);
         if (name == "object" || name == "class" || name == "selector" || name == "pointer")
         {
             argumentValues[index + 2] = &values[index + 2].pointer;
@@ -1082,11 +1087,12 @@ static Value invokeSuperObject(Runtime &runtime, id target, Class currentClass, 
         throw JSError(runtime, "Unsupported native super return type encoding");
     }
     FFITypeSpec result = ffiType(runtime, resultName);
-    ffi_cif cif{};
-    if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned) ffiTypes.size(), result.type, ffiTypes.data()) != FFI_OK)
-    {
-        throw JSError(runtime, "Native Objective-C super signature could not be prepared");
-    }
+    std::vector<FFITypeSpec> cifArguments;
+    cifArguments.reserve(types.size() + 2);
+    cifArguments.push_back({"pointer", &ffi_type_pointer});
+    cifArguments.push_back({"selector", &ffi_type_pointer});
+    cifArguments.insert(cifArguments.end(), types.begin(), types.end());
+    ffi_cif cif = prepareFFICif(runtime, result, cifArguments);
 
     std::vector<uint8_t> output(std::max<size_t>(result.type->size, sizeof(void *)));
     ffi_call(&cif, reinterpret_cast<void (*)(void)>(objc_msgSendSuper),
@@ -1420,6 +1426,53 @@ static FFITypeSpec ffiType(Runtime &runtime, const std::string &name)
     throw JSError(runtime, "Unsupported native FFI type");
 }
 
+static std::string ffiCifKey(const FFITypeSpec &result, const std::vector<FFITypeSpec> &arguments)
+{
+    std::ostringstream key;
+    key << result.name;
+    for (const FFITypeSpec &argument : arguments)
+    {
+        key << '\0' << argument.name;
+    }
+    return key.str();
+}
+
+static ffi_cif prepareFFICif(Runtime &runtime, const FFITypeSpec &result,
+                             const std::vector<FFITypeSpec> &arguments)
+{
+    std::string key = ffiCifKey(result, arguments);
+    {
+        std::lock_guard<std::mutex> lock(gFFICifMutex);
+        auto existing = gFFICifs.find(key);
+        if (existing != gFFICifs.end())
+        {
+            return existing->second->cif;
+        }
+    }
+
+    auto cached = std::make_shared<CachedFFICif>();
+    cached->arguments.reserve(arguments.size());
+    for (const FFITypeSpec &argument : arguments)
+    {
+        cached->arguments.push_back(argument.type);
+    }
+
+    if (ffi_prep_cif(&cached->cif, FFI_DEFAULT_ABI, (unsigned) cached->arguments.size(), result.type,
+                     cached->arguments.data()) != FFI_OK)
+    {
+        throw JSError(runtime, "Native FFI signature could not be prepared");
+    }
+
+    std::lock_guard<std::mutex> lock(gFFICifMutex);
+    auto existing = gFFICifs.find(key);
+    if (existing != gFFICifs.end())
+    {
+        return existing->second->cif;
+    }
+    gFFICifs.emplace(std::move(key), cached);
+    return cached->cif;
+}
+
 static std::string ffiTypeName(Runtime &runtime, const Value &value)
 {
     if (value.isString())
@@ -1590,7 +1643,10 @@ struct HookInvocation {
     std::shared_ptr<HookDispatcher> dispatcher;
     std::vector<std::vector<uint8_t>> arguments;
     std::vector<uint8_t> originalResult;
-    std::atomic_bool originalRequested{false};
+    void **nativeArguments = nullptr;
+    void *returnValue = nullptr;
+    std::thread::id hookThread;
+    bool originalCalled = false;
 };
 
 struct RuntimeCallState {
@@ -1605,10 +1661,13 @@ struct RuntimeCallState {
 };
 
 static std::shared_ptr<HookInvocation> hookInvocation(const std::shared_ptr<HookDispatcher> &dispatcher,
-                                                      void **arguments)
+                                                      void **arguments, void *returnValue)
 {
     auto invocation = std::make_shared<HookInvocation>();
     invocation->dispatcher = dispatcher;
+    invocation->nativeArguments = arguments;
+    invocation->returnValue = returnValue;
+    invocation->hookThread = std::this_thread::get_id();
     invocation->arguments.reserve(dispatcher->signature->arguments.size());
     for (const FFITypeSpec &spec : dispatcher->signature->arguments)
     {
@@ -1663,11 +1722,17 @@ static Object hookContext(Runtime &runtime, const std::shared_ptr<HookInvocation
         Function::createFromHostFunction(
             runtime, PropNameID::forUtf8(runtime, "original"), 0,
             [original](Runtime &rt, const Value &, const Value *, size_t) -> Value {
-                original->originalRequested.store(true);
-                if (original->originalResult.empty() &&
-                    original->dispatcher->signature->result.name != "void")
+                if (!original->originalCalled)
                 {
-                    return Value::undefined();
+                    if (std::this_thread::get_id() != original->hookThread)
+                    {
+                        throw JSError(rt, "Native hook original() cannot cross runtime threads");
+                    }
+
+                    invokeHookOriginal(original->dispatcher, original->nativeArguments,
+                                       original->returnValue);
+                    copyHookResult(original, original->returnValue);
+                    original->originalCalled = true;
                 }
                 return ffiResult(rt, original->dispatcher->signature->result, original->originalResult);
             }));
@@ -1863,13 +1928,10 @@ static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vec
 static Value ffiCall(Runtime &runtime, void *pointer, const FFISignature &signature,
                      const Value *args)
 {
-    std::vector<ffi_type *> argumentTypes;
     std::vector<FFICallArgument> arguments(signature.arguments.size());
     std::vector<void *> argumentValues(signature.arguments.size());
-    argumentTypes.reserve(signature.arguments.size());
     for (size_t index = 0; index < signature.arguments.size(); index++)
     {
-        argumentTypes.push_back(signature.arguments[index].type);
         setFFIArgument(runtime, args[index], signature.arguments[index], arguments[index]);
         if (signature.arguments[index].name == "pointer" ||
             signature.arguments[index].name == "object" || signature.arguments[index].name == "class" ||
@@ -1883,12 +1945,7 @@ static Value ffiCall(Runtime &runtime, void *pointer, const FFISignature &signat
         }
     }
 
-    ffi_cif cif{};
-    if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned) argumentTypes.size(), signature.result.type,
-                     argumentTypes.data()) != FFI_OK)
-    {
-        throw JSError(runtime, "Native FFI signature could not be prepared");
-    }
+    ffi_cif cif = prepareFFICif(runtime, signature.result, signature.arguments);
 
     size_t resultSize = signature.result.type->size;
     std::vector<uint8_t> result(std::max<size_t>(resultSize, sizeof(void *)));
@@ -2000,7 +2057,7 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
     {
         return;
     }
-    auto invocation = hookInvocation(dispatcher, arguments);
+    auto invocation = hookInvocation(dispatcher, arguments, returnValue);
 
     std::vector<std::shared_ptr<HookState>> hooks;
     {
@@ -2034,10 +2091,8 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
             }
         }
 
-        if (invocation->originalRequested.exchange(false) && !originalCalled)
+        if (invocation->originalCalled && !originalCalled)
         {
-            invokeHookOriginal(dispatcher, arguments, returnValue);
-            copyHookResult(invocation, returnValue);
             originalCalled = true;
         }
 
@@ -2119,7 +2174,7 @@ static void dispatchVoidHook(id object, SEL selector)
 
         HookCallGuard guard(dispatcher);
         void *arguments[] = {&object, &selector};
-        auto invocation = hookInvocation(dispatcher, arguments);
+        auto invocation = hookInvocation(dispatcher, arguments, nullptr);
 
         std::vector<std::shared_ptr<HookState>> hooks;
         {
@@ -2153,10 +2208,8 @@ static void dispatchVoidHook(id object, SEL selector)
                 }
             }
 
-            if (invocation->originalRequested.exchange(false) && !originalCalled)
+            if (invocation->originalCalled && !originalCalled)
             {
-                invokeHookOriginal(dispatcher, arguments, nullptr);
-                copyHookResult(invocation, nullptr);
                 originalCalled = true;
             }
 
@@ -2253,14 +2306,8 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
             throw JSError(runtime, "Unsupported native hook argument type encoding");
         }
         signature->arguments.push_back(ffiType(runtime, name));
-        signature->argumentTypes.push_back(signature->arguments.back().type);
     }
-    if (ffi_prep_cif(&signature->cif, FFI_DEFAULT_ABI,
-                     (unsigned) signature->argumentTypes.size(), signature->result.type,
-                     signature->argumentTypes.data()) != FFI_OK)
-    {
-        throw JSError(runtime, "Native hook signature could not be prepared");
-    }
+    signature->cif = prepareFFICif(runtime, signature->result, signature->arguments);
 
     Object handlers = args[2].asObject(runtime);
     auto functionFor = [&](const char *name) -> std::shared_ptr<Function> {
