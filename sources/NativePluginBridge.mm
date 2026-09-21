@@ -437,6 +437,16 @@ static Value structValue(Runtime &runtime, NSString *name, const Value &fields)
                                                object.getProperty(runtime, "right").asNumber());
         return structResult(runtime, name, [NSValue valueWithUIEdgeInsets:insets]);
     }
+    if ([name isEqualToString:@"CGAffineTransform"])
+    {
+        CGAffineTransform transform = CGAffineTransformMake(object.getProperty(runtime, "a").asNumber(),
+                                                            object.getProperty(runtime, "b").asNumber(),
+                                                            object.getProperty(runtime, "c").asNumber(),
+                                                            object.getProperty(runtime, "d").asNumber(),
+                                                            object.getProperty(runtime, "tx").asNumber(),
+                                                            object.getProperty(runtime, "ty").asNumber());
+        return structResult(runtime, name, [NSValue valueWithCGAffineTransform:transform]);
+    }
 
     throw JSError(runtime, "Unsupported native struct");
 }
@@ -845,6 +855,10 @@ static std::string nativeFFITypeName(const char *encoding)
             if (value.find("UIEdgeInsets") != std::string::npos)
             {
                 return "struct:UIEdgeInsets";
+            }
+            if (value.find("CGAffineTransform") != std::string::npos)
+            {
+                return "struct:CGAffineTransform";
             }
             break;
         }
@@ -1355,6 +1369,10 @@ static const char *structEncoding(const std::string &name)
     {
         return "{UIEdgeInsets=dddd}";
     }
+    if (name == "CGAffineTransform")
+    {
+        return "{CGAffineTransform=dddddd}";
+    }
     return nullptr;
 }
 
@@ -1384,6 +1402,18 @@ static ffi_type *ffiStructTypeLocked(const std::string &name)
     else if (name == "UIEdgeInsets")
     {
         definition->elements = {
+            &ffi_type_double,
+            &ffi_type_double,
+            &ffi_type_double,
+            &ffi_type_double,
+            nullptr,
+        };
+    }
+    else if (name == "CGAffineTransform")
+    {
+        definition->elements = {
+            &ffi_type_double,
+            &ffi_type_double,
             &ffi_type_double,
             &ffi_type_double,
             &ffi_type_double,
