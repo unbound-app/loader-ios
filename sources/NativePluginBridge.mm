@@ -1642,11 +1642,15 @@ static void setFFIArgument(Runtime &runtime, const Value &value, const FFITypeSp
 struct HookInvocation {
     std::shared_ptr<HookDispatcher> dispatcher;
     std::vector<std::vector<uint8_t>> arguments;
+    std::vector<std::shared_ptr<ObjCHandleHost>> retainedObjects;
+    std::vector<std::string> retainedStrings;
     std::vector<uint8_t> originalResult;
     void **nativeArguments = nullptr;
     void *returnValue = nullptr;
     std::thread::id hookThread;
-    bool originalCalled = false;
+    std::mutex lifecycleMutex;
+    std::atomic_bool active{true};
+    std::atomic_bool originalCalled{false};
 };
 
 struct RuntimeCallState {
@@ -1658,6 +1662,7 @@ struct RuntimeCallState {
     std::function<void(Runtime &)> callback;
     std::exception_ptr failure;
     dispatch_semaphore_t semaphore;
+    std::atomic_bool cancelled{false};
 };
 
 static std::shared_ptr<HookInvocation> hookInvocation(const std::shared_ptr<HookDispatcher> &dispatcher,
@@ -1669,6 +1674,8 @@ static std::shared_ptr<HookInvocation> hookInvocation(const std::shared_ptr<Hook
     invocation->returnValue = returnValue;
     invocation->hookThread = std::this_thread::get_id();
     invocation->arguments.reserve(dispatcher->signature->arguments.size());
+    invocation->retainedObjects.reserve(dispatcher->signature->arguments.size());
+    invocation->retainedStrings.reserve(dispatcher->signature->arguments.size());
     for (const FFITypeSpec &spec : dispatcher->signature->arguments)
     {
         size_t size = std::max<size_t>(spec.type->size, sizeof(void *));
@@ -1677,6 +1684,27 @@ static std::shared_ptr<HookInvocation> hookInvocation(const std::shared_ptr<Hook
         {
             memcpy(invocation->arguments.back().data(), arguments[invocation->arguments.size() - 1],
                    spec.type->size);
+        }
+        if (spec.name == "object" || spec.name == "class")
+        {
+            void *rawObject = nullptr;
+            memcpy(&rawObject, invocation->arguments.back().data(), sizeof(rawObject));
+            id object = (__bridge id) rawObject;
+            if (object)
+            {
+                invocation->retainedObjects.emplace_back(std::make_shared<ObjCHandleHost>(object));
+            }
+        }
+        else if (spec.name == "cstring")
+        {
+            const char *string = nullptr;
+            memcpy(&string, invocation->arguments.back().data(), sizeof(string));
+            if (string)
+            {
+                invocation->retainedStrings.emplace_back(string);
+                string = invocation->retainedStrings.back().c_str();
+                memcpy(invocation->arguments.back().data(), &string, sizeof(string));
+            }
         }
     }
     return invocation;
@@ -1696,8 +1724,28 @@ static void copyHookResult(const std::shared_ptr<HookInvocation> &invocation, vo
            invocation->dispatcher->signature->result.type->size);
 }
 
+static std::shared_ptr<std::vector<uint8_t>> hookReturnBuffer(
+    const std::shared_ptr<HookInvocation> &invocation)
+{
+    size_t size = std::max<size_t>(invocation->dispatcher->signature->result.type->size,
+                                   sizeof(void *));
+    return std::make_shared<std::vector<uint8_t>>(size);
+}
+
+static void copyHookReturnBuffer(const std::shared_ptr<HookInvocation> &invocation,
+                                 const std::shared_ptr<std::vector<uint8_t>> &buffer,
+                                 void *returnValue)
+{
+    if (invocation->dispatcher->signature->result.name == "void" || !returnValue)
+    {
+        return;
+    }
+
+    memcpy(returnValue, buffer->data(), invocation->dispatcher->signature->result.type->size);
+}
+
 static Object hookContext(Runtime &runtime, const std::shared_ptr<HookInvocation> &invocation,
-                          id object, SEL selector)
+                          id object, SEL selector, bool allowOriginal)
 {
     Object context(runtime);
     context.setProperty(runtime, "self",
@@ -1721,8 +1769,17 @@ static Object hookContext(Runtime &runtime, const std::shared_ptr<HookInvocation
         runtime, "original",
         Function::createFromHostFunction(
             runtime, PropNameID::forUtf8(runtime, "original"), 0,
-            [original](Runtime &rt, const Value &, const Value *, size_t) -> Value {
-                if (!original->originalCalled)
+            [original, allowOriginal](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+                std::lock_guard<std::mutex> lock(original->lifecycleMutex);
+                if (!original->active.load())
+                {
+                    throw JSError(rt, "Native hook original() is unavailable after the hook returns");
+                }
+                if (!allowOriginal)
+                {
+                    throw JSError(rt, "Native hook original() is only available synchronously");
+                }
+                if (!original->originalCalled.load())
                 {
                     if (std::this_thread::get_id() != original->hookThread)
                     {
@@ -1732,7 +1789,7 @@ static Object hookContext(Runtime &runtime, const std::shared_ptr<HookInvocation
                     invokeHookOriginal(original->dispatcher, original->nativeArguments,
                                        original->returnValue);
                     copyHookResult(original, original->returnValue);
-                    original->originalCalled = true;
+                    original->originalCalled.store(true);
                 }
                 return ffiResult(rt, original->dispatcher->signature->result, original->originalResult);
             }));
@@ -1757,13 +1814,16 @@ static bool executeRuntimeSynchronously(std::function<void(Runtime &)> callback)
     [instance callFunctionOnBufferedRuntimeExecutor:[state](Runtime &runtime) {
         @autoreleasepool
         {
-            try
+            if (!state->cancelled.load())
             {
-                state->callback(runtime);
-            }
-            catch (...)
-            {
-                state->failure = std::current_exception();
+                try
+                {
+                    state->callback(runtime);
+                }
+                catch (...)
+                {
+                    state->failure = std::current_exception();
+                }
             }
             dispatch_semaphore_signal(state->semaphore);
         }
@@ -1772,6 +1832,7 @@ static bool executeRuntimeSynchronously(std::function<void(Runtime &)> callback)
     if (dispatch_semaphore_wait(state->semaphore,
                                 dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC)) != 0)
     {
+        state->cancelled.store(true);
         return false;
     }
     if (state->failure)
@@ -2081,7 +2142,7 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
             try
             {
                 executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
-                    Object context = hookContext(runtime, invocation, object, selector);
+                    Object context = hookContext(runtime, invocation, object, selector, true);
                     state->before->call(runtime, context);
                 });
             }
@@ -2091,7 +2152,7 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
             }
         }
 
-        if (invocation->originalCalled && !originalCalled)
+        if (invocation->originalCalled.load() && !originalCalled)
         {
             originalCalled = true;
         }
@@ -2100,12 +2161,13 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         {
             try
             {
+                std::shared_ptr<std::vector<uint8_t>> replacementResult = hookReturnBuffer(invocation);
                 bool completed = executeRuntimeSynchronously(
-                    [invocation, object, selector, state, returnValue](Runtime &runtime) {
-                        Object context = hookContext(runtime, invocation, object, selector);
+                    [invocation, object, selector, state, replacementResult](Runtime &runtime) {
+                        Object context = hookContext(runtime, invocation, object, selector, true);
                         Value result = state->replace->call(runtime, context);
                         if (!setHookReturn(runtime, invocation->dispatcher->signature->result, result,
-                                           returnValue))
+                                           replacementResult->data()))
                         {
                             throw JSError(runtime, "Native hook replacement returned an unsupported value");
                         }
@@ -2113,6 +2175,7 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
                 if (completed)
                 {
                     replacementApplied = true;
+                    copyHookReturnBuffer(invocation, replacementResult, returnValue);
                     copyHookResult(invocation, returnValue);
                 }
             }
@@ -2142,10 +2205,20 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         }
 
         std::shared_ptr<Function> callback = state->after;
-        executeRuntimeAsynchronously([invocation, object, selector, callback](Runtime &runtime) {
-            Object context = hookContext(runtime, invocation, object, selector);
+        __strong id retainedObject = object;
+        executeRuntimeAsynchronously([invocation, retainedObject, selector, callback, state](Runtime &runtime) {
+            if (!state->active.load())
+            {
+                return;
+            }
+            Object context = hookContext(runtime, invocation, retainedObject, selector, false);
             callback->call(runtime, context);
         });
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(invocation->lifecycleMutex);
+        invocation->active.store(false);
     }
 
     for (const std::shared_ptr<HookState> &state : onceHooks)
@@ -2198,7 +2271,7 @@ static void dispatchVoidHook(id object, SEL selector)
                 try
                 {
                     executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
-                        Object context = hookContext(runtime, invocation, object, selector);
+                        Object context = hookContext(runtime, invocation, object, selector, true);
                         state->before->call(runtime, context);
                     });
                 }
@@ -2208,7 +2281,7 @@ static void dispatchVoidHook(id object, SEL selector)
                 }
             }
 
-            if (invocation->originalCalled && !originalCalled)
+            if (invocation->originalCalled.load() && !originalCalled)
             {
                 originalCalled = true;
             }
@@ -2217,12 +2290,13 @@ static void dispatchVoidHook(id object, SEL selector)
             {
                 try
                 {
+                    std::shared_ptr<std::vector<uint8_t>> replacementResult = hookReturnBuffer(invocation);
                     bool completed = executeRuntimeSynchronously(
-                        [invocation, object, selector, state](Runtime &runtime) {
-                            Object context = hookContext(runtime, invocation, object, selector);
+                        [invocation, object, selector, state, replacementResult](Runtime &runtime) {
+                            Object context = hookContext(runtime, invocation, object, selector, true);
                             Value result = state->replace->call(runtime, context);
                             if (!setHookReturn(runtime, invocation->dispatcher->signature->result, result,
-                                               nullptr))
+                                               replacementResult->data()))
                             {
                                 throw JSError(runtime, "Native hook replacement returned an unsupported value");
                             }
@@ -2259,10 +2333,20 @@ static void dispatchVoidHook(id object, SEL selector)
             }
 
             std::shared_ptr<Function> callback = state->after;
-            executeRuntimeAsynchronously([invocation, object, selector, callback](Runtime &runtime) {
-                Object context = hookContext(runtime, invocation, object, selector);
+            __strong id retainedObject = object;
+            executeRuntimeAsynchronously([invocation, retainedObject, selector, callback, state](Runtime &runtime) {
+                if (!state->active.load())
+                {
+                    return;
+                }
+                Object context = hookContext(runtime, invocation, retainedObject, selector, false);
                 callback->call(runtime, context);
             });
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(invocation->lifecycleMutex);
+            invocation->active.store(false);
         }
 
         for (const std::shared_ptr<HookState> &state : onceHooks)
