@@ -541,6 +541,16 @@ static NSDictionary *fabricProperties(Runtime &runtime, const Value *value)
     return object;
 }
 
+static double fabricNumber(Runtime &runtime, Object &object, const char *name)
+{
+    Value value = object.getProperty(runtime, name);
+    if (!value.isNumber())
+    {
+        throw JSError(runtime, "fabric dimensions must be numbers");
+    }
+    return value.asNumber();
+}
+
 static CGSize fabricSize(Runtime &runtime, const Value &value)
 {
     if (!value.isObject())
@@ -549,8 +559,8 @@ static CGSize fabricSize(Runtime &runtime, const Value &value)
     }
 
     Object object = value.asObject(runtime);
-    return CGSizeMake(object.getProperty(runtime, "width").asNumber(),
-                      object.getProperty(runtime, "height").asNumber());
+    return CGSizeMake(fabricNumber(runtime, object, "width"),
+                      fabricNumber(runtime, object, "height"));
 }
 
 static CGRect fabricFrame(Runtime &runtime, const Value &value)
@@ -561,10 +571,9 @@ static CGRect fabricFrame(Runtime &runtime, const Value &value)
     }
 
     Object object = value.asObject(runtime);
-    return CGRectMake(object.getProperty(runtime, "x").asNumber(),
-                      object.getProperty(runtime, "y").asNumber(),
-                      object.getProperty(runtime, "width").asNumber(),
-                      object.getProperty(runtime, "height").asNumber());
+    return CGRectMake(fabricNumber(runtime, object, "x"), fabricNumber(runtime, object, "y"),
+                      fabricNumber(runtime, object, "width"),
+                      fabricNumber(runtime, object, "height"));
 }
 
 static void fabricStart(id surface)
@@ -622,6 +631,10 @@ static Value fabricMount(Runtime &runtime, const Value *args, size_t count)
     auto surfaceHost = std::make_shared<FabricSurfaceHost>();
 
     executeMainSynchronously([host, container, moduleName, properties, surfaceHost]() {
+        if (![host respondsToSelector:@selector(createSurfaceWithModuleName:mode:initialProperties:)])
+        {
+            throw std::runtime_error("Fabric host does not expose surface creation");
+        }
         id surface = [host createSurfaceWithModuleName:moduleName mode:0 initialProperties:properties];
         if (!surface)
         {
