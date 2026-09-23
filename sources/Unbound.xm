@@ -324,6 +324,7 @@ static void enqueueUnboundBundle(id self)
 {
     gRuntime = &runtime;
     [Logger info:LOG_CATEGORY_DEFAULT format:@"RCTHost didInitializeRuntime reached."];
+    unbound::setNativePluginFabricHost(self);
     id hostInstance = instance;
     prepareUnboundLoading(hostInstance);
     injectModulesPatch(runtime);

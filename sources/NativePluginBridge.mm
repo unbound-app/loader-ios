@@ -4,6 +4,7 @@
 #import <mach/mach.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <UIKit/UIKit.h>
 
 #import <algorithm>
 #import <atomic>
@@ -14,6 +15,7 @@
 #import <memory>
 #import <mutex>
 #import <sstream>
+#import <stdexcept>
 #import <string>
 #import <thread>
 #import <unordered_map>
@@ -31,6 +33,12 @@ using namespace facebook::jsi;
     (std::function<void(facebook::jsi::Runtime &)> &&)executor;
 @end
 
+@interface NSObject (UnboundFabricHost)
+- (id)createSurfaceWithModuleName:(NSString *)moduleName
+                              mode:(NSInteger)mode
+                 initialProperties:(NSDictionary *)properties;
+@end
+
 namespace {
 
 class ObjCHandleHost final : public HostObject
@@ -45,6 +53,52 @@ public:
 
 private:
     __strong id value_;
+};
+
+class FabricSurfaceHost final : public HostObject
+{
+public:
+    FabricSurfaceHost(void) = default;
+
+    void setSurface(id surface, UIView *view)
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        surface_ = surface;
+        view_ = view;
+        active_ = true;
+    }
+
+    id surface(void) const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return surface_;
+    }
+
+    UIView *view(void) const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return view_;
+    }
+
+    bool active(void) const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return active_;
+    }
+
+    void clear(void)
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        surface_ = nil;
+        view_ = nil;
+        active_ = false;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    __strong id surface_ = nil;
+    __strong UIView *view_ = nil;
+    bool active_ = false;
 };
 
 class PointerHost final : public HostObject
@@ -169,6 +223,7 @@ static std::mutex gHookMutex;
 static std::unordered_map<std::string, std::shared_ptr<HookDispatcher>> gDispatchers;
 static std::atomic_uint64_t gNextHookIdentifier{1};
 static __weak id gRuntimeExecutorInstance = nil;
+static __weak id gFabricHostInstance = nil;
 static Runtime *gNativePluginRuntime = nullptr;
 static std::thread::id gNativePluginRuntimeThread;
 
@@ -416,6 +471,303 @@ static id valueToObjC(Runtime &runtime, const Value &value)
         result[key] = item ?: [NSNull null];
     }
     return result;
+}
+
+static void executeMainSynchronously(std::function<void(void)> callback)
+{
+    if ([NSThread isMainThread])
+    {
+        callback();
+        return;
+    }
+
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    __block std::exception_ptr failure;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @autoreleasepool
+        {
+            try
+            {
+                callback();
+            }
+            catch (...)
+            {
+                failure = std::current_exception();
+            }
+            dispatch_semaphore_signal(semaphore);
+        }
+    });
+
+    if (dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)) != 0)
+    {
+        throw std::runtime_error("Native Fabric operation timed out on the main thread");
+    }
+
+    if (failure)
+    {
+        std::rethrow_exception(failure);
+    }
+}
+
+static std::shared_ptr<FabricSurfaceHost> fabricSurfaceHost(Runtime &runtime, const Value &value)
+{
+    if (!value.isObject())
+    {
+        throw JSError(runtime, "fabric surface handle is invalid");
+    }
+
+    Object object = value.asObject(runtime);
+    if (!object.isHostObject<FabricSurfaceHost>(runtime))
+    {
+        throw JSError(runtime, "fabric surface handle is invalid");
+    }
+
+    return object.getHostObject<FabricSurfaceHost>(runtime);
+}
+
+static NSDictionary *fabricProperties(Runtime &runtime, const Value *value)
+{
+    if (!value || value->isNull() || value->isUndefined())
+    {
+        return @{};
+    }
+
+    id object = valueToObjC(runtime, *value);
+    if (![object isKindOfClass:[NSDictionary class]])
+    {
+        throw JSError(runtime, "fabric surface properties must be an object");
+    }
+
+    return object;
+}
+
+static CGSize fabricSize(Runtime &runtime, const Value &value)
+{
+    if (!value.isObject())
+    {
+        throw JSError(runtime, "fabric size must be an object");
+    }
+
+    Object object = value.asObject(runtime);
+    return CGSizeMake(object.getProperty(runtime, "width").asNumber(),
+                      object.getProperty(runtime, "height").asNumber());
+}
+
+static CGRect fabricFrame(Runtime &runtime, const Value &value)
+{
+    if (!value.isObject())
+    {
+        throw JSError(runtime, "fabric frame must be an object");
+    }
+
+    Object object = value.asObject(runtime);
+    return CGRectMake(object.getProperty(runtime, "x").asNumber(),
+                      object.getProperty(runtime, "y").asNumber(),
+                      object.getProperty(runtime, "width").asNumber(),
+                      object.getProperty(runtime, "height").asNumber());
+}
+
+static void fabricStart(id surface)
+{
+    using Function = void (*)(id, SEL);
+    ((Function)objc_msgSend)(surface, @selector(start));
+}
+
+static void fabricStop(id surface)
+{
+    using Function = void (*)(id, SEL);
+    ((Function)objc_msgSend)(surface, @selector(stop));
+}
+
+static UIView *fabricView(id surface)
+{
+    using Function = UIView *(*)(id, SEL);
+    return ((Function)objc_msgSend)(surface, @selector(view));
+}
+
+static void fabricSetProps(id surface, NSDictionary *properties)
+{
+    using Function = void (*)(id, SEL, NSDictionary *);
+    ((Function)objc_msgSend)(surface, @selector(setProps:), properties);
+}
+
+static void fabricSetMinimumSize(id surface, CGSize minimumSize, CGSize maximumSize)
+{
+    using Function = void (*)(id, SEL, CGSize, CGSize);
+    ((Function)objc_msgSend)(surface, @selector(setMinimumSize:maximumSize:), minimumSize,
+                             maximumSize);
+}
+
+static Value fabricMount(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count < 2 || !args[1].isString())
+    {
+        throw JSError(runtime, "fabric.mount expects a container and module name");
+    }
+
+    id container = objcValue(runtime, args[0]);
+    if (![container isKindOfClass:[UIView class]])
+    {
+        throw JSError(runtime, "fabric.mount expects a UIView container");
+    }
+
+    id host = gFabricHostInstance;
+    if (!host)
+    {
+        throw JSError(runtime, "Fabric host is unavailable");
+    }
+
+    NSString *moduleName = [JSI toNSString:args[1] runtime:runtime];
+    NSDictionary *properties = fabricProperties(runtime, count > 2 ? &args[2] : nullptr);
+    auto surfaceHost = std::make_shared<FabricSurfaceHost>();
+
+    executeMainSynchronously([host, container, moduleName, properties, surfaceHost]() {
+        id surface = [host createSurfaceWithModuleName:moduleName mode:0 initialProperties:properties];
+        if (!surface)
+        {
+            throw std::runtime_error("Fabric host could not create the requested surface");
+        }
+
+        if (![surface respondsToSelector:@selector(start)] ||
+            ![surface respondsToSelector:@selector(view)])
+        {
+            throw std::runtime_error("Fabric surface does not expose start and view");
+        }
+
+        fabricStart(surface);
+        UIView *view = fabricView(surface);
+        if (!view)
+        {
+            fabricStop(surface);
+            throw std::runtime_error("Fabric surface did not create a view");
+        }
+
+        UIView *containerView = (UIView *) container;
+        view.frame = containerView.bounds;
+        view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [containerView addSubview:view];
+        surfaceHost->setSurface(surface, view);
+    });
+
+    return Object::createFromHostObject(runtime, std::move(surfaceHost));
+}
+
+static Value fabricUpdate(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count < 2)
+    {
+        throw JSError(runtime, "fabric.update expects a surface and properties");
+    }
+
+    std::shared_ptr<FabricSurfaceHost> surfaceHost = fabricSurfaceHost(runtime, args[0]);
+    NSDictionary *properties = fabricProperties(runtime, &args[1]);
+    id surface = surfaceHost->surface();
+    if (!surfaceHost->active() || !surface)
+    {
+        return Value::undefined();
+    }
+
+    executeMainSynchronously([surface, properties]() {
+        if ([surface respondsToSelector:@selector(setProps:)])
+        {
+            fabricSetProps(surface, properties);
+        }
+    });
+    return Value::undefined();
+}
+
+static Value fabricSetSize(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count < 3)
+    {
+        throw JSError(runtime, "fabric.setSize expects a surface, minimum size, and maximum size");
+    }
+
+    std::shared_ptr<FabricSurfaceHost> surfaceHost = fabricSurfaceHost(runtime, args[0]);
+    CGSize minimumSize = fabricSize(runtime, args[1]);
+    CGSize maximumSize = fabricSize(runtime, args[2]);
+    id surface = surfaceHost->surface();
+    if (!surfaceHost->active() || !surface)
+    {
+        return Value::undefined();
+    }
+
+    executeMainSynchronously([surface, minimumSize, maximumSize]() {
+        if ([surface respondsToSelector:@selector(setMinimumSize:maximumSize:)])
+        {
+            fabricSetMinimumSize(surface, minimumSize, maximumSize);
+        }
+    });
+    return Value::undefined();
+}
+
+static Value fabricSetFrame(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count < 2)
+    {
+        throw JSError(runtime, "fabric.setFrame expects a surface and frame");
+    }
+
+    std::shared_ptr<FabricSurfaceHost> surfaceHost = fabricSurfaceHost(runtime, args[0]);
+    CGRect frame = fabricFrame(runtime, args[1]);
+    UIView *view = surfaceHost->view();
+    if (!surfaceHost->active() || !view)
+    {
+        return Value::undefined();
+    }
+
+    executeMainSynchronously([view, frame]() { view.frame = frame; });
+    return Value::undefined();
+}
+
+static Value fabricMeasure(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count == 0)
+    {
+        throw JSError(runtime, "fabric.measure expects a UIView");
+    }
+
+    id object = objcValue(runtime, args[0]);
+    if (![object isKindOfClass:[UIView class]])
+    {
+        throw JSError(runtime, "fabric.measure expects a UIView");
+    }
+
+    CGRect frame = CGRectZero;
+    executeMainSynchronously([object, &frame]() { frame = [(UIView *) object frame]; });
+
+    Object result(runtime);
+    result.setProperty(runtime, "x", frame.origin.x);
+    result.setProperty(runtime, "y", frame.origin.y);
+    result.setProperty(runtime, "width", frame.size.width);
+    result.setProperty(runtime, "height", frame.size.height);
+    return result;
+}
+
+static Value fabricUnmount(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count == 0)
+    {
+        throw JSError(runtime, "fabric.unmount expects a surface");
+    }
+
+    std::shared_ptr<FabricSurfaceHost> surfaceHost = fabricSurfaceHost(runtime, args[0]);
+    id surface = surfaceHost->surface();
+    UIView *view = surfaceHost->view();
+    if (!surfaceHost->active())
+    {
+        return Value::undefined();
+    }
+
+    executeMainSynchronously([surface, view]() {
+        [view removeFromSuperview];
+        if ([surface respondsToSelector:@selector(stop)])
+        {
+            fabricStop(surface);
+        }
+    });
+    surfaceHost->clear();
+    return Value::undefined();
 }
 
 static id valueToData(Runtime &runtime, const Value &value)
@@ -3011,6 +3363,16 @@ static void installFFI(Runtime &runtime, Object &ffi)
     ffi.setProperty(runtime, "call", makeFunction("call", 3, runtime, ffiCallValue));
 }
 
+static void installFabric(Runtime &runtime, Object &fabric)
+{
+    fabric.setProperty(runtime, "mount", makeFunction("mount", 3, runtime, fabricMount));
+    fabric.setProperty(runtime, "update", makeFunction("update", 2, runtime, fabricUpdate));
+    fabric.setProperty(runtime, "setSize", makeFunction("setSize", 3, runtime, fabricSetSize));
+    fabric.setProperty(runtime, "setFrame", makeFunction("setFrame", 2, runtime, fabricSetFrame));
+    fabric.setProperty(runtime, "measure", makeFunction("measure", 1, runtime, fabricMeasure));
+    fabric.setProperty(runtime, "unmount", makeFunction("unmount", 1, runtime, fabricUnmount));
+}
+
 }
 
 namespace unbound {
@@ -3018,6 +3380,11 @@ namespace unbound {
 void setNativePluginRuntimeExecutor(id instance)
 {
     gRuntimeExecutorInstance = instance;
+}
+
+void setNativePluginFabricHost(id instance)
+{
+    gFabricHostInstance = instance;
 }
 
 void registerNativePluginBridge(Runtime &runtime)
@@ -3028,7 +3395,7 @@ void registerNativePluginBridge(Runtime &runtime)
     bridge.setProperty(runtime, "apiVersion", String::createFromUtf8(runtime, kNativePluginApiVersion));
     bridge.setProperty(runtime, "abiVersion", String::createFromUtf8(runtime, kNativePluginAbiVersion));
 
-    Array capabilities(runtime, 7);
+    Array capabilities(runtime, 8);
     const char *names[] = {
         "native.objc.classes",
         "native.objc.invoke",
@@ -3037,8 +3404,9 @@ void registerNativePluginBridge(Runtime &runtime)
         "native.objc.hooks",
         "native.ffi.symbols",
         "native.ffi.call",
+        "native.fabric.mount",
     };
-    for (size_t index = 0; index < 7; index++)
+    for (size_t index = 0; index < 8; index++)
     {
         capabilities.setValueAtIndex(runtime, index, String::createFromUtf8(runtime, names[index]));
     }
@@ -3051,6 +3419,10 @@ void registerNativePluginBridge(Runtime &runtime)
     Object ffi(runtime);
     installFFI(runtime, ffi);
     bridge.setProperty(runtime, "ffi", std::move(ffi));
+
+    Object fabric(runtime);
+    installFabric(runtime, fabric);
+    bridge.setProperty(runtime, "fabric", std::move(fabric));
 
     runtime.global().setProperty(runtime, "UnboundNative", std::move(bridge));
 }
