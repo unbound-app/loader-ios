@@ -18,7 +18,7 @@ void showToolboxSheet(void);
 + (void)showToolboxMenu;
 @end
 
-@interface UnboundToolboxViewController
+@interface ToolboxViewController
     : UIViewController <UITableViewDelegate, UITableViewDataSource, SFSafariViewControllerDelegate,
                          UIGestureRecognizerDelegate>
 
@@ -29,6 +29,6 @@ void showToolboxSheet(void);
 
 @end
 
-@interface                                             UnboundToolboxViewController ()
+@interface                                             ToolboxViewController ()
 @property (nonatomic, strong) NSArray<NSDictionary *> *menuSections;
 @end

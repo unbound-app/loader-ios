@@ -1,6 +1,6 @@
 #import "Settings.h"
 
-NSString *const UnboundSettingsDidChangeNotification = @"UnboundSettingsDidChange";
+NSString *const SettingsDidChangeNotification = @"SettingsDidChange";
 
 static const NSTimeInterval kSettingsSaveDebounce = 0.3;
 
@@ -27,7 +27,7 @@ static NSRecursiveLock *settingsLock(void)
                onChange:^{
                    [Settings loadSettings];
                    [[NSNotificationCenter defaultCenter]
-                       postNotificationName:UnboundSettingsDidChangeNotification
+                       postNotificationName:SettingsDidChangeNotification
                                      object:nil];
                }
             autoRestart:YES];
@@ -267,7 +267,7 @@ static NSRecursiveLock *settingsLock(void)
     [settingsLock() unlock];
 
     [Settings save];
-    [[NSNotificationCenter defaultCenter] postNotificationName:UnboundSettingsDidChangeNotification
+    [[NSNotificationCenter defaultCenter] postNotificationName:SettingsDidChangeNotification
                                                          object:nil];
 
     return YES;

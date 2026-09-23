@@ -236,7 +236,7 @@ static const CGFloat kDevOverlayButtonMargin = 8;
     avatarRadiusPresets = @[ @0, @8, @16, @20 ];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(settingsDidChange:)
-                                                 name:UnboundSettingsDidChangeNotification
+                                                 name:SettingsDidChangeNotification
                                                object:nil];
 }
 

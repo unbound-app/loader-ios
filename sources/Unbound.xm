@@ -15,7 +15,7 @@
 
 using namespace facebook;
 
-@interface NSObject (UnboundRuntimeExecutor)
+@interface NSObject (RuntimeExecutor)
 - (void)callFunctionOnBufferedRuntimeExecutor:
     (std::function<void(facebook::jsi::Runtime &)> &&)executor;
 @end
@@ -26,7 +26,7 @@ static jsi::Runtime *gRuntime = nullptr;
 static __weak id gInstance = nil;
 static NSString *gPendingBrowserLoginToken = nil;
 static BOOL      gBrowserLoginIsApplying    = NO;
-static BOOL      gUnboundBundleIsReady      = NO;
+static BOOL      gBundleIsReady             = NO;
 static NSUInteger gBrowserLoginFailureCount = 0;
 static std::atomic_bool gLoaderPrepared{false};
 static std::atomic_bool gBundleExecutionScheduled{false};
@@ -35,7 +35,7 @@ static void applyPendingBrowserLogin(void)
 {
     id          instance = gInstance;
     NSString    *token    = gPendingBrowserLoginToken;
-    if (!instance || token.length == 0 || !gUnboundBundleIsReady || gBrowserLoginIsApplying)
+    if (!instance || token.length == 0 || !gBundleIsReady || gBrowserLoginIsApplying)
     {
         return;
     }
@@ -51,7 +51,7 @@ static void applyPendingBrowserLogin(void)
     }
 
     NSString *source = [NSString stringWithFormat:
-                             @"(function(token){const apply=()=>{const metro=globalThis.unbound?.metro;if(!metro||typeof metro.findByProps!=='function')throw new Error('Unbound Metro API unavailable');let auth=metro.findByProps('getAnalyticsToken','setToken');if(!auth)auth=metro.findByProps('getToken','setToken');if(!auth||typeof auth.setToken!=='function')throw new Error('Discord authentication store unavailable');auth.setToken(token);const reload=globalThis.unbound?.native?.reload;if(typeof reload!=='function')throw new Error('Unbound reload API unavailable');Promise.resolve(reload()).catch(()=>{});};const ready=globalThis.__unboundReady;if(ready?.ready)apply();else if(Array.isArray(ready?.callbacks))ready.callbacks.push(apply);else apply();})(%@);",
+                             @"(function(token){const apply=()=>{const metro=globalThis.unbound?.metro;if(!metro||typeof metro.findByProps!=='function')throw new Error('Metro API unavailable');let auth=metro.findByProps('getAnalyticsToken','setToken');if(!auth)auth=metro.findByProps('getToken','setToken');if(!auth||typeof auth.setToken!=='function')throw new Error('Discord authentication store unavailable');auth.setToken(token);const reload=globalThis.unbound?.native?.reload;if(typeof reload!=='function')throw new Error('Reload API unavailable');Promise.resolve(reload()).catch(()=>{});};const ready=globalThis.__runtimeReady;if(ready?.ready)apply();else if(Array.isArray(ready?.callbacks))ready.callbacks.push(apply);else apply();})(%@);",
                          tokenJSON];
     NSData *script = [source dataUsingEncoding:NSUTF8StringEncoding];
 
@@ -110,11 +110,11 @@ static void injectModulesPatch(jsi::Runtime &runtime)
     }
 }
 
-static void injectUnboundPreBundle(jsi::Runtime &runtime)
+static void injectPreBundle(jsi::Runtime &runtime)
 {
-    unbound::setNativePluginRuntimeExecutor(gInstance);
-    unbound::registerNativePluginBridge(runtime);
-    unbound::registerNativePlatform(runtime);
+    loader::setNativePluginRuntimeExecutor(gInstance);
+    loader::registerNativePluginBridge(runtime);
+    loader::registerNativePlatform(runtime);
 
     if ([Settings getBoolean:@"unbound" key:@"loader.devtools" def:NO])
     {
@@ -138,13 +138,13 @@ static void injectUnboundPreBundle(jsi::Runtime &runtime)
     }
 }
 
-static NSData              *gUnboundBundle    = nil;
-static dispatch_semaphore_t gUnboundBundleSem = nil;
+static NSData              *gBundle    = nil;
+static dispatch_semaphore_t gBundleSem = nil;
 static std::atomic_uint64_t gPrefetchToken{0};
 
-static void prefetchUnboundBundle(void);
+static void prefetchBundle(void);
 
-static void prepareUnboundLoading(id instance)
+static void prepareLoading(id instance)
 {
     if (!instance || gLoaderPrepared.exchange(true))
     {
@@ -152,7 +152,7 @@ static void prepareUnboundLoading(id instance)
     }
 
     gInstance = instance;
-    gUnboundBundleIsReady = NO;
+    gBundleIsReady = NO;
     gBundleExecutionScheduled.store(false);
     dispatch_async(dispatch_get_main_queue(), ^{ [DevOverlay refreshOverlay]; });
 
@@ -165,17 +165,17 @@ static void prepareUnboundLoading(id instance)
     [Plugins init];
     [Themes init];
     [Fonts init];
-    prefetchUnboundBundle();
+    prefetchBundle();
     [HotReload observe];
 }
 
-static void prefetchUnboundBundle(void)
+static void prefetchBundle(void)
 {
     uint64_t token = gPrefetchToken.fetch_add(1) + 1;
     dispatch_semaphore_t sem = dispatch_semaphore_create(0);
 
-    gUnboundBundle    = nil;
-    gUnboundBundleSem = sem;
+    gBundle    = nil;
+    gBundleSem = sem;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *bundlePath = [Updater resolveBundlePath];
@@ -211,11 +211,11 @@ static void prefetchUnboundBundle(void)
             NSData *bundle = [FileSystem readFile:bundlePath];
             if (bundle.length)
             {
-                gUnboundBundle = bundle;
+                gBundle = bundle;
             }
         }
 
-        if (!gUnboundBundle)
+        if (!gBundle)
         {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [Utilities alert:@"Failed to load Unbound's bundle. Please report "
@@ -235,7 +235,7 @@ static BOOL runtimeHasRequiredModules(jsi::Runtime &runtime)
     return [JSI toBool:result runtime:runtime fallback:NO];
 }
 
-static void executeUnboundBundle(id instance,
+static void executeBundle(id instance,
                                  NSData *bundle,
                                  uint64_t token,
                                  NSUInteger attempt)
@@ -259,13 +259,13 @@ static void executeUnboundBundle(id instance,
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
                            dispatch_get_main_queue(), ^{
-                               executeUnboundBundle(gInstance, bundle, token, attempt + 1);
+                               executeBundle(gInstance, bundle, token, attempt + 1);
                            });
             return;
         }
 
         injectModulesPatch(runtime);
-        injectUnboundPreBundle(runtime);
+        injectPreBundle(runtime);
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
         BOOL didLoadBundle = [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
         if (didLoadBundle)
@@ -277,21 +277,21 @@ static void executeUnboundBundle(id instance,
                 {
                     return;
                 }
-                gUnboundBundleIsReady = YES;
+                gBundleIsReady = YES;
                 applyPendingBrowserLogin();
             });
         }
     }];
 }
 
-static void enqueueUnboundBundle(id self)
+static void enqueueBundle(id self)
 {
     if (gBundleExecutionScheduled.exchange(true))
     {
         return;
     }
 
-    dispatch_semaphore_t sem = gUnboundBundleSem;
+    dispatch_semaphore_t sem = gBundleSem;
     uint64_t              token = gPrefetchToken.load();
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -305,14 +305,14 @@ static void enqueueUnboundBundle(id self)
             return;
         }
 
-        NSData *bundle = gUnboundBundle;
+        NSData *bundle = gBundle;
         if (bundle.length == 0)
         {
             return;
         }
 
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Scheduling Unbound's bundle for execution..."];
-        executeUnboundBundle(self, bundle, token, 0);
+        executeBundle(self, bundle, token, 0);
     });
 }
 
@@ -324,15 +324,15 @@ static void enqueueUnboundBundle(id self)
 {
     gRuntime = &runtime;
     [Logger info:LOG_CATEGORY_DEFAULT format:@"RCTHost didInitializeRuntime reached."];
-    unbound::setNativePluginFabricHost(self);
+    loader::setNativePluginFabricHost(self);
     id hostInstance = instance;
-    prepareUnboundLoading(hostInstance);
+    prepareLoading(hostInstance);
     injectModulesPatch(runtime);
     %orig;
     if ([hostInstance respondsToSelector:@selector(callFunctionOnBufferedRuntimeExecutor:)])
     {
         [Logger info:LOG_CATEGORY_DEFAULT format:@"RCTHost runtime instance is ready."];
-        enqueueUnboundBundle(hostInstance);
+        enqueueBundle(hostInstance);
     }
     else
     {
@@ -365,16 +365,16 @@ static LoadJSBundleIMP         gOriginalLoadJSBundle         = NULL;
 static LoadScriptFromSourceIMP gOriginalLoadScriptFromSource = NULL;
 static BOOL                    gRCTInstanceHooksInstalled   = NO;
 
-static void unboundLoadJSBundle(id self, SEL selector, NSURL *sourceURL)
+static void loadJSBundle(id self, SEL selector, NSURL *sourceURL)
 {
-    prepareUnboundLoading(self);
+    prepareLoading(self);
     if (gOriginalLoadJSBundle)
     {
         gOriginalLoadJSBundle(self, selector, sourceURL);
     }
 }
 
-static void unboundLoadScriptFromSource(id self, SEL selector, id source)
+static void loadScriptFromSource(id self, SEL selector, id source)
 {
     [self callFunctionOnBufferedRuntimeExecutor:[](jsi::Runtime &runtime) {
         injectModulesPatch(runtime);
@@ -385,7 +385,7 @@ static void unboundLoadScriptFromSource(id self, SEL selector, id source)
         gOriginalLoadScriptFromSource(self, selector, source);
     }
 
-    enqueueUnboundBundle(self);
+    enqueueBundle(self);
 }
 
 static BOOL installRCTInstanceHooks(void)
@@ -404,11 +404,11 @@ static BOOL installRCTInstanceHooks(void)
 
     MSHookMessageEx(instanceClass,
                     @selector(_loadJSBundle:),
-                    (IMP)unboundLoadJSBundle,
+                    (IMP)loadJSBundle,
                     (IMP *)&gOriginalLoadJSBundle);
     MSHookMessageEx(instanceClass,
                     @selector(_loadScriptFromSource:),
-                    (IMP)unboundLoadScriptFromSource,
+                    (IMP)loadScriptFromSource,
                     (IMP *)&gOriginalLoadScriptFromSource);
     gRCTInstanceHooksInstalled = gOriginalLoadJSBundle != NULL &&
                                  gOriginalLoadScriptFromSource != NULL;

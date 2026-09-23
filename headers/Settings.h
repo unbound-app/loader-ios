@@ -3,7 +3,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern NSString *const UnboundSettingsDidChangeNotification;
+extern NSString *const SettingsDidChangeNotification;
 #ifdef __cplusplus
 }
 #endif

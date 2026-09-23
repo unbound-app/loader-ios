@@ -3,6 +3,6 @@
 #import <Foundation/Foundation.h>
 #import <jsi/jsi.h>
 
-namespace unbound {
+namespace loader {
 void registerNativePlatform(facebook::jsi::Runtime &runtime);
 }

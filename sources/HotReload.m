@@ -31,7 +31,7 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
 
         [[NSNotificationCenter defaultCenter] addObserver:shared
                                                  selector:@selector(sync)
-                                                     name:UnboundSettingsDidChangeNotification
+                                                     name:SettingsDidChangeNotification
                                                    object:nil];
 
         [shared sync];

@@ -6,7 +6,7 @@
 using namespace facebook;
 using namespace facebook::jsi;
 
-namespace unbound {
+namespace loader {
 
 void registerNativePlatform(Runtime &runtime)
 {
@@ -37,7 +37,7 @@ void registerNativePlatform(Runtime &runtime)
                           NSString *tag = (count > 1) ? [JSI toNSString:args[1] runtime:rt] : nil;
 
                           return [JSI evaluateBytecode:bytecodeData
-                                                    tag:(tag ?: @"UnboundPlatform.evaluateBytecode")
+                                                    tag:(tag ?: @"NativePlatform.evaluateBytecode")
                                                 runtime:rt];
                       }]);
 
@@ -124,7 +124,7 @@ void registerNativePlatform(Runtime &runtime)
 
         platform.setProperty(runtime, "app", std::move(app));
 
-        runtime.global().setProperty(runtime, "UnboundPlatform", std::move(platform));
+        runtime.global().setProperty(runtime, "NativePlatform", std::move(platform));
     }
 }
 

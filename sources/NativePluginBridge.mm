@@ -28,15 +28,57 @@
 using namespace facebook;
 using namespace facebook::jsi;
 
-@interface NSObject (UnboundRuntimeExecutor)
+@interface NSObject (RuntimeExecutor)
 - (void)callFunctionOnBufferedRuntimeExecutor:
     (std::function<void(facebook::jsi::Runtime &)> &&)executor;
 @end
 
-@interface NSObject (UnboundFabricHost)
+@interface NSObject (FabricHost)
 - (id)createSurfaceWithModuleName:(NSString *)moduleName
                               mode:(NSInteger)mode
                  initialProperties:(NSDictionary *)properties;
+@end
+
+@interface FabricContainer : UIView
+@property(nonatomic, weak) UIView *surfaceView;
+- (void)setFabricFrame:(CGRect)frame;
+@end
+
+@implementation FabricContainer
+
+{
+    BOOL _fabricFrameProtected;
+    BOOL _fabricSettingFrame;
+}
+
+- (void)setFrame:(CGRect)frame
+{
+    if (_fabricFrameProtected && !_fabricSettingFrame)
+    {
+        return;
+    }
+    [super setFrame:frame];
+}
+
+- (void)setFabricFrame:(CGRect)frame
+{
+    _fabricFrameProtected = YES;
+    _fabricSettingFrame = YES;
+    [super setFrame:frame];
+    _fabricSettingFrame = NO;
+}
+
+- (void)layoutSubviews
+{
+    [super layoutSubviews];
+    UIView *surfaceView = self.surfaceView;
+    if (surfaceView)
+    {
+        surfaceView.frame = self.bounds;
+        surfaceView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    }
+}
+
 @end
 
 namespace {
@@ -60,11 +102,12 @@ class FabricSurfaceHost final : public HostObject
 public:
     FabricSurfaceHost(void) = default;
 
-    void setSurface(id surface, UIView *view)
+    void setSurface(id surface, UIView *containerView, UIView *surfaceView)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         surface_ = surface;
-        view_ = view;
+        view_ = containerView;
+        surfaceView_ = surfaceView;
         active_ = true;
     }
 
@@ -80,6 +123,12 @@ public:
         return view_;
     }
 
+    UIView *surfaceView(void) const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return surfaceView_;
+    }
+
     bool active(void) const
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -91,6 +140,7 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         surface_ = nil;
         view_ = nil;
+        surfaceView_ = nil;
         active_ = false;
     }
 
@@ -98,6 +148,7 @@ private:
     mutable std::mutex mutex_;
     __strong id surface_ = nil;
     __strong UIView *view_ = nil;
+    __strong UIView *surfaceView_ = nil;
     bool active_ = false;
 };
 
@@ -656,10 +707,19 @@ static Value fabricMount(Runtime &runtime, const Value *args, size_t count)
         }
 
         UIView *containerView = (UIView *) container;
-        view.frame = containerView.bounds;
+        FabricContainer *surfaceContainer =
+            [[FabricContainer alloc] initWithFrame:containerView.bounds];
+        surfaceContainer.clipsToBounds = NO;
+        surfaceContainer.autoresizingMask =
+            UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        surfaceContainer.surfaceView = view;
+        view.frame = surfaceContainer.bounds;
         view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [containerView addSubview:view];
-        surfaceHost->setSurface(surface, view);
+        [surfaceContainer addSubview:view];
+        [containerView addSubview:surfaceContainer];
+        [surfaceContainer setNeedsLayout];
+        [surfaceContainer layoutIfNeeded];
+        surfaceHost->setSurface(surface, surfaceContainer, view);
     });
 
     return Object::createFromHostObject(runtime, std::move(surfaceHost));
@@ -724,12 +784,31 @@ static Value fabricSetFrame(Runtime &runtime, const Value *args, size_t count)
     std::shared_ptr<FabricSurfaceHost> surfaceHost = fabricSurfaceHost(runtime, args[0]);
     CGRect frame = fabricFrame(runtime, args[1]);
     UIView *view = surfaceHost->view();
+    UIView *surfaceView = surfaceHost->surfaceView();
     if (!surfaceHost->active() || !view)
     {
         return Value::undefined();
     }
 
-    executeMainSynchronously([view, frame]() { view.frame = frame; });
+    executeMainSynchronously([view, surfaceView, frame]() {
+        view.autoresizingMask = UIViewAutoresizingNone;
+        if ([view respondsToSelector:@selector(setFabricFrame:)])
+        {
+            [(FabricContainer *) view setFabricFrame:frame];
+        }
+        else
+        {
+            view.frame = frame;
+        }
+        [view setNeedsLayout];
+        [view layoutIfNeeded];
+        if (surfaceView)
+        {
+            surfaceView.frame = view.bounds;
+            surfaceView.autoresizingMask =
+                UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        }
+    });
     return Value::undefined();
 }
 
@@ -3388,7 +3467,7 @@ static void installFabric(Runtime &runtime, Object &fabric)
 
 }
 
-namespace unbound {
+namespace loader {
 
 void setNativePluginRuntimeExecutor(id instance)
 {
@@ -3437,7 +3516,7 @@ void registerNativePluginBridge(Runtime &runtime)
     installFabric(runtime, fabric);
     bridge.setProperty(runtime, "fabric", std::move(fabric));
 
-    runtime.global().setProperty(runtime, "UnboundNative", std::move(bridge));
+    runtime.global().setProperty(runtime, "NativePlugin", std::move(bridge));
 }
 
 }

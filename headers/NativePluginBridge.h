@@ -3,7 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <jsi/jsi.h>
 
-namespace unbound {
+namespace loader {
 
 constexpr const char *kNativePluginApiVersion = "1.0.0";
 constexpr const char *kNativePluginAbiVersion = "1.0.0";

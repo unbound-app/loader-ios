@@ -1,9 +1,9 @@
 #import "NotificationDelegate.h"
 
-@interface UnboundNotificationDelegate : NSObject <UNUserNotificationCenterDelegate>
+@interface NotificationDelegate : NSObject <UNUserNotificationCenterDelegate>
 @end
 
-@implementation UnboundNotificationDelegate
+@implementation NotificationDelegate
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
        willPresentNotification:(UNNotification *)notification
@@ -28,7 +28,7 @@
 
 @end
 
-static UnboundNotificationDelegate *notificationDelegate = nil;
+static NotificationDelegate *notificationDelegate = nil;
 
 %ctor
 {
@@ -37,7 +37,7 @@ static UnboundNotificationDelegate *notificationDelegate = nil;
             if (!notificationDelegate)
             {
                 [Logger info:LOG_CATEGORY_DEFAULT format:@"Setting up notification delegate"];
-                notificationDelegate = [[UnboundNotificationDelegate alloc] init];
+                notificationDelegate = [[NotificationDelegate alloc] init];
                 [UNUserNotificationCenter currentNotificationCenter].delegate =
                     notificationDelegate;
 

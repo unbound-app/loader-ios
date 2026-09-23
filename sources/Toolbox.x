@@ -1,7 +1,7 @@
 #import "Toolbox.h"
 #import "DevOverlay.h"
 
-@interface UnboundToolboxViewController ()
+@interface ToolboxViewController ()
 @property (nonatomic, assign) BOOL dismissalInProgress;
 @end
 
@@ -127,7 +127,7 @@ static UIWindowScene *activeWindowScene(void)
 }
 %end
 
-@implementation UnboundToolboxViewController
+@implementation ToolboxViewController
 
 - (void)viewDidLoad
 {
@@ -1011,7 +1011,7 @@ static UIWindowScene *activeWindowScene(void)
 
 void showToolboxSheet(void)
 {
-    UnboundToolboxViewController *settingsVC = [[UnboundToolboxViewController alloc] init];
+    ToolboxViewController *settingsVC = [[ToolboxViewController alloc] init];
     settingsVC.modalPresentationStyle        = UIModalPresentationOverFullScreen;
     settingsVC.modalTransitionStyle          = UIModalTransitionStyleCrossDissolve;
 
