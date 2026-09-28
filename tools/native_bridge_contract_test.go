@@ -48,6 +48,10 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"ffi_prep_closure_loc",
 		"dispatchFFIHook",
 		"dispatchVoidHook",
+		"dispatchVoidObjectHook",
+		"dispatchVoidObjectObjectHook",
+		"replaceObjectArgument",
+		"instanceTarget",
 		"isExecutableAddress",
 		"invokeHookOriginal",
 		"prepareFFICif",
@@ -69,6 +73,9 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	}
 	if strings.Contains(sourceText, "originalRequested") {
 		t.Fatal("native hook original invocation still uses deferred return semantics")
+	}
+	if !strings.Contains(sourceText, "state->instanceTarget == object") {
+		t.Fatal("native hook instance targets are not filtered before JavaScript dispatch")
 	}
 	if !strings.Contains(sourceText, "gFFICifs") {
 		t.Fatal("native FFI call interface cache is missing from the loader")

@@ -166,10 +166,14 @@ private:
     void *value_;
 };
 
+static Value structFields(Runtime &runtime, NSString *name, NSValue *value);
+
 class StructHost final : public HostObject
 {
 public:
     StructHost(NSString *name, NSValue *value) : name_([name copy]), value_(value) {}
+
+    Value get(Runtime &runtime, const PropNameID &name) override;
 
     NSString *name(void) const
     {
@@ -250,6 +254,10 @@ struct HookState {
     std::shared_ptr<Function> after;
     std::shared_ptr<Function> replace;
     std::weak_ptr<HookDispatcher> dispatcher;
+    __strong id instanceTarget = nil;
+    std::mutex returnCacheMutex;
+    __strong NSMutableDictionary<NSArray *, NSData *> *returnCache = [NSMutableDictionary dictionary];
+    bool cacheOnly = false;
     bool once = false;
     std::atomic_bool active{true};
 };
@@ -284,10 +292,28 @@ static ffi_cif prepareFFICif(Runtime &runtime, const FFITypeSpec &result,
 static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vector<uint8_t> &bytes);
 static void releaseHookClosure(const std::shared_ptr<HookDispatcher> &dispatcher);
 static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
+static void dispatchFFIHookBody(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
 static void dispatchVoidHook(id object, SEL selector);
+static CGSize dispatchCGSizeHook(id object, SEL selector, CGSize size);
+static CGSize dispatchCGSizePriorityHook(id object, SEL selector, CGSize size, float horizontal,
+                                        float vertical);
+static CGSize dispatchCGSizeDoublePriorityHook(id object, SEL selector, CGSize size, double horizontal,
+                                               double vertical);
+static CGRect dispatchCGRectObjectHook(id object, SEL selector, id indexPath);
+static double dispatchDoubleObjectObjectHook(id object, SEL selector, id tableView, id indexPath);
+static void dispatchVoidObjectHook(id object, SEL selector, id value);
+static void dispatchVoidObjectObjectHook(id object, SEL selector, id first, id second);
+static void dispatchVoidObjectObjectObjectHook(id object, SEL selector, id tableView, id cell,
+                                               id indexPath);
 static Value makeHook(Runtime &runtime, const Value *args, size_t count);
 static void invokeHookOriginal(const std::shared_ptr<HookDispatcher> &dispatcher, void **arguments,
                                void *returnValue);
+static const char *structEncoding(const std::string &name);
+static void setHookReturnCache(Runtime &runtime, const std::shared_ptr<HookState> &state,
+                               const Value *args, size_t count);
+static void removeHookReturnCache(Runtime &runtime, const std::shared_ptr<HookState> &state,
+                                  const Value *args, size_t count);
+static void clearHookReturnCache(const std::shared_ptr<HookState> &state);
 
 static std::mutex gFFIMutex;
 static std::unordered_map<std::string, std::shared_ptr<FFITypeDefinition>> gFFITypes;
@@ -1665,6 +1691,7 @@ static void removeHook(const std::shared_ptr<HookState> &state)
     {
         return;
     }
+    clearHookReturnCache(state);
 
     std::shared_ptr<HookDispatcher> dispatcher = state->dispatcher.lock();
     if (!dispatcher)
@@ -1713,6 +1740,36 @@ Value HookTokenHost::get(Runtime &runtime, const PropNameID &name)
     {
         return Value(state_ && state_->active.load());
     }
+    if (property == "setReturnValue")
+    {
+        std::shared_ptr<HookState> state = state_;
+        return Function::createFromHostFunction(
+            runtime, PropNameID::forUtf8(runtime, "setReturnValue"), 3,
+            [state](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+                setHookReturnCache(rt, state, args, count);
+                return Value::undefined();
+            });
+    }
+    if (property == "removeReturnValue")
+    {
+        std::shared_ptr<HookState> state = state_;
+        return Function::createFromHostFunction(
+            runtime, PropNameID::forUtf8(runtime, "removeReturnValue"), 2,
+            [state](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+                removeHookReturnCache(rt, state, args, count);
+                return Value::undefined();
+            });
+    }
+    if (property == "clearReturnValues")
+    {
+        std::shared_ptr<HookState> state = state_;
+        return Function::createFromHostFunction(
+            runtime, PropNameID::forUtf8(runtime, "clearReturnValues"), 0,
+            [state](Runtime &, const Value &, const Value *, size_t) -> Value {
+                clearHookReturnCache(state);
+                return Value::undefined();
+            });
+    }
     return Value::undefined();
 }
 
@@ -1743,6 +1800,117 @@ static const char *structEncoding(const std::string &name)
         return "{CGAffineTransform=dddddd}";
     }
     return nullptr;
+}
+
+Value StructHost::get(Runtime &runtime, const PropNameID &name)
+{
+    std::string property = name.utf8(runtime);
+    if (property == "name")
+    {
+        return String::createFromUtf8(runtime, name_.UTF8String ?: "");
+    }
+    if (property == "value")
+    {
+        return structFields(runtime, name_, value_);
+    }
+    return Value::undefined();
+}
+
+static Value structFields(Runtime &runtime, NSString *name, NSValue *value)
+{
+    if (!value)
+    {
+        return Value::undefined();
+    }
+
+    NSString *canonicalName = name;
+    if ([name containsString:@"_NSRange"])
+    {
+        canonicalName = @"NSRange";
+    }
+    else if ([name containsString:@"CGAffineTransform"])
+    {
+        canonicalName = @"CGAffineTransform";
+    }
+    else if ([name containsString:@"UIEdgeInsets"])
+    {
+        canonicalName = @"UIEdgeInsets";
+    }
+    else if ([name containsString:@"CGRect"])
+    {
+        canonicalName = @"CGRect";
+    }
+    else if ([name containsString:@"CGPoint"])
+    {
+        canonicalName = @"CGPoint";
+    }
+    else if ([name containsString:@"CGSize"])
+    {
+        canonicalName = @"CGSize";
+    }
+
+    Object result(runtime);
+    if ([canonicalName isEqualToString:@"NSRange"])
+    {
+        NSRange range = NSMakeRange(0, 0);
+        [value getValue:&range];
+        result.setProperty(runtime, "location", (double) range.location);
+        result.setProperty(runtime, "length", (double) range.length);
+        return result;
+    }
+    if ([canonicalName isEqualToString:@"CGPoint"])
+    {
+        CGPoint point = CGPointZero;
+        [value getValue:&point];
+        result.setProperty(runtime, "x", point.x);
+        result.setProperty(runtime, "y", point.y);
+        return result;
+    }
+    if ([canonicalName isEqualToString:@"CGSize"])
+    {
+        CGSize size = CGSizeZero;
+        [value getValue:&size];
+        result.setProperty(runtime, "width", size.width);
+        result.setProperty(runtime, "height", size.height);
+        return result;
+    }
+    if ([canonicalName isEqualToString:@"CGRect"])
+    {
+        CGRect rect = CGRectZero;
+        [value getValue:&rect];
+        Object origin(runtime);
+        origin.setProperty(runtime, "x", rect.origin.x);
+        origin.setProperty(runtime, "y", rect.origin.y);
+        Object size(runtime);
+        size.setProperty(runtime, "width", rect.size.width);
+        size.setProperty(runtime, "height", rect.size.height);
+        result.setProperty(runtime, "origin", origin);
+        result.setProperty(runtime, "size", size);
+        return result;
+    }
+    if ([canonicalName isEqualToString:@"UIEdgeInsets"])
+    {
+        UIEdgeInsets insets = UIEdgeInsetsZero;
+        [value getValue:&insets];
+        result.setProperty(runtime, "top", insets.top);
+        result.setProperty(runtime, "left", insets.left);
+        result.setProperty(runtime, "bottom", insets.bottom);
+        result.setProperty(runtime, "right", insets.right);
+        return result;
+    }
+    if ([canonicalName isEqualToString:@"CGAffineTransform"])
+    {
+        CGAffineTransform transform = CGAffineTransformIdentity;
+        [value getValue:&transform];
+        result.setProperty(runtime, "a", transform.a);
+        result.setProperty(runtime, "b", transform.b);
+        result.setProperty(runtime, "c", transform.c);
+        result.setProperty(runtime, "d", transform.d);
+        result.setProperty(runtime, "tx", transform.tx);
+        result.setProperty(runtime, "ty", transform.ty);
+        return result;
+    }
+    return Value::undefined();
 }
 
 static ffi_type *ffiStructTypeLocked(const std::string &name)
@@ -2210,6 +2378,59 @@ static Object hookContext(Runtime &runtime, const std::shared_ptr<HookInvocation
 
     auto original = invocation;
     context.setProperty(
+        runtime, "replaceObjectArgument",
+        Function::createFromHostFunction(
+            runtime, PropNameID::forUtf8(runtime, "replaceObjectArgument"), 2,
+            [original, allowOriginal](Runtime &rt, const Value &, const Value *args,
+                                     size_t count) -> Value {
+                std::lock_guard<std::mutex> lock(original->lifecycleMutex);
+                if (!original->active.load())
+                {
+                    throw JSError(rt, "Native hook arguments are unavailable after the hook returns");
+                }
+                if (!allowOriginal)
+                {
+                    throw JSError(rt, "Native hook arguments can only be replaced synchronously");
+                }
+                if (std::this_thread::get_id() != original->hookThread)
+                {
+                    throw JSError(rt, "Native hook arguments cannot cross runtime threads");
+                }
+                if (count < 2 || !args[0].isNumber())
+                {
+                    throw JSError(rt, "Native hook replaceObjectArgument expects an index and object");
+                }
+
+                double requestedIndex = args[0].getNumber();
+                size_t explicitCount = original->dispatcher->signature->arguments.size() - 2;
+                if (!(requestedIndex >= 0 && requestedIndex < explicitCount))
+                {
+                    throw JSError(rt, "Native hook argument index is out of range");
+                }
+                size_t explicitIndex = static_cast<size_t>(requestedIndex);
+                if (static_cast<double>(explicitIndex) != requestedIndex)
+                {
+                    throw JSError(rt, "Native hook argument index must be an integer");
+                }
+
+                size_t argumentIndex = explicitIndex + 2;
+                const FFITypeSpec &spec = original->dispatcher->signature->arguments[argumentIndex];
+                if (spec.name != "object" && spec.name != "class")
+                {
+                    throw JSError(rt, "Native hook argument is not an Objective-C object");
+                }
+
+                id object = args[1].isNull() ? nil : objcValue(rt, args[1]);
+                void *rawObject = (__bridge void *) object;
+                if (object)
+                {
+                    original->retainedObjects.emplace_back(std::make_shared<ObjCHandleHost>(object));
+                }
+                memcpy(original->arguments[argumentIndex].data(), &rawObject, sizeof(rawObject));
+                memcpy(original->nativeArguments[argumentIndex], &rawObject, sizeof(rawObject));
+                return Value::undefined();
+            }));
+    context.setProperty(
         runtime, "original",
         Function::createFromHostFunction(
             runtime, PropNameID::forUtf8(runtime, "original"), 0,
@@ -2343,6 +2564,203 @@ static bool setHookReturn(Runtime &runtime, const FFITypeSpec &spec, const Value
     }
     memcpy(returnValue, argument.bytes.data(), spec.type->size);
     return true;
+}
+
+static id hookCacheComponent(const FFITypeSpec &spec, const FFICallArgument &argument)
+{
+    if (spec.name == "object" || spec.name == "class")
+    {
+        id object = (__bridge id) argument.pointer;
+        return object ?: [NSNull null];
+    }
+    if (spec.name == "selector")
+    {
+        SEL selector = (SEL) argument.pointer;
+        return selector ? NSStringFromSelector(selector) : [NSNull null];
+    }
+    if (spec.name == "pointer")
+    {
+        return [NSValue valueWithPointer:argument.pointer];
+    }
+    if (spec.name == "cstring")
+    {
+        const char *string = (const char *) argument.pointer;
+        return string ? ([NSString stringWithUTF8String:string] ?: [NSNull null]) : [NSNull null];
+    }
+    if (spec.name == "bool")
+    {
+        return @(*(const bool *) argument.bytes.data());
+    }
+    if (spec.name == "i8")
+    {
+        return @(*(const int8_t *) argument.bytes.data());
+    }
+    if (spec.name == "u8")
+    {
+        return @(*(const uint8_t *) argument.bytes.data());
+    }
+    if (spec.name == "i16")
+    {
+        return @(*(const int16_t *) argument.bytes.data());
+    }
+    if (spec.name == "u16")
+    {
+        return @(*(const uint16_t *) argument.bytes.data());
+    }
+    if (spec.name == "i32")
+    {
+        return @(*(const int32_t *) argument.bytes.data());
+    }
+    if (spec.name == "u32")
+    {
+        return @(*(const uint32_t *) argument.bytes.data());
+    }
+    if (spec.name == "i64")
+    {
+        return @(*(const int64_t *) argument.bytes.data());
+    }
+    if (spec.name == "u64")
+    {
+        return @(*(const uint64_t *) argument.bytes.data());
+    }
+    if (spec.name == "float")
+    {
+        return @(*(const float *) argument.bytes.data());
+    }
+    if (spec.name == "double")
+    {
+        return @(*(const double *) argument.bytes.data());
+    }
+    if (spec.name.rfind("struct:", 0) == 0)
+    {
+        const char *encoding = structEncoding(spec.name.substr(7));
+        if (!encoding || argument.bytes.size() < spec.type->size)
+        {
+            return nil;
+        }
+        return [NSValue value:argument.bytes.data() withObjCType:encoding];
+    }
+    return nil;
+}
+
+static NSArray *hookReturnCacheKey(Runtime &runtime, const std::shared_ptr<HookState> &state,
+                                   const Value *args, size_t count)
+{
+    if (!state || !state->cacheOnly || count < 2 || !args[1].isObject() ||
+        !args[1].asObject(runtime).isArray(runtime))
+    {
+        throw JSError(runtime, "Native hook return caching is unavailable");
+    }
+
+    std::shared_ptr<HookDispatcher> dispatcher = state->dispatcher.lock();
+    if (!dispatcher)
+    {
+        throw JSError(runtime, "Native hook has been removed");
+    }
+
+    id target = objcValue(runtime, args[0]);
+    Array values = args[1].asObject(runtime).asArray(runtime);
+    size_t expected = dispatcher->signature->arguments.size() - 2;
+    if (!target || values.size(runtime) != expected)
+    {
+        throw JSError(runtime, "Native hook return cache arguments do not match the method");
+    }
+
+    NSMutableArray *components = [NSMutableArray arrayWithCapacity:expected + 2];
+    [components addObject:target];
+    [components addObject:NSStringFromSelector(dispatcher->selector)];
+    for (size_t index = 0; index < expected; index++)
+    {
+        FFICallArgument argument{};
+        setFFIArgument(runtime, values.getValueAtIndex(runtime, index),
+                       dispatcher->signature->arguments[index + 2], argument);
+        id component = hookCacheComponent(dispatcher->signature->arguments[index + 2], argument);
+        if (!component)
+        {
+            throw JSError(runtime, "Native hook return cache argument type is unsupported");
+        }
+        [components addObject:component];
+    }
+    return [components copy];
+}
+
+static NSArray *hookReturnCacheKey(const std::shared_ptr<HookDispatcher> &dispatcher,
+                                   void **arguments)
+{
+    if (!dispatcher || !arguments)
+    {
+        return nil;
+    }
+
+    NSMutableArray *components =
+        [NSMutableArray arrayWithCapacity:dispatcher->signature->arguments.size()];
+    for (size_t index = 0; index < dispatcher->signature->arguments.size(); index++)
+    {
+        const FFITypeSpec &spec = dispatcher->signature->arguments[index];
+        FFICallArgument argument{};
+        if (spec.name == "object" || spec.name == "class" || spec.name == "selector" ||
+            spec.name == "pointer" || spec.name == "cstring")
+        {
+            memcpy(&argument.pointer, arguments[index], sizeof(argument.pointer));
+        }
+        else
+        {
+            argument.bytes.resize(spec.type->size);
+            memcpy(argument.bytes.data(), arguments[index], spec.type->size);
+        }
+        id component = hookCacheComponent(spec, argument);
+        if (!component)
+        {
+            return nil;
+        }
+        [components addObject:component];
+    }
+    return [components copy];
+}
+
+static void setHookReturnCache(Runtime &runtime, const std::shared_ptr<HookState> &state,
+                               const Value *args, size_t count)
+{
+    if (!state || !state->cacheOnly || count < 3)
+    {
+        throw JSError(runtime, "Native hook does not support cached return values");
+    }
+
+    std::shared_ptr<HookDispatcher> dispatcher = state->dispatcher.lock();
+    if (!dispatcher)
+    {
+        throw JSError(runtime, "Native hook has been removed");
+    }
+
+    const FFITypeSpec &result = dispatcher->signature->result;
+    std::vector<uint8_t> bytes(std::max<size_t>(result.type->size, sizeof(void *)));
+    if (!setHookReturn(runtime, result, args[2], bytes.data()))
+    {
+        throw JSError(runtime, "Native hook return value has an unsupported type");
+    }
+
+    NSArray *key = hookReturnCacheKey(runtime, state, args, count);
+    NSData *value = [NSData dataWithBytes:bytes.data() length:result.type->size];
+    std::lock_guard<std::mutex> lock(state->returnCacheMutex);
+    state->returnCache[key] = value;
+}
+
+static void removeHookReturnCache(Runtime &runtime, const std::shared_ptr<HookState> &state,
+                                  const Value *args, size_t count)
+{
+    NSArray *key = hookReturnCacheKey(runtime, state, args, count);
+    std::lock_guard<std::mutex> lock(state->returnCacheMutex);
+    [state->returnCache removeObjectForKey:key];
+}
+
+static void clearHookReturnCache(const std::shared_ptr<HookState> &state)
+{
+    if (!state)
+    {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(state->returnCacheMutex);
+    [state->returnCache removeAllObjects];
 }
 
 static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vector<uint8_t> &bytes)
@@ -2558,17 +2976,79 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
     }
 
     HookCallGuard guard(dispatcher);
-    if (dispatcher.get() != userData)
+    if (userData && dispatcher.get() != userData)
     {
         return;
     }
-    auto invocation = hookInvocation(dispatcher, arguments, returnValue);
 
     std::vector<std::shared_ptr<HookState>> hooks;
     {
         std::lock_guard<std::mutex> lock(gHookMutex);
-        hooks = dispatcher->hooks;
+        for (const std::shared_ptr<HookState> &state : dispatcher->hooks)
+        {
+            if (state->active && (!state->instanceTarget || state->instanceTarget == object))
+            {
+                hooks.push_back(state);
+            }
+        }
     }
+    if (hooks.empty())
+    {
+        invokeHookOriginal(dispatcher, arguments, returnValue);
+        return;
+    }
+
+    bool cacheOnly = true;
+    for (const std::shared_ptr<HookState> &state : hooks)
+    {
+        if (state->active && !state->cacheOnly)
+        {
+            cacheOnly = false;
+            break;
+        }
+    }
+    if (cacheOnly)
+    {
+        bool cachedReturn = false;
+        std::vector<std::shared_ptr<HookState>> onceHooks;
+        for (const std::shared_ptr<HookState> &state : hooks)
+        {
+            if (!state->active)
+            {
+                continue;
+            }
+
+            NSArray *key = hookReturnCacheKey(dispatcher, arguments);
+            NSData *cached = nil;
+            if (key)
+            {
+                std::lock_guard<std::mutex> lock(state->returnCacheMutex);
+                cached = state->returnCache[key];
+            }
+            if (cached && returnValue &&
+                cached.length == dispatcher->signature->result.type->size)
+            {
+                memcpy(returnValue, cached.bytes, cached.length);
+                cachedReturn = true;
+            }
+            if (state->once)
+            {
+                onceHooks.push_back(state);
+            }
+        }
+
+        if (!cachedReturn)
+        {
+            invokeHookOriginal(dispatcher, arguments, returnValue);
+        }
+        for (const std::shared_ptr<HookState> &state : onceHooks)
+        {
+            removeHook(state);
+        }
+        return;
+    }
+
+    auto invocation = hookInvocation(dispatcher, arguments, returnValue);
 
     bool replacementApplied = false;
     bool originalCalled = false;
@@ -2578,6 +3058,28 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
     {
         if (!state->active)
         {
+            continue;
+        }
+
+        if (state->cacheOnly)
+        {
+            NSArray *key = hookReturnCacheKey(dispatcher, arguments);
+            NSData *cached = nil;
+            if (key)
+            {
+                std::lock_guard<std::mutex> lock(state->returnCacheMutex);
+                cached = state->returnCache[key];
+            }
+            if (cached && returnValue &&
+                cached.length == dispatcher->signature->result.type->size)
+            {
+                memcpy(returnValue, cached.bytes, cached.length);
+                replacementApplied = true;
+            }
+            if (state->once)
+            {
+                onceHooks.push_back(state);
+            }
             continue;
         }
 
@@ -2679,6 +3181,149 @@ static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, v
     }
 }
 
+static CGSize dispatchCGSizeHook(id object, SEL selector, CGSize size)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &size};
+        CGSize result = CGSizeZero;
+        dispatchFFIHookBody(nullptr, &result, arguments, nullptr);
+        return result;
+    }
+}
+
+static CGSize dispatchCGSizePriorityHook(id object, SEL selector, CGSize size, float horizontal,
+                                        float vertical)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &size, &horizontal, &vertical};
+        CGSize result = CGSizeZero;
+        dispatchFFIHookBody(nullptr, &result, arguments, nullptr);
+        return result;
+    }
+}
+
+static CGSize dispatchCGSizeDoublePriorityHook(id object, SEL selector, CGSize size, double horizontal,
+                                               double vertical)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &size, &horizontal, &vertical};
+        CGSize result = CGSizeZero;
+        dispatchFFIHookBody(nullptr, &result, arguments, nullptr);
+        return result;
+    }
+}
+
+static CGRect dispatchCGRectObjectHook(id object, SEL selector, id indexPath)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &indexPath};
+        CGRect result = CGRectZero;
+        dispatchFFIHookBody(nullptr, &result, arguments, nullptr);
+        return result;
+    }
+}
+
+static double dispatchDoubleObjectObjectHook(id object, SEL selector, id tableView, id indexPath)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &tableView, &indexPath};
+        double result = 0;
+        dispatchFFIHookBody(nullptr, &result, arguments, nullptr);
+        return result;
+    }
+}
+
+static void dispatchVoidObjectObjectObjectHook(id object, SEL selector, id tableView, id cell,
+                                               id indexPath)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &tableView, &cell, &indexPath};
+        dispatchFFIHookBody(nullptr, nullptr, arguments, nullptr);
+    }
+}
+
+static void dispatchVoidObjectHook(id object, SEL selector, id value)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &value};
+        dispatchFFIHookBody(nullptr, nullptr, arguments, nullptr);
+    }
+}
+
+static void dispatchVoidObjectObjectHook(id object, SEL selector, id first, id second)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &first, &second};
+        dispatchFFIHookBody(nullptr, nullptr, arguments, nullptr);
+    }
+}
+
+static void *fallbackHookCode(const HookSignature &signature)
+{
+    if (signature.result.name == "void" && signature.arguments.size() == 3 &&
+        signature.arguments[2].name == "object")
+    {
+        return reinterpret_cast<void *>(dispatchVoidObjectHook);
+    }
+
+    if (signature.result.name == "void" && signature.arguments.size() == 4 &&
+        signature.arguments[2].name == "object" && signature.arguments[3].name == "object")
+    {
+        return reinterpret_cast<void *>(dispatchVoidObjectObjectHook);
+    }
+
+    if (signature.result.name == "void" && signature.arguments.size() == 5 &&
+        signature.arguments[2].name == "object" && signature.arguments[3].name == "object" &&
+        signature.arguments[4].name == "object")
+    {
+        return reinterpret_cast<void *>(dispatchVoidObjectObjectObjectHook);
+    }
+
+    if (signature.result.name == "struct:CGRect" && signature.arguments.size() == 3 &&
+        signature.arguments[2].name == "object")
+    {
+        return reinterpret_cast<void *>(dispatchCGRectObjectHook);
+    }
+
+    if (signature.result.name == "double" && signature.arguments.size() == 4 &&
+        signature.arguments[2].name == "object" && signature.arguments[3].name == "object")
+    {
+        return reinterpret_cast<void *>(dispatchDoubleObjectObjectHook);
+    }
+
+    if (signature.result.name != "struct:CGSize")
+    {
+        return nullptr;
+    }
+
+    if (signature.arguments.size() == 3 && signature.arguments[2].name == "struct:CGSize")
+    {
+        return reinterpret_cast<void *>(dispatchCGSizeHook);
+    }
+
+    if (signature.arguments.size() == 5 && signature.arguments[2].name == "struct:CGSize" &&
+        signature.arguments[3].name == "float" && signature.arguments[4].name == "float")
+    {
+        return reinterpret_cast<void *>(dispatchCGSizePriorityHook);
+    }
+
+    if (signature.arguments.size() == 5 && signature.arguments[2].name == "struct:CGSize" &&
+        signature.arguments[3].name == "double" && signature.arguments[4].name == "double")
+    {
+        return reinterpret_cast<void *>(dispatchCGSizeDoublePriorityHook);
+    }
+
+    return nullptr;
+}
+
 static void dispatchVoidHook(id object, SEL selector)
 {
     @autoreleasepool
@@ -2696,7 +3341,18 @@ static void dispatchVoidHook(id object, SEL selector)
         std::vector<std::shared_ptr<HookState>> hooks;
         {
             std::lock_guard<std::mutex> lock(gHookMutex);
-            hooks = dispatcher->hooks;
+            for (const std::shared_ptr<HookState> &state : dispatcher->hooks)
+            {
+                if (state->active && (!state->instanceTarget || state->instanceTarget == object))
+                {
+                    hooks.push_back(state);
+                }
+            }
+        }
+        if (hooks.empty())
+        {
+            invokeHookOriginal(dispatcher, arguments, nullptr);
+            return;
         }
 
         bool replacementApplied = false;
@@ -2854,16 +3510,42 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
     std::shared_ptr<Function> before = functionFor("before");
     std::shared_ptr<Function> after = functionFor("after");
     std::shared_ptr<Function> replace = functionFor("replace");
-    if (!before && !after && !replace)
+    bool once = false;
+    bool cacheOnly = false;
+    id instanceTarget = nil;
+    if (count > 3 && args[3].isObject())
+    {
+        Object options = args[3].asObject(runtime);
+        Value onceValue = options.getProperty(runtime, "once");
+        once = onceValue.isBool() && onceValue.getBool();
+        Value cacheOnlyValue = options.getProperty(runtime, "cacheOnly");
+        cacheOnly = cacheOnlyValue.isBool() && cacheOnlyValue.getBool();
+        Value instanceValue = options.getProperty(runtime, "instance");
+        if (!instanceValue.isUndefined() && !instanceValue.isNull())
+        {
+            instanceTarget = objcValue(runtime, instanceValue);
+            if (!instanceTarget)
+            {
+                throw JSError(runtime, "Native hook instance target must be an Objective-C handle");
+            }
+        }
+    }
+    if (!before && !after && !replace && !cacheOnly)
     {
         throw JSError(runtime, "objc.hook requires at least one handler");
     }
-
-    bool once = false;
-    if (count > 3 && args[3].isObject())
+    if (cacheOnly)
     {
-        Value onceValue = args[3].asObject(runtime).getProperty(runtime, "once");
-        once = onceValue.isBool() && onceValue.getBool();
+        const std::string &result = signature->result.name;
+        bool supportedResult = result == "bool" || result == "i8" || result == "u8" ||
+                               result == "i16" || result == "u16" || result == "i32" ||
+                               result == "u32" || result == "i64" || result == "u64" ||
+                               result == "float" || result == "double" ||
+                               result.rfind("struct:", 0) == 0;
+        if (before || after || replace || !supportedResult)
+        {
+            throw JSError(runtime, "Native cache-only hooks require a scalar or struct return type");
+        }
     }
 
     std::shared_ptr<HookDispatcher> dispatcher;
@@ -2878,24 +3560,42 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
             dispatcher->selector = selector;
             dispatcher->original = method_getImplementation(method);
             dispatcher->signature = signature;
+            auto prepareClosure = [&]() {
+                dispatcher->closure = (ffi_closure *) ffi_closure_alloc(sizeof(ffi_closure),
+                                                                          &dispatcher->code);
+                bool closureReady =
+                    dispatcher->closure && isExecutableAddress(dispatcher->code) &&
+                    ffi_prep_closure_loc(dispatcher->closure, &dispatcher->signature->cif,
+                                         dispatchFFIHook, dispatcher.get(), dispatcher->code) == FFI_OK;
+                if (!closureReady)
+                {
+                    if (dispatcher->closure) ffi_closure_free(dispatcher->closure);
+                    dispatcher->closure = nullptr;
+                    dispatcher->code = nullptr;
+                    throw JSError(runtime, "Native hook closure is unavailable on this device");
+                }
+            };
             if (signature->result.name == "void")
             {
-                if (signature->arguments.size() != 2)
+                if (signature->arguments.size() == 2)
                 {
-                    throw JSError(runtime, "Native hook signature is unsupported on this device");
+                    dispatcher->code = (void *) dispatchVoidHook;
                 }
-                dispatcher->code = (void *) dispatchVoidHook;
+                else
+                {
+                    dispatcher->code = fallbackHookCode(*dispatcher->signature);
+                    if (!dispatcher->code)
+                    {
+                        prepareClosure();
+                    }
+                }
             }
             else
             {
-                dispatcher->closure = (ffi_closure *) ffi_closure_alloc(sizeof(ffi_closure),
-                                                                          &dispatcher->code);
-                if (!dispatcher->closure || !isExecutableAddress(dispatcher->code) ||
-                    ffi_prep_closure_loc(dispatcher->closure, &dispatcher->signature->cif,
-                                         dispatchFFIHook, dispatcher.get(), dispatcher->code) != FFI_OK)
+                dispatcher->code = fallbackHookCode(*dispatcher->signature);
+                if (!dispatcher->code)
                 {
-                    if (dispatcher->closure) ffi_closure_free(dispatcher->closure);
-                    throw JSError(runtime, "Native hook closure is unavailable on this device");
+                    prepareClosure();
                 }
             }
             method_setImplementation(method, (IMP) dispatcher->code);
@@ -2922,7 +3622,9 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
     state->before = std::move(before);
     state->after = std::move(after);
     state->replace = std::move(replace);
+    state->cacheOnly = cacheOnly;
     state->once = once;
+    state->instanceTarget = instanceTarget;
     state->dispatcher = dispatcher;
     {
         std::lock_guard<std::mutex> lock(gHookMutex);
