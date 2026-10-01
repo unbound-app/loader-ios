@@ -44,8 +44,8 @@ void registerNativePlatform(Runtime &runtime)
         Object device(runtime);
 
         device.setProperty(
-            runtime, "getModel",
-            [JSI makeFunction:"getModel"
+            runtime, "getDeviceModel",
+            [JSI makeFunction:"getDeviceModel"
                      argCount:0
                       runtime:runtime
                       handler:[](Runtime &rt, const Value &, const Value *, size_t) -> Value {
@@ -114,8 +114,8 @@ void registerNativePlatform(Runtime &runtime)
         Object app(runtime);
 
         app.setProperty(
-            runtime, "getSource",
-            [JSI makeFunction:"getSource"
+            runtime, "getAppSource",
+            [JSI makeFunction:"getAppSource"
                      argCount:0
                       runtime:runtime
                       handler:[](Runtime &rt, const Value &, const Value *, size_t) -> Value {
