@@ -407,11 +407,11 @@ static Value makeFunction(const char *name, unsigned int argCount, Runtime &runt
 static Value makeFunction(const char *name, unsigned int argCount, Runtime &runtime,
                           Value (*handler)(Runtime &, const Value *, size_t))
 {
-    return [JSI makeFunction:name
-                    argCount:argCount
-                     runtime:runtime
-                     handler:[handler](Runtime &rt, const Value &, const Value *args,
-                                       size_t count) -> Value { return handler(rt, args, count); }];
+    HostFunctionType wrappedHandler = [handler](Runtime &rt, const Value &, const Value *args,
+                                                 size_t count) -> Value {
+        return handler(rt, args, count);
+    };
+    return makeFunction(name, argCount, runtime, wrappedHandler);
 }
 
 static std::string hookKey(Class cls, SEL selector)

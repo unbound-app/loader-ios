@@ -80,6 +80,11 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		!strings.Contains(sourceText, "attachNativeErrorCode") {
 		t.Fatal("native bridge exceptions are missing structured error codes")
 	}
+	rawFunctionHandler := strings.Index(sourceText, "Value (*handler)(Runtime &, const Value *, size_t)")
+	if rawFunctionHandler < 0 ||
+		!strings.Contains(sourceText[rawFunctionHandler:], "return makeFunction(name, argCount, runtime, wrappedHandler);") {
+		t.Fatal("raw native bridge handlers bypass structured error wrapping")
+	}
 	if !strings.Contains(sourceText, `signature.result.name == "object" && signature.arguments.size() == 3`) {
 		t.Fatal("native object-return hooks do not have a precompiled fallback")
 	}
