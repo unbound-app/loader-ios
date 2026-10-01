@@ -38,6 +38,7 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"native.objc.hooks",
 		"native.ffi.symbols",
 		"native.ffi.call",
+		"native.fabric.mount",
 	} {
 		if !strings.Contains(sourceText, `"`+capability+`"`) {
 			t.Fatalf("native capability %q is missing from the loader", capability)
@@ -70,6 +71,14 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	}
 	if !strings.Contains(sourceText, "Native hook closure is unavailable on this device") {
 		t.Fatal("native hook closure fail-closed diagnostic is missing from the loader")
+	}
+	if !strings.Contains(sourceText, "class NativeDataBuffer") ||
+		!strings.Contains(sourceText, "[value isKindOfClass:[NSData class]]") {
+		t.Fatal("native Objective-C data results are not converted to JavaScript byte arrays")
+	}
+	if !strings.Contains(sourceText, "NATIVE_BRIDGE_ERROR") ||
+		!strings.Contains(sourceText, "attachNativeErrorCode") {
+		t.Fatal("native bridge exceptions are missing structured error codes")
 	}
 	if !strings.Contains(sourceText, `signature.result.name == "object" && signature.arguments.size() == 3`) {
 		t.Fatal("native object-return hooks do not have a precompiled fallback")

@@ -98,6 +98,34 @@ private:
     __strong id value_;
 };
 
+class NativeDataBuffer final : public MutableBuffer
+{
+public:
+    explicit NativeDataBuffer(NSData *value)
+    {
+        if (value.length == 0)
+        {
+            return;
+        }
+
+        const uint8_t *bytes = static_cast<const uint8_t *>(value.bytes);
+        bytes_.assign(bytes, bytes + value.length);
+    }
+
+    size_t size() const override
+    {
+        return bytes_.size();
+    }
+
+    uint8_t *data() override
+    {
+        return bytes_.data();
+    }
+
+private:
+    std::vector<uint8_t> bytes_;
+};
+
 class FabricSurfaceHost final : public HostObject
 {
 public:
@@ -317,6 +345,25 @@ static void removeHookReturnCache(Runtime &runtime, const std::shared_ptr<HookSt
                                   const Value *args, size_t count);
 static void clearHookReturnCache(const std::shared_ptr<HookState> &state);
 
+static void attachNativeErrorCode(Runtime &runtime, const JSError &error)
+{
+    const Value &value = error.value();
+    if (!value.isObject())
+    {
+        return;
+    }
+
+    Object object = value.asObject(runtime);
+    Value code = object.getProperty(runtime, "code");
+    if (code.isString())
+    {
+        return;
+    }
+
+    object.setProperty(runtime, "code",
+                       String::createFromUtf8(runtime, "NATIVE_BRIDGE_ERROR"));
+}
+
 static std::mutex gFFIMutex;
 static std::unordered_map<std::string, std::shared_ptr<FFITypeDefinition>> gFFITypes;
 struct CachedFFICif {
@@ -330,7 +377,31 @@ static std::unordered_map<std::string, std::shared_ptr<CachedFFICif>> gFFICifs;
 static Value makeFunction(const char *name, unsigned int argCount, Runtime &runtime,
                           const HostFunctionType &handler)
 {
-    return [JSI makeFunction:name argCount:argCount runtime:runtime handler:handler];
+    HostFunctionType guardedHandler = [handler](Runtime &rt, const Value &thisValue,
+                                                const Value *args, size_t count) -> Value {
+        try
+        {
+            return handler(rt, thisValue, args, count);
+        }
+        catch (const JSError &error)
+        {
+            attachNativeErrorCode(rt, error);
+            throw;
+        }
+        catch (const std::exception &error)
+        {
+            JSError failure(rt, error.what());
+            attachNativeErrorCode(rt, failure);
+            throw failure;
+        }
+        catch (...)
+        {
+            JSError failure(rt, "Native bridge operation failed");
+            attachNativeErrorCode(rt, failure);
+            throw failure;
+        }
+    };
+    return [JSI makeFunction:name argCount:argCount runtime:runtime handler:guardedHandler];
 }
 
 static Value makeFunction(const char *name, unsigned int argCount, Runtime &runtime,
@@ -432,6 +503,13 @@ static Value objcResult(Runtime &runtime, id value)
     if ([value isKindOfClass:[NSNumber class]])
     {
         return [JSI fromObjC:value runtime:runtime];
+    }
+
+    if ([value isKindOfClass:[NSData class]])
+    {
+        auto data = std::make_shared<NativeDataBuffer>((NSData *) value);
+        ArrayBuffer buffer(runtime, data);
+        return Uint8Array(runtime, buffer, 0, buffer.size(runtime));
     }
 
     if ([value isKindOfClass:[NSArray class]])
