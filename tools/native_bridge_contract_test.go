@@ -48,6 +48,9 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"ffi_prep_closure_loc",
 		"dispatchFFIHook",
 		"dispatchVoidHook",
+		"dispatchObjectObjectHook",
+		"dispatchObjectCGRectHook",
+		"dispatchCGSizeNoArgumentHook",
 		"dispatchVoidObjectHook",
 		"dispatchVoidObjectObjectHook",
 		"replaceObjectArgument",
@@ -68,6 +71,21 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	if !strings.Contains(sourceText, "Native hook closure is unavailable on this device") {
 		t.Fatal("native hook closure fail-closed diagnostic is missing from the loader")
 	}
+	if !strings.Contains(sourceText, `signature.result.name == "object" && signature.arguments.size() == 3`) {
+		t.Fatal("native object-return hooks do not have a precompiled fallback")
+	}
+	if !strings.Contains(sourceText, `signature.arguments[2].name == "struct:CGRect"`) {
+		t.Fatal("native object-return CGRect hooks do not have a precompiled fallback")
+	}
+	rectEncoding := strings.Index(sourceText, `if (value.find("CGRect")`)
+	pointEncoding := strings.Index(sourceText, `if (value.find("CGPoint")`)
+	if rectEncoding < 0 || pointEncoding < 0 || rectEncoding > pointEncoding {
+		t.Fatal("native type parsing must recognize CGRect before its nested CGPoint encoding")
+	}
+	if !strings.Contains(sourceText, `signature.result.name != "struct:CGSize"`) ||
+		!strings.Contains(sourceText, `signature.arguments.size() == 2`) {
+		t.Fatal("native no-argument CGSize hooks do not have a precompiled fallback")
+	}
 	if !strings.Contains(sourceText, "Native hook original() cannot cross runtime threads") {
 		t.Fatal("native hook original thread safety diagnostic is missing from the loader")
 	}
@@ -76,6 +94,32 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	}
 	if !strings.Contains(sourceText, "state->instanceTarget == object") {
 		t.Fatal("native hook instance targets are not filtered before JavaScript dispatch")
+	}
+	if !strings.Contains(sourceText, "method_getImplementation(method) == dispatcher->original") {
+		t.Fatal("native hook dispatchers are not restored when their original IMP is current")
+	}
+	if strings.Contains(sourceText, "method_setImplementation") {
+		t.Fatal("native hook dispatchers bypass the shared hook framework")
+	}
+	if !strings.Contains(sourceText, "MSHookMessageEx(cls, selector, (IMP) dispatcher->code, &dispatcher->original)") {
+		t.Fatal("native hook dispatchers are not installed through the shared hook framework")
+	}
+	if !strings.Contains(sourceText, "MSHookMessageEx(dispatcher->cls, dispatcher->selector,") {
+		t.Fatal("native hook dispatchers are not restored through the shared hook framework")
+	}
+	if !strings.Contains(sourceText, "current == (IMP) dispatcher->code || current == dispatcher->original") {
+		t.Fatal("native hook dispatchers are not retained while external IMPs may chain through them")
+	}
+	registration := strings.Index(sourceText, "dispatcher = iterator->second;")
+	if registration < 0 {
+		t.Fatal("native hook registration branch is missing")
+	}
+	registrationEnd := strings.Index(sourceText[registration:], "auto state = std::make_shared<HookState>();")
+	if registrationEnd < 0 {
+		t.Fatal("native hook registration branch is missing")
+	}
+	if strings.Contains(sourceText[registration:registration+registrationEnd], "dispatcher->original = method_getImplementation(method)") {
+		t.Fatal("native hook registration can wrap an external IMP that already chains through its dispatcher")
 	}
 	if !strings.Contains(sourceText, "gFFICifs") {
 		t.Fatal("native FFI call interface cache is missing from the loader")

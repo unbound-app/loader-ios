@@ -4,6 +4,7 @@
 #import <mach/mach.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <substrate.h>
 #import <UIKit/UIKit.h>
 
 #import <algorithm>
@@ -295,6 +296,7 @@ static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, v
 static void dispatchFFIHookBody(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
 static void dispatchVoidHook(id object, SEL selector);
 static CGSize dispatchCGSizeHook(id object, SEL selector, CGSize size);
+static CGSize dispatchCGSizeNoArgumentHook(id object, SEL selector);
 static CGSize dispatchCGSizePriorityHook(id object, SEL selector, CGSize size, float horizontal,
                                         float vertical);
 static CGSize dispatchCGSizeDoublePriorityHook(id object, SEL selector, CGSize size, double horizontal,
@@ -1365,6 +1367,10 @@ static std::string nativeFFITypeName(const char *encoding)
             {
                 return "struct:NSRange";
             }
+            if (value.find("CGRect") != std::string::npos)
+            {
+                return "struct:CGRect";
+            }
             if (value.find("CGPoint") != std::string::npos)
             {
                 return "struct:CGPoint";
@@ -1372,10 +1378,6 @@ static std::string nativeFFITypeName(const char *encoding)
             if (value.find("CGSize") != std::string::npos)
             {
                 return "struct:CGSize";
-            }
-            if (value.find("CGRect") != std::string::npos)
-            {
-                return "struct:CGRect";
             }
             if (value.find("UIEdgeInsets") != std::string::npos)
             {
@@ -1708,15 +1710,21 @@ static void removeHook(const std::shared_ptr<HookState> &state)
             dispatcher->hooks.erase(iterator);
         }
 
-        if (dispatcher->hooks.empty() && !dispatcher->retired.exchange(true))
+        if (dispatcher->hooks.empty() && !dispatcher->retired.load())
         {
             Method method = class_getInstanceMethod(dispatcher->cls, dispatcher->selector);
-            if (method && method_getImplementation(method) == (IMP) dispatcher->code)
+            IMP current = method ? method_getImplementation(method) : nullptr;
+            if (!method || current == (IMP) dispatcher->code || current == dispatcher->original)
             {
-                method_setImplementation(method, dispatcher->original);
+                if (method && current == (IMP) dispatcher->code)
+                {
+                    MSHookMessageEx(dispatcher->cls, dispatcher->selector,
+                                    dispatcher->original, nullptr);
+                }
+                dispatcher->retired.store(true);
+                gDispatchers.erase(hookKey(dispatcher->cls, dispatcher->selector));
+                retired = true;
             }
-            gDispatchers.erase(hookKey(dispatcher->cls, dispatcher->selector));
-            retired = true;
         }
     }
 
@@ -3192,6 +3200,17 @@ static CGSize dispatchCGSizeHook(id object, SEL selector, CGSize size)
     }
 }
 
+static CGSize dispatchCGSizeNoArgumentHook(id object, SEL selector)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector};
+        CGSize result = CGSizeZero;
+        dispatchFFIHookBody(nullptr, &result, arguments, nullptr);
+        return result;
+    }
+}
+
 static CGSize dispatchCGSizePriorityHook(id object, SEL selector, CGSize size, float horizontal,
                                         float vertical)
 {
@@ -3257,6 +3276,30 @@ static void dispatchVoidObjectHook(id object, SEL selector, id value)
     }
 }
 
+static id dispatchObjectObjectHook(id object, SEL selector, id value)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &value};
+        void *returnValue = nullptr;
+        dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
+        id result = (__bridge id) returnValue;
+        return result;
+    }
+}
+
+static id dispatchObjectCGRectHook(id object, SEL selector, CGRect rect)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &rect};
+        void *returnValue = nullptr;
+        dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
+        id result = (__bridge id) returnValue;
+        return result;
+    }
+}
+
 static void dispatchVoidObjectObjectHook(id object, SEL selector, id first, id second)
 {
     @autoreleasepool
@@ -3268,6 +3311,18 @@ static void dispatchVoidObjectObjectHook(id object, SEL selector, id first, id s
 
 static void *fallbackHookCode(const HookSignature &signature)
 {
+    if (signature.result.name == "object" && signature.arguments.size() == 3 &&
+        signature.arguments[2].name == "struct:CGRect")
+    {
+        return reinterpret_cast<void *>(dispatchObjectCGRectHook);
+    }
+
+    if (signature.result.name == "object" && signature.arguments.size() == 3 &&
+        signature.arguments[2].name == "object")
+    {
+        return reinterpret_cast<void *>(dispatchObjectObjectHook);
+    }
+
     if (signature.result.name == "void" && signature.arguments.size() == 3 &&
         signature.arguments[2].name == "object")
     {
@@ -3302,6 +3357,11 @@ static void *fallbackHookCode(const HookSignature &signature)
     if (signature.result.name != "struct:CGSize")
     {
         return nullptr;
+    }
+
+    if (signature.arguments.size() == 2)
+    {
+        return reinterpret_cast<void *>(dispatchCGSizeNoArgumentHook);
     }
 
     if (signature.arguments.size() == 3 && signature.arguments[2].name == "struct:CGSize")
@@ -3558,7 +3618,6 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
             dispatcher = std::make_shared<HookDispatcher>();
             dispatcher->cls = cls;
             dispatcher->selector = selector;
-            dispatcher->original = method_getImplementation(method);
             dispatcher->signature = signature;
             auto prepareClosure = [&]() {
                 dispatcher->closure = (ffi_closure *) ffi_closure_alloc(sizeof(ffi_closure),
@@ -3598,7 +3657,7 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
                     prepareClosure();
                 }
             }
-            method_setImplementation(method, (IMP) dispatcher->code);
+            MSHookMessageEx(cls, selector, (IMP) dispatcher->code, &dispatcher->original);
             gDispatchers[key] = dispatcher;
         }
         else
@@ -3609,10 +3668,10 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
             {
                 throw JSError(runtime, "Native hook signature changed while hooks are active");
             }
-            if (method_getImplementation(method) != (IMP) dispatcher->code)
+            if (method_getImplementation(method) == dispatcher->original)
             {
-                dispatcher->original = method_getImplementation(method);
-                method_setImplementation(method, (IMP) dispatcher->code);
+                MSHookMessageEx(cls, selector, (IMP) dispatcher->code,
+                                &dispatcher->original);
             }
         }
     }
