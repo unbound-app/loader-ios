@@ -76,6 +76,19 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		!strings.Contains(sourceText, "[value isKindOfClass:[NSData class]]") {
 		t.Fatal("native Objective-C data results are not converted to JavaScript byte arrays")
 	}
+	if !strings.Contains(sourceText, "static Value objcHandleResult(Runtime &runtime, id value)") ||
+		!strings.Contains(sourceText, "return objcHandleResult(rt, [[cls alloc] init]);") {
+		t.Fatal("native Objective-C allocation does not always return a native handle")
+	}
+	dataHandler := strings.Index(sourceText, `objc.setProperty(runtime, "data", makeFunction(`)
+	if dataHandler < 0 {
+		t.Fatal("native Objective-C data constructor is missing")
+	}
+	dataHandlerEnd := strings.Index(sourceText[dataHandler:], `objc.setProperty(runtime, "hook",`)
+	if dataHandlerEnd < 0 ||
+		!strings.Contains(sourceText[dataHandler:dataHandler+dataHandlerEnd], "return objcHandleResult(rt, data);") {
+		t.Fatal("native Objective-C data constructor does not return an NSData handle")
+	}
 	if !strings.Contains(sourceText, "NATIVE_BRIDGE_ERROR") ||
 		!strings.Contains(sourceText, "attachNativeErrorCode") {
 		t.Fatal("native bridge exceptions are missing structured error codes")

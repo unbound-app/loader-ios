@@ -478,6 +478,16 @@ static id objcValue(Runtime &runtime, const Value &value)
     return host ? host->value() : nil;
 }
 
+static Value objcHandleResult(Runtime &runtime, id value)
+{
+    if (!value)
+    {
+        return Value::null();
+    }
+
+    return Object::createFromHostObject(runtime, std::make_shared<ObjCHandleHost>(value));
+}
+
 static Value pointerResult(Runtime &runtime, void *pointer)
 {
     if (!pointer)
@@ -4126,8 +4136,7 @@ static void installObjC(Runtime &runtime, Object &objc)
             {
                 throw JSError(rt, "objc.alloc expects a class handle or class name");
             }
-            id object = [[cls alloc] init];
-            return objcResult(rt, object);
+            return objcHandleResult(rt, [[cls alloc] init]);
         }));
 
     objc.setProperty(runtime, "className", makeFunction(
@@ -4282,7 +4291,7 @@ static void installObjC(Runtime &runtime, Object &objc)
             {
                 throw JSError(rt, "objc.data expects an ArrayBuffer or TypedArray");
             }
-            return objcResult(rt, data);
+            return objcHandleResult(rt, data);
         }));
 
     objc.setProperty(runtime, "hook", makeFunction("hook", 3, runtime, makeHook));
