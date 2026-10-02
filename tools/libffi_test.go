@@ -43,8 +43,8 @@ func TestLibFFIConfigurePlaceholdersAreRemovedBeforeMake(t *testing.T) {
 }
 
 func TestLibFFIMakeDoesNotRerunConfigureOnCoarseTimestampFilesystems(t *testing.T) {
-	args := libFFIMakeArgs("build_iphoneos-arm64")
-	if !slices.Contains(args, "-o") || !slices.Contains(args, "config.status") {
+	args := libFFIMakeArgs()
+	if !slices.Contains(args, "-o") || !slices.Contains(args, "config.status") || slices.Contains(args, "-C") {
 		t.Fatal("libffi make must not rerun config.status after placeholders are cleared")
 	}
 }
