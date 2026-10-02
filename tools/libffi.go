@@ -6,13 +6,22 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 )
 
 func runLibFFIBuild(args []string) error {
+	releaseBuildLock, err := acquireLibFFIBuildLock("/tmp/loader-ios-libffi-build.lock")
+	if err != nil {
+		return err
+	}
+	defer releaseBuildLock()
+
 	set := flag.NewFlagSet("libffi-build", flag.ContinueOnError)
 	root := set.String("root", ".", "repository root")
 	archive := set.String("archive", "", "output static archive")
@@ -89,12 +98,37 @@ func runLibFFIBuild(args []string) error {
 	return nil
 }
 
+func acquireLibFFIBuildLock(lockPath string) (func(), error) {
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+
+	deadline := time.Now().Add(15 * time.Minute)
+	for {
+		if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
+			return func() {
+				_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+				_ = lockFile.Close()
+			}, nil
+		} else if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
+			_ = lockFile.Close()
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			_ = lockFile.Close()
+			return nil, fmt.Errorf("timed out waiting for libffi build lock %s", lockFile.Name())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func buildLibFFIArch(root, buildMachine, arch string) error {
 	buildDirectory := filepath.Join(root, "build_iphoneos-"+arch)
 	if err := os.MkdirAll(buildDirectory, 0o755); err != nil {
 		return err
 	}
-	configure := exec.Command("../configure", "--host=arm64-apple-ios", "--build="+buildMachine+"-apple-darwin")
+	configure := exec.Command("../configure", libFFIConfigureArgs(buildMachine)...)
 	configure.Dir = buildDirectory
 	configure.Env = append(os.Environ(),
 		"CC=xcrun -sdk iphoneos clang -target arm64-apple-ios",
@@ -106,7 +140,73 @@ func buildLibFFIArch(root, buildMachine, arch string) error {
 	if err := configure.Run(); err != nil {
 		return fmt.Errorf("configure %s failed: %w", arch, err)
 	}
-	return runCommand(root, nil, os.Stdout, os.Stderr, "make", "-C", buildDirectory, "-j4", "libffi.la")
+	if err := clearLibFFIConfigurePlaceholders(buildDirectory); err != nil {
+		return err
+	}
+	if err := runLibFFIMake(buildDirectory); err != nil {
+		return err
+	}
+	archive := filepath.Join(buildDirectory, ".libs", "libffi.a")
+	if _, err := os.Stat(archive); err != nil {
+		return fmt.Errorf("libffi %s build did not produce %s: %w", arch, archive, err)
+	}
+	return nil
+}
+
+func libFFIConfigureArgs(buildMachine string) []string {
+	return []string{
+		"--disable-multi-os-directory",
+		"--host=arm64-apple-ios",
+		"--build=" + buildMachine + "-apple-darwin",
+	}
+}
+
+func clearLibFFIConfigurePlaceholders(buildDirectory string) error {
+	archivePlaceholder := filepath.Join(buildDirectory, "libffi.la")
+	if err := os.Remove(archivePlaceholder); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return filepath.WalkDir(filepath.Join(buildDirectory, "src"), func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".lo" {
+			return nil
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	})
+}
+
+func libFFIMakeArgs() []string {
+	return []string{"-B", "-o", "config.status", "-j4", "libffi.la"}
+}
+
+func runLibFFIMake(buildDirectory string) error {
+	command := exec.Command("make", libFFIMakeArgs()...)
+	command.Dir = buildDirectory
+	command.Env = libFFIMakeEnvironment(os.Environ())
+	command.Stdout = os.Stdout
+	command.Stderr = os.Stderr
+	if err := command.Run(); err != nil {
+		return fmt.Errorf("libffi make failed: %w", err)
+	}
+	return nil
+}
+
+func libFFIMakeEnvironment(environment []string) []string {
+	filtered := make([]string, 0, len(environment))
+	for _, variable := range environment {
+		name, _, _ := strings.Cut(variable, "=")
+		switch name {
+		case "MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEOVERRIDES", "MAKELEVEL":
+			continue
+		}
+		filtered = append(filtered, variable)
+	}
+	return filtered
 }
 
 func commandOutput(dir, name string, args ...string) ([]byte, error) {

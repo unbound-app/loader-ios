@@ -32,30 +32,11 @@ jobs:
                   fi
                   git submodule foreach --recursive 'git diff --exit-code'
 
-    fetch-latest-ipa:
-        name: Get latest stable ipa
-        runs-on: ubuntu-latest
-        outputs:
-            ipa_url: ${{ steps.get-latest-ipa.outputs.ipa_url }}
-        steps:
-            - name: Get latest Discord ipa
-              id: get-latest-ipa
-              run: |
-                  RESPONSE=$(curl -s -H "Accept: application/json" https://ipa.aspy.dev/discord/stable/ || true)
-                  LATEST_IPA=$(echo "$RESPONSE" | jq -r '.[-1].url // empty' 2>/dev/null | sed 's/^\.\///' || true)
-                  if [ -z "$LATEST_IPA" ]; then
-                          FULL_URL="https://files.catbox.moe/pk80qh.ipa"
-                  else
-                          FULL_URL="https://ipa.aspy.dev/discord/stable/$LATEST_IPA"
-                  fi
-                  echo "ipa_url=$FULL_URL" >> $GITHUB_OUTPUT
-
     build:
         name: Build Unbound
-        needs: fetch-latest-ipa
         uses: ./.github/workflows/build.yml
         with:
-            ipa_url: ${{ needs.fetch-latest-ipa.outputs.ipa_url }}
+            ipa_url: https://raw.githubusercontent.com/Tulugaak/Discord-205.0-IPA/4eec98e61e20d0720c091d42c4a762710b32e8c5/com.hammerandchisel.discord_861573261.ipa
             release: false
             caller_workflow: "ci"
         secrets: inherit
