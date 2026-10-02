@@ -11,9 +11,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 )
 
 func runLibFFIBuild(args []string) error {
+	releaseBuildLock, err := acquireLibFFIBuildLock(filepath.Join(os.TempDir(), "loader-ios-libffi-build.lock"))
+	if err != nil {
+		return err
+	}
+	defer releaseBuildLock()
+
 	set := flag.NewFlagSet("libffi-build", flag.ContinueOnError)
 	root := set.String("root", ".", "repository root")
 	archive := set.String("archive", "", "output static archive")
@@ -88,6 +96,31 @@ func runLibFFIBuild(args []string) error {
 		}
 	}
 	return nil
+}
+
+func acquireLibFFIBuildLock(lockPath string) (func(), error) {
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+
+	deadline := time.Now().Add(15 * time.Minute)
+	for {
+		if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
+			return func() {
+				_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+				_ = lockFile.Close()
+			}, nil
+		} else if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
+			_ = lockFile.Close()
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			_ = lockFile.Close()
+			return nil, fmt.Errorf("timed out waiting for libffi build lock %s", lockFile.Name())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func buildLibFFIArch(root, buildMachine, arch string) error {
