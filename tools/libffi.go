@@ -16,7 +16,7 @@ import (
 )
 
 func runLibFFIBuild(args []string) error {
-	releaseBuildLock, err := acquireLibFFIBuildLock(filepath.Join(os.TempDir(), "loader-ios-libffi-build.lock"))
+	releaseBuildLock, err := acquireLibFFIBuildLock("/tmp/loader-ios-libffi-build.lock")
 	if err != nil {
 		return err
 	}

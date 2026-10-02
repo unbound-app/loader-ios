@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -88,5 +89,64 @@ func TestLibFFIBuildLockSerializesConcurrentBuilds(t *testing.T) {
 		result.release()
 	case <-time.After(2 * time.Second):
 		t.Fatal("second build did not acquire the lock after it was released")
+	}
+}
+
+func TestLibFFIBuildLockWorkerProcess(t *testing.T) {
+	lockPath := os.Getenv("LOADER_IOS_LIBFFI_LOCK_PATH")
+	if lockPath == "" {
+		return
+	}
+	release, err := acquireLibFFIBuildLock(lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if err := os.WriteFile(os.Getenv("LOADER_IOS_LIBFFI_LOCK_MARKER"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLibFFIBuildLockSerializesSeparateProcesses(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "libffi-build.lock")
+	markerPath := filepath.Join(t.TempDir(), "acquired")
+	releaseFirst, err := acquireLibFFIBuildLock(lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.Command(os.Args[0], "-test.run=^TestLibFFIBuildLockWorkerProcess$")
+	command.Env = append(os.Environ(), "LOADER_IOS_LIBFFI_LOCK_PATH="+lockPath, "LOADER_IOS_LIBFFI_LOCK_MARKER="+markerPath)
+	if err := command.Start(); err != nil {
+		releaseFirst()
+		t.Fatal(err)
+	}
+	commandResult := make(chan error, 1)
+	go func() {
+		commandResult <- command.Wait()
+	}()
+
+	select {
+	case err := <-commandResult:
+		releaseFirst()
+		t.Fatalf("second process exited before the first released the lock: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if _, err := os.Stat(markerPath); !os.IsNotExist(err) {
+		releaseFirst()
+		t.Fatal("second process acquired the lock before the first released it")
+	}
+
+	releaseFirst()
+	select {
+	case err := <-commandResult:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("second process did not acquire the lock after it was released")
+	}
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Fatal(err)
 	}
 }
