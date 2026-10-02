@@ -110,7 +110,7 @@ func buildLibFFIArch(root, buildMachine, arch string) error {
 	if err := clearLibFFIConfigurePlaceholders(buildDirectory); err != nil {
 		return err
 	}
-	return runCommand(root, nil, os.Stdout, os.Stderr, "make", "-C", buildDirectory, "-j4", "libffi.la")
+	return runCommand(root, nil, os.Stdout, os.Stderr, "make", libFFIMakeArgs(buildDirectory)...)
 }
 
 func libFFIConfigureArgs(buildMachine string) []string {
@@ -138,6 +138,10 @@ func clearLibFFIConfigurePlaceholders(buildDirectory string) error {
 		}
 		return nil
 	})
+}
+
+func libFFIMakeArgs(buildDirectory string) []string {
+	return []string{"-o", "config.status", "-C", buildDirectory, "-j4", "libffi.la"}
 }
 
 func commandOutput(dir, name string, args ...string) ([]byte, error) {
