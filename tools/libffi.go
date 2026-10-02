@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -106,6 +107,9 @@ func buildLibFFIArch(root, buildMachine, arch string) error {
 	if err := configure.Run(); err != nil {
 		return fmt.Errorf("configure %s failed: %w", arch, err)
 	}
+	if err := clearLibFFIConfigurePlaceholders(buildDirectory); err != nil {
+		return err
+	}
 	return runCommand(root, nil, os.Stdout, os.Stderr, "make", "-C", buildDirectory, "-j4", "libffi.la")
 }
 
@@ -115,6 +119,25 @@ func libFFIConfigureArgs(buildMachine string) []string {
 		"--host=arm64-apple-ios",
 		"--build=" + buildMachine + "-apple-darwin",
 	}
+}
+
+func clearLibFFIConfigurePlaceholders(buildDirectory string) error {
+	archivePlaceholder := filepath.Join(buildDirectory, "libffi.la")
+	if err := os.Remove(archivePlaceholder); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return filepath.WalkDir(filepath.Join(buildDirectory, "src"), func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".lo" {
+			return nil
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	})
 }
 
 func commandOutput(dir, name string, args ...string) ([]byte, error) {
