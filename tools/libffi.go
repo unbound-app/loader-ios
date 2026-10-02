@@ -143,7 +143,14 @@ func buildLibFFIArch(root, buildMachine, arch string) error {
 	if err := clearLibFFIConfigurePlaceholders(buildDirectory); err != nil {
 		return err
 	}
-	return runCommand(buildDirectory, nil, os.Stdout, os.Stderr, "make", libFFIMakeArgs()...)
+	if err := runCommand(buildDirectory, nil, os.Stdout, os.Stderr, "make", libFFIMakeArgs()...); err != nil {
+		return err
+	}
+	archive := filepath.Join(buildDirectory, ".libs", "libffi.a")
+	if _, err := os.Stat(archive); err != nil {
+		return fmt.Errorf("libffi %s build did not produce %s: %w", arch, archive, err)
+	}
+	return nil
 }
 
 func libFFIConfigureArgs(buildMachine string) []string {
@@ -174,7 +181,7 @@ func clearLibFFIConfigurePlaceholders(buildDirectory string) error {
 }
 
 func libFFIMakeArgs() []string {
-	return []string{"-o", "config.status", "-j4", "libffi.la"}
+	return []string{"-B", "-o", "config.status", "-j4", "libffi.la"}
 }
 
 func commandOutput(dir, name string, args ...string) ([]byte, error) {
