@@ -94,7 +94,7 @@ func buildLibFFIArch(root, buildMachine, arch string) error {
 	if err := os.MkdirAll(buildDirectory, 0o755); err != nil {
 		return err
 	}
-	configure := exec.Command("../configure", "--host=arm64-apple-ios", "--build="+buildMachine+"-apple-darwin")
+	configure := exec.Command("../configure", libFFIConfigureArgs(buildMachine)...)
 	configure.Dir = buildDirectory
 	configure.Env = append(os.Environ(),
 		"CC=xcrun -sdk iphoneos clang -target arm64-apple-ios",
@@ -107,6 +107,14 @@ func buildLibFFIArch(root, buildMachine, arch string) error {
 		return fmt.Errorf("configure %s failed: %w", arch, err)
 	}
 	return runCommand(root, nil, os.Stdout, os.Stderr, "make", "-C", buildDirectory, "-j4", "libffi.la")
+}
+
+func libFFIConfigureArgs(buildMachine string) []string {
+	return []string{
+		"--disable-multi-os-directory",
+		"--host=arm64-apple-ios",
+		"--build=" + buildMachine + "-apple-darwin",
+	}
 }
 
 func commandOutput(dir, name string, args ...string) ([]byte, error) {

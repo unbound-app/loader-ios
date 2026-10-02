@@ -48,3 +48,25 @@ func TestBuildWorkflowInstallsAutotoolsBeforeTweakBuild(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildWorkflowAllowsManualIPAInput(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "build.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(workflow)
+	dispatchStart := strings.Index(contents, "  workflow_dispatch:\n")
+	workflowCallStart := strings.Index(contents, "  workflow_call:\n")
+	if dispatchStart < 0 || workflowCallStart <= dispatchStart {
+		t.Fatal("workflow_dispatch input section could not be located")
+	}
+	dispatchInputs := contents[dispatchStart:workflowCallStart]
+	if !strings.Contains(dispatchInputs, "      ipa_url:\n") {
+		t.Fatal("manual builds must accept an IPA URL to avoid triggering a device decrypt")
+	}
+}
