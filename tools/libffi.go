@@ -143,7 +143,7 @@ func buildLibFFIArch(root, buildMachine, arch string) error {
 	if err := clearLibFFIConfigurePlaceholders(buildDirectory); err != nil {
 		return err
 	}
-	if err := runCommand(buildDirectory, nil, os.Stdout, os.Stderr, "make", libFFIMakeArgs()...); err != nil {
+	if err := runLibFFIMake(buildDirectory); err != nil {
 		return err
 	}
 	archive := filepath.Join(buildDirectory, ".libs", "libffi.a")
@@ -182,6 +182,31 @@ func clearLibFFIConfigurePlaceholders(buildDirectory string) error {
 
 func libFFIMakeArgs() []string {
 	return []string{"-B", "-o", "config.status", "-j4", "libffi.la"}
+}
+
+func runLibFFIMake(buildDirectory string) error {
+	command := exec.Command("make", libFFIMakeArgs()...)
+	command.Dir = buildDirectory
+	command.Env = libFFIMakeEnvironment(os.Environ())
+	command.Stdout = os.Stdout
+	command.Stderr = os.Stderr
+	if err := command.Run(); err != nil {
+		return fmt.Errorf("libffi make failed: %w", err)
+	}
+	return nil
+}
+
+func libFFIMakeEnvironment(environment []string) []string {
+	filtered := make([]string, 0, len(environment))
+	for _, variable := range environment {
+		name, _, _ := strings.Cut(variable, "=")
+		switch name {
+		case "MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEOVERRIDES", "MAKELEVEL":
+			continue
+		}
+		filtered = append(filtered, variable)
+	}
+	return filtered
 }
 
 func commandOutput(dir, name string, args ...string) ([]byte, error) {

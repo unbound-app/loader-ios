@@ -50,6 +50,21 @@ func TestLibFFIMakeDoesNotRerunConfigureOnCoarseTimestampFilesystems(t *testing.
 	}
 }
 
+func TestLibFFIMakeEnvironmentRemovesInheritedRecursiveFlags(t *testing.T) {
+	environment := libFFIMakeEnvironment([]string{
+		"PATH=/bin",
+		"MAKEFLAGS=-t",
+		"MFLAGS=-n",
+		"GNUMAKEFLAGS=-s",
+		"MAKEOVERRIDES=DEBUG=1",
+		"MAKELEVEL=2",
+		"LANG=C",
+	})
+	if !slices.Equal(environment, []string{"PATH=/bin", "LANG=C"}) {
+		t.Fatalf("recursive make flags were not removed: %v", environment)
+	}
+}
+
 func TestLibFFIBuildLockSerializesConcurrentBuilds(t *testing.T) {
 	lockPath := filepath.Join(t.TempDir(), "libffi-build.lock")
 	releaseFirst, err := acquireLibFFIBuildLock(lockPath)
