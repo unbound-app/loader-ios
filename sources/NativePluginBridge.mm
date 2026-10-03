@@ -331,7 +331,9 @@ static CGSize dispatchCGSizeDoublePriorityHook(id object, SEL selector, CGSize s
                                                double vertical);
 static CGRect dispatchCGRectObjectHook(id object, SEL selector, id indexPath);
 static double dispatchDoubleObjectObjectHook(id object, SEL selector, id tableView, id indexPath);
+static int8_t dispatchBoolObjectObjectHook(id object, SEL selector, id first, id second);
 static void dispatchVoidObjectHook(id object, SEL selector, id value);
+static void dispatchVoidNSUIntegerHook(id object, SEL selector, NSUInteger value);
 static void dispatchVoidObjectObjectHook(id object, SEL selector, id first, id second);
 static void dispatchVoidObjectObjectObjectHook(id object, SEL selector, id tableView, id cell,
                                                id indexPath);
@@ -3364,6 +3366,15 @@ static void dispatchVoidObjectHook(id object, SEL selector, id value)
     }
 }
 
+static void dispatchVoidNSUIntegerHook(id object, SEL selector, NSUInteger value)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &value};
+        dispatchFFIHookBody(nullptr, nullptr, arguments, nullptr);
+    }
+}
+
 static id dispatchObjectObjectHook(id object, SEL selector, id value)
 {
     @autoreleasepool
@@ -3373,6 +3384,17 @@ static id dispatchObjectObjectHook(id object, SEL selector, id value)
         dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
         id result = (__bridge id) returnValue;
         return result;
+    }
+}
+
+static int8_t dispatchBoolObjectObjectHook(id object, SEL selector, id first, id second)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &first, &second};
+        int8_t returnValue = 0;
+        dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
+        return returnValue;
     }
 }
 
@@ -3399,6 +3421,13 @@ static void dispatchVoidObjectObjectHook(id object, SEL selector, id first, id s
 
 static void *fallbackHookCode(const HookSignature &signature)
 {
+    if ((signature.result.name == "bool" || signature.result.name == "i8") &&
+        signature.arguments.size() == 4 &&
+        signature.arguments[2].name == "object" && signature.arguments[3].name == "object")
+    {
+        return reinterpret_cast<void *>(dispatchBoolObjectObjectHook);
+    }
+
     if (signature.result.name == "object" && signature.arguments.size() == 3 &&
         signature.arguments[2].name == "struct:CGRect")
     {
@@ -3415,6 +3444,12 @@ static void *fallbackHookCode(const HookSignature &signature)
         signature.arguments[2].name == "object")
     {
         return reinterpret_cast<void *>(dispatchVoidObjectHook);
+    }
+
+    if (signature.result.name == "void" && signature.arguments.size() == 3 &&
+        signature.arguments[2].name == "u64")
+    {
+        return reinterpret_cast<void *>(dispatchVoidNSUIntegerHook);
     }
 
     if (signature.result.name == "void" && signature.arguments.size() == 4 &&
@@ -3719,7 +3754,15 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
                     if (dispatcher->closure) ffi_closure_free(dispatcher->closure);
                     dispatcher->closure = nullptr;
                     dispatcher->code = nullptr;
-                    throw JSError(runtime, "Native hook closure is unavailable on this device");
+                    std::string signatureName = dispatcher->signature->result.name + "(";
+                    for (size_t index = 0; index < dispatcher->signature->arguments.size(); index++)
+                    {
+                        if (index > 0) signatureName += ",";
+                        signatureName += dispatcher->signature->arguments[index].name;
+                    }
+                    signatureName += ")";
+                    throw JSError(runtime, "Native hook closure is unavailable on this device for " +
+                                                signatureName);
                 }
             };
             if (signature->result.name == "void")

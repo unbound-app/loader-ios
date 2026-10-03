@@ -50,9 +50,11 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"dispatchFFIHook",
 		"dispatchVoidHook",
 		"dispatchObjectObjectHook",
+		"dispatchBoolObjectObjectHook",
 		"dispatchObjectCGRectHook",
 		"dispatchCGSizeNoArgumentHook",
 		"dispatchVoidObjectHook",
+		"dispatchVoidNSUIntegerHook",
 		"dispatchVoidObjectObjectHook",
 		"replaceObjectArgument",
 		"instanceTarget",
@@ -71,6 +73,9 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	}
 	if !strings.Contains(sourceText, "Native hook closure is unavailable on this device") {
 		t.Fatal("native hook closure fail-closed diagnostic is missing from the loader")
+	}
+	if !strings.Contains(sourceText, `signature.arguments[2].name == "u64"`) {
+		t.Fatal("native unsigned 64-bit argument hooks do not have a precompiled fallback")
 	}
 	if !strings.Contains(sourceText, "class NativeDataBuffer") ||
 		!strings.Contains(sourceText, "[value isKindOfClass:[NSData class]]") {
@@ -100,6 +105,10 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	}
 	if !strings.Contains(sourceText, `signature.result.name == "object" && signature.arguments.size() == 3`) {
 		t.Fatal("native object-return hooks do not have a precompiled fallback")
+	}
+	if !strings.Contains(sourceText, `signature.result.name == "bool" || signature.result.name == "i8"`) ||
+		!strings.Contains(sourceText, `signature.arguments.size() == 4`) {
+		t.Fatal("native boolean hooks with two object arguments do not have a precompiled fallback")
 	}
 	if !strings.Contains(sourceText, `signature.arguments[2].name == "struct:CGRect"`) {
 		t.Fatal("native object-return CGRect hooks do not have a precompiled fallback")
