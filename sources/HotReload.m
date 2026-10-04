@@ -133,7 +133,7 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
 
 - (NSURL *)resolveHotURL
 {
-    NSString *base = [Settings getString:@"unbound" key:@"loader.update.url" def:@""];
+    NSString *base = [Updater resolveUpdateURL];
     if (base.length == 0)
     {
         return nil;

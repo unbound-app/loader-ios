@@ -1,7 +1,70 @@
 #import "Updater.h"
 
+// `bun run serve` in the client repo serves its build from this port on the Mac.
+static const NSInteger      kDevServerPort         = 3000;
+static NSString *const      kDevServerBundleName   = @"unbound.bundle";
+static const NSTimeInterval kDevServerProbeTimeout = 1.5;
+
+static BOOL isServingBundle(NSURL *url)
+{
+    NSMutableURLRequest *request =
+        [NSMutableURLRequest requestWithURL:url
+                                cachePolicy:NSURLRequestReloadIgnoringCacheData
+                            timeoutInterval:kDevServerProbeTimeout];
+    request.HTTPMethod = @"HEAD";
+
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    __block BOOL         serving   = NO;
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession]
+        dataTaskWithRequest:request
+          completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+              serving = !error && [(NSHTTPURLResponse *) response statusCode] == 200;
+              dispatch_semaphore_signal(semaphore);
+          }];
+    [task resume];
+
+    if (dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW,
+                                                         (int64_t) (kDevServerProbeTimeout *
+                                                                    NSEC_PER_SEC))) != 0)
+    {
+        [task cancel];
+        return NO;
+    }
+
+    return serving;
+}
+
 @implementation Updater
 static NSString *etag = nil;
+
++ (NSString *)resolveUpdateURL
+{
+    NSString *configuredURL = [Settings getString:@"unbound" key:@"loader.update.url" def:nil];
+    if (configuredURL)
+    {
+        return configuredURL;
+    }
+
+    NSString *hostAddress = [Utilities getVirtualDeviceHostAddress];
+    if (!hostAddress)
+    {
+        return nil;
+    }
+
+    NSString *devServerURL = [NSString
+        stringWithFormat:@"http://%@:%ld/%@", hostAddress, (long) kDevServerPort, kDevServerBundleName];
+    if (!isServingBundle([NSURL URLWithString:devServerURL]))
+    {
+        [Logger info:LOG_CATEGORY_UPDATER
+              format:@"Virtual device: %@ is not reachable; using the default update URL.",
+                     devServerURL];
+        return nil;
+    }
+
+    [Logger info:LOG_CATEGORY_UPDATER format:@"Virtual device: using %@.", devServerURL];
+    return devServerURL;
+}
 
 + (NSString *)resolveBundlePath
 {
@@ -94,9 +157,8 @@ static NSString *etag = nil;
 
 + (NSURL *)getDownloadURL
 {
-    NSString *baseURL             = [Settings getString:@"unbound"
-                                        key:@"loader.update.url"
-                                        def:@"https://builds.unbound.rip/"];
+    NSString *updateURL           = [Updater resolveUpdateURL];
+    NSString *baseURL             = updateURL ?: @"https://builds.unbound.rip/";
     NSString *directURLIfProvided = nil;
 
     if ([baseURL hasSuffix:@".bundle"] || [baseURL hasSuffix:@".js"])
@@ -114,12 +176,7 @@ static NSString *etag = nil;
         {
             baseURL = [baseURL stringByAppendingString:@"/"];
         }
-        directURLIfProvided =
-            ((NSURL *) [NSURL URLWithString:((NSString *) [Settings getString:@"unbound"
-                                                                          key:@"loader.update.url"
-                                                                          def:@""])])
-                    .absoluteString
-                ?: nil;
+        directURLIfProvided = [NSURL URLWithString:updateURL].absoluteString;
     }
 
     if (![baseURL hasSuffix:@"/"])

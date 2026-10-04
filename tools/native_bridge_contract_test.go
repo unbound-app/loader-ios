@@ -39,6 +39,8 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"native.ffi.symbols",
 		"native.ffi.call",
 		"native.fabric.mount",
+		"native.debug.evaluations",
+		"native.debug.environment",
 	} {
 		if !strings.Contains(sourceText, `"`+capability+`"`) {
 			t.Fatalf("native capability %q is missing from the loader", capability)
@@ -159,5 +161,24 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	}
 	if !strings.Contains(sourceText, "gFFICifs") {
 		t.Fatal("native FFI call interface cache is missing from the loader")
+	}
+	for _, installation := range []string{
+		`bridge.setProperty(runtime, "debug", std::move(debug));`,
+		`makeFunction("recordEvaluation", 1, runtime, recordEvaluation)`,
+		`makeFunction("environment", 0, runtime, environment)`,
+	} {
+		if !strings.Contains(sourceText, installation) {
+			t.Fatalf("native debug function %q is not installed on the bridge", installation)
+		}
+	}
+	recordHandler := strings.Index(sourceText, "static Value recordEvaluation(Runtime &runtime")
+	if recordHandler < 0 {
+		t.Fatal("native evaluation record handler is missing")
+	}
+	recordHandlerEnd := strings.Index(sourceText[recordHandler:], "static Value environment(")
+	if recordHandlerEnd < 0 ||
+		!strings.Contains(sourceText[recordHandler:recordHandler+recordHandlerEnd], "catch (...)") ||
+		!strings.Contains(sourceText[recordHandler:recordHandler+recordHandlerEnd], "return Value(false);") {
+		t.Fatal("native evaluation records can throw into JavaScript on bad input")
 	}
 }
