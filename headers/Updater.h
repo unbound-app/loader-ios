@@ -7,6 +7,7 @@
 
 + (NSString *)downloadBundle:(NSString *)preferredPath;
 + (NSString *)resolveBundlePath;
++ (NSString *)resolveUpdateURL;
 + (NSURL *)getDownloadURL;
 
 @end
