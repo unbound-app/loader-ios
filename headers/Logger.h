@@ -35,5 +35,6 @@ typedef NS_ENUM(NSInteger, LogLevel) {
 #define LOG_CATEGORY_TOOLBOX    "toolbox"
 #define LOG_CATEGORY_FONTS      "fonts"
 #define LOG_CATEGORY_CHATUI     "chatui"
+#define LOG_CATEGORY_DEBUGGER   "debugger"
 
 NS_ASSUME_NONNULL_END

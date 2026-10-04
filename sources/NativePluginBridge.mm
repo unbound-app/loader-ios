@@ -22,6 +22,7 @@
 #import <unordered_map>
 #import <vector>
 
+#import "Evaluations.h"
 #import "JSI.h"
 #import "Logger.h"
 #import "NativePluginFFI.h"
@@ -4356,6 +4357,136 @@ static void installFabric(Runtime &runtime, Object &fabric)
     fabric.setProperty(runtime, "unmount", makeFunction("unmount", 1, runtime, fabricUnmount));
 }
 
+static bool isOptionalString(const Value &value)
+{
+    return value.isUndefined() || value.isNull() || value.isString();
+}
+
+static NSString *optionalString(Runtime &runtime, const Value &value)
+{
+    return value.isString() ? [JSI toNSString:value runtime:runtime] : nil;
+}
+
+static EvaluationRecord *evaluationRecord(Runtime &runtime, const Value &value, NSString **failure)
+{
+    if (!value.isObject())
+    {
+        *failure = @"expected an evaluation record object";
+        return nil;
+    }
+
+    Object record     = value.asObject(runtime);
+    Value  identifier = record.getProperty(runtime, "id");
+    Value  code       = record.getProperty(runtime, "code");
+    Value  ok         = record.getProperty(runtime, "ok");
+    Value  result     = record.getProperty(runtime, "value");
+    Value  error      = record.getProperty(runtime, "error");
+    Value  logs       = record.getProperty(runtime, "logs");
+
+    if (!identifier.isString() || !code.isString() || !ok.isBool())
+    {
+        *failure = @"id and code must be strings and ok must be a boolean";
+        return nil;
+    }
+
+    if (!isOptionalString(result) || !isOptionalString(error))
+    {
+        *failure = @"value and error must be strings when present";
+        return nil;
+    }
+
+    NSMutableArray<EvaluationLogLine *> *lines = [NSMutableArray array];
+    if (!logs.isUndefined() && !logs.isNull())
+    {
+        if (!logs.isObject() || !logs.asObject(runtime).isArray(runtime))
+        {
+            *failure = @"logs must be an array when present";
+            return nil;
+        }
+
+        Array entries = logs.asObject(runtime).asArray(runtime);
+        for (size_t index = 0; index < entries.size(runtime); index++)
+        {
+            Value entry = entries.getValueAtIndex(runtime, index);
+            if (!entry.isObject())
+            {
+                *failure = [NSString stringWithFormat:@"logs[%zu] must be an object", index];
+                return nil;
+            }
+
+            Object line    = entry.asObject(runtime);
+            Value  level   = line.getProperty(runtime, "level");
+            Value  message = line.getProperty(runtime, "message");
+            double number  = level.isNumber() ? level.getNumber() : 0;
+            if (!message.isString() || (number != static_cast<double>(EvaluationLogLevelLog) &&
+                                        number != static_cast<double>(EvaluationLogLevelWarn) &&
+                                        number != static_cast<double>(EvaluationLogLevelError)))
+            {
+                *failure = [NSString
+                    stringWithFormat:@"logs[%zu] must have a level of 1, 2 or 3 and a string message",
+                                     index];
+                return nil;
+            }
+
+            [lines addObject:[[EvaluationLogLine alloc]
+                                 initWithLevel:static_cast<EvaluationLogLevel>(number)
+                                       message:[JSI toNSString:message runtime:runtime]]];
+        }
+    }
+
+    return [[EvaluationRecord alloc] initWithIdentifier:[JSI toNSString:identifier runtime:runtime]
+                                                   code:[JSI toNSString:code runtime:runtime]
+                                                     ok:ok.getBool()
+                                                  value:optionalString(runtime, result)
+                                                  error:optionalString(runtime, error)
+                                                   logs:lines];
+}
+
+static Value recordEvaluation(Runtime &runtime, const Value *args, size_t count)
+{
+    NSString *failure = @"expected an evaluation record";
+
+    try
+    {
+        EvaluationRecord *record = count ? evaluationRecord(runtime, args[0], &failure) : nil;
+        if (record)
+        {
+            [Evaluations record:record];
+            return Value(true);
+        }
+    }
+    catch (const std::exception &exception)
+    {
+        failure = @(exception.what());
+    }
+    catch (...)
+    {
+        failure = @"reading the record failed";
+    }
+
+    [Logger error:LOG_CATEGORY_DEBUGGER format:@"Rejected evaluation record: %@", failure];
+    return Value(false);
+}
+
+static Value environment(Runtime &runtime, const Value *, size_t)
+{
+    NSString *hostAddress = [Utilities getVirtualDeviceHostAddress];
+
+    Object result(runtime);
+    result.setProperty(runtime, "isVirtualDevice", Value(static_cast<bool>([Utilities isVPhone])));
+    result.setProperty(runtime, "hostAddress",
+                       hostAddress ? Value(String::createFromUtf8(runtime, hostAddress.UTF8String))
+                                   : Value::null());
+    return result;
+}
+
+static void installDebug(Runtime &runtime, Object &debug)
+{
+    debug.setProperty(runtime, "recordEvaluation",
+                      makeFunction("recordEvaluation", 1, runtime, recordEvaluation));
+    debug.setProperty(runtime, "environment", makeFunction("environment", 0, runtime, environment));
+}
+
 }
 
 namespace loader {
@@ -4378,7 +4509,6 @@ void registerNativePluginBridge(Runtime &runtime)
     bridge.setProperty(runtime, "apiVersion", String::createFromUtf8(runtime, kNativePluginApiVersion));
     bridge.setProperty(runtime, "abiVersion", String::createFromUtf8(runtime, kNativePluginAbiVersion));
 
-    Array capabilities(runtime, 8);
     const char *names[] = {
         "native.objc.classes",
         "native.objc.invoke",
@@ -4388,8 +4518,11 @@ void registerNativePluginBridge(Runtime &runtime)
         "native.ffi.symbols",
         "native.ffi.call",
         "native.fabric.mount",
+        "native.debug.evaluations",
+        "native.debug.environment",
     };
-    for (size_t index = 0; index < 8; index++)
+    Array capabilities(runtime, std::size(names));
+    for (size_t index = 0; index < std::size(names); index++)
     {
         capabilities.setValueAtIndex(runtime, index, String::createFromUtf8(runtime, names[index]));
     }
@@ -4406,6 +4539,10 @@ void registerNativePluginBridge(Runtime &runtime)
     Object fabric(runtime);
     installFabric(runtime, fabric);
     bridge.setProperty(runtime, "fabric", std::move(fabric));
+
+    Object debug(runtime);
+    installDebug(runtime, debug);
+    bridge.setProperty(runtime, "debug", std::move(debug));
 
     runtime.global().setProperty(runtime, "NativePlugin", std::move(bridge));
 }
