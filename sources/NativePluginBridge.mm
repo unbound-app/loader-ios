@@ -652,17 +652,22 @@ static void executeMainSynchronously(std::function<void(void)> callback)
     }
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-    __block std::exception_ptr failure;
+    auto failure = std::make_shared<std::exception_ptr>();
+    auto cancelled = std::make_shared<std::atomic_bool>(false);
     dispatch_async(dispatch_get_main_queue(), ^{
         @autoreleasepool
         {
+            if (cancelled->load())
+            {
+                return;
+            }
             try
             {
                 callback();
             }
             catch (...)
             {
-                failure = std::current_exception();
+                *failure = std::current_exception();
             }
             dispatch_semaphore_signal(semaphore);
         }
@@ -670,12 +675,13 @@ static void executeMainSynchronously(std::function<void(void)> callback)
 
     if (dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)) != 0)
     {
+        cancelled->store(true);
         throw std::runtime_error("Native Fabric operation timed out on the main thread");
     }
 
-    if (failure)
+    if (*failure)
     {
-        std::rethrow_exception(failure);
+        std::rethrow_exception(*failure);
     }
 }
 
@@ -944,14 +950,14 @@ static Value fabricMeasure(Runtime &runtime, const Value *args, size_t count)
         throw JSError(runtime, "fabric.measure expects a UIView");
     }
 
-    CGRect frame = CGRectZero;
-    executeMainSynchronously([object, &frame]() { frame = [(UIView *) object frame]; });
+    auto frame = std::make_shared<CGRect>(CGRectZero);
+    executeMainSynchronously([object, frame]() { *frame = [(UIView *) object frame]; });
 
     Object result(runtime);
-    result.setProperty(runtime, "x", frame.origin.x);
-    result.setProperty(runtime, "y", frame.origin.y);
-    result.setProperty(runtime, "width", frame.size.width);
-    result.setProperty(runtime, "height", frame.size.height);
+    result.setProperty(runtime, "x", frame->origin.x);
+    result.setProperty(runtime, "y", frame->origin.y);
+    result.setProperty(runtime, "width", frame->size.width);
+    result.setProperty(runtime, "height", frame->size.height);
     return result;
 }
 
