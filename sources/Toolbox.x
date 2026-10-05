@@ -520,10 +520,7 @@ static UIWindowScene *activeWindowScene(void)
 
 - (void)toggleRecoveryMode
 {
-    BOOL currentValue = [Utilities isRecoveryModeEnabled];
-    [Settings set:@"unbound" key:@"recovery" value:@(!currentValue)];
-    [Settings save];
-    [RecoveryQuickAction refresh];
+    [RecoveryQuickAction toggleSafeMode];
     [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 

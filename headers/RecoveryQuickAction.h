@@ -2,4 +2,5 @@
 
 @interface RecoveryQuickAction : NSObject
 + (void)refresh;
++ (BOOL)toggleSafeMode;
 @end

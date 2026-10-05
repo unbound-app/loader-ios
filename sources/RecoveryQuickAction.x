@@ -44,13 +44,19 @@ static NSString *const kRecoveryShortcutType = @"app.unbound.recovery.toggle";
         return NO;
     }
 
+    BOOL enabled = [RecoveryQuickAction toggleSafeMode];
+    [Logger info:LOG_CATEGORY_DEFAULT
+          format:@"Home Screen action %@ Safe Mode.", enabled ? @"enabled" : @"disabled"];
+    return YES;
+}
+
++ (BOOL)toggleSafeMode
+{
     BOOL enabled = ![Utilities isRecoveryModeEnabled];
     [Settings set:@"unbound" key:@"recovery" value:@(enabled)];
     [Settings save];
     [RecoveryQuickAction refresh];
-    [Logger info:LOG_CATEGORY_DEFAULT
-          format:@"Home Screen action %@ Safe Mode.", enabled ? @"enabled" : @"disabled"];
-    return YES;
+    return enabled;
 }
 
 + (void)refresh
