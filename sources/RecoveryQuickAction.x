@@ -16,8 +16,7 @@ static NSString *const kRecoveryShortcutType = @"app.unbound.recovery.toggle";
 {
     BOOL enabled = [Utilities isRecoveryModeEnabled];
     NSString *title = enabled ? @"Disable Safe Mode" : @"Enable Safe Mode";
-    UIApplicationShortcutIcon *icon =
-        [UIApplicationShortcutIcon iconWithType:UIApplicationShortcutIconTypePause];
+    UIApplicationShortcutIcon *icon = [UIApplicationShortcutIcon iconWithSystemImageName:@"shield"];
     UIApplicationShortcutItem *recovery =
         [[UIApplicationShortcutItem alloc] initWithType:kRecoveryShortcutType
                                         localizedTitle:title
