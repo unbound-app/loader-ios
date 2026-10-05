@@ -1,5 +1,6 @@
 #import "Toolbox.h"
 #import "DevOverlay.h"
+#import "RecoveryQuickAction.h"
 
 @interface ToolboxViewController ()
 @property (nonatomic, assign) BOOL dismissalInProgress;
@@ -521,6 +522,8 @@ static UIWindowScene *activeWindowScene(void)
 {
     BOOL currentValue = [Utilities isRecoveryModeEnabled];
     [Settings set:@"unbound" key:@"recovery" value:@(!currentValue)];
+    [Settings save];
+    [RecoveryQuickAction refresh];
     [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 
