@@ -1,5 +1,7 @@
 #import "Updater.h"
 
+#include <stdio.h>
+
 // `bun run serve` in the client repo serves its build from this port on the Mac.
 static const NSInteger      kDevServerPort         = 3000;
 static NSString *const      kDevServerBundleName   = @"unbound.bundle";
@@ -74,6 +76,29 @@ static NSString *etag = nil;
 
     for (NSString *extension in extensions)
     {
+        NSString *candidate = [NSString pathWithComponents:@[
+            FileSystem.documents, [NSString stringWithFormat:@"unbound.%@.candidate", extension]
+        ]];
+        if ([FileSystem exists:[candidate stringByAppendingString:@".attempting"]])
+        {
+            [Updater rejectBundle:candidate];
+        }
+        if ([FileSystem exists:candidate])
+        {
+            NSDictionary *attributes = [[NSFileManager defaultManager]
+                attributesOfItemAtPath:candidate error:nil];
+            if (![FileSystem exists:[candidate stringByAppendingString:@".etag"]] ||
+                [attributes[NSFileSize] unsignedLongLongValue] == 0)
+            {
+                [Updater rejectBundle:candidate];
+                continue;
+            }
+            return candidate;
+        }
+    }
+
+    for (NSString *extension in extensions)
+    {
         NSString *path =
             [NSString pathWithComponents:@[ FileSystem.documents,
                                              [NSString stringWithFormat:@"unbound.%@", extension] ]];
@@ -90,6 +115,11 @@ static NSString *etag = nil;
 + (NSString *)downloadBundle:(NSString *)preferredPath
 {
     [Logger info:LOG_CATEGORY_UPDATER format:@"Ensuring bundle is up to date..."];
+
+    if ([preferredPath hasSuffix:@".candidate"] && [FileSystem exists:preferredPath])
+    {
+        return preferredPath;
+    }
 
     NSString *storedEtag = [Settings getString:@"unbound" key:@"loader.update.etag" def:@""];
     NSURL    *url        = [Updater getDownloadURL];
@@ -110,6 +140,7 @@ static NSString *etag = nil;
     NSString *targetPath = [NSString
         pathWithComponents:@[ FileSystem.documents,
                                [NSString stringWithFormat:@"unbound.%@", urlExtension] ]];
+    NSString *candidatePath = [targetPath stringByAppendingString:@".candidate"];
 
     NSDictionary *headers = storedEtag.length > 0 ? @{ @"If-None-Match" : storedEtag } : @{};
 
@@ -120,39 +151,90 @@ static NSString *etag = nil;
 
     if (![FileSystem exists:targetPath] || forceUpdate)
     {
-        response = [FileSystem download:url path:targetPath];
+        response = [FileSystem download:url path:candidatePath];
     }
     else
     {
-        response = [FileSystem download:url path:targetPath withHeaders:headers];
+        response = [FileSystem download:url path:candidatePath withHeaders:headers];
     }
 
     if ([response statusCode] == 304)
     {
         [Logger info:LOG_CATEGORY_UPDATER format:@"No update found."];
-    }
-    else
-    {
-        [Logger info:LOG_CATEGORY_UPDATER format:@"Successfully updated to the latest version."];
-        [Settings set:@"unbound"
-                  key:@"loader.update.etag"
-                value:[response valueForHTTPHeaderField:@"etag"]];
+        return targetPath;
     }
 
-    NSArray<NSString *> *extensionsToClean = @[ @"bundle", @"js" ];
-    for (NSString *extension in extensionsToClean)
+    if (![FileSystem exists:candidatePath])
     {
-        NSString *candidatePath = [NSString
-            pathWithComponents:@[ FileSystem.documents,
-                                   [NSString stringWithFormat:@"unbound.%@", extension] ]];
+        @throw [[NSException alloc] initWithName:@"BundleCandidateMissing"
+                                         reason:@"Downloaded bundle candidate is unavailable"
+                                       userInfo:nil];
+    }
 
-        if (![candidatePath isEqualToString:targetPath] && [FileSystem exists:candidatePath])
+    NSString *newEtag = [response valueForHTTPHeaderField:@"etag"] ?: @"";
+    if (![newEtag writeToFile:[candidatePath stringByAppendingString:@".etag"]
+                  atomically:YES encoding:NSUTF8StringEncoding error:nil])
+    {
+        [Updater rejectBundle:candidatePath];
+        @throw [[NSException alloc] initWithName:@"BundleCandidateMetadataFailed"
+                                         reason:@"Downloaded bundle metadata could not be saved"
+                                       userInfo:nil];
+    }
+    [Logger info:LOG_CATEGORY_UPDATER format:@"Bundle candidate is ready for validation."];
+    return candidatePath;
+}
+
++ (BOOL)markBundleAttempted:(NSString *)path
+{
+    if (![path hasSuffix:@".candidate"])
+    {
+        return YES;
+    }
+    return [@"1" writeToFile:[path stringByAppendingString:@".attempting"]
+                    atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
++ (BOOL)acceptBundle:(NSString *)path
+{
+    if (![path hasSuffix:@".candidate"])
+    {
+        return YES;
+    }
+
+    NSString *targetPath = [path substringToIndex:path.length - @".candidate".length];
+    if (rename(path.fileSystemRepresentation, targetPath.fileSystemRepresentation) != 0)
+    {
+        return NO;
+    }
+
+    NSString *newEtag = [NSString stringWithContentsOfFile:[path stringByAppendingString:@".etag"]
+                                                  encoding:NSUTF8StringEncoding error:nil];
+    [Settings set:@"unbound" key:@"loader.update.etag" value:newEtag ?: @""];
+    [FileSystem delete:[path stringByAppendingString:@".etag"]];
+    [FileSystem delete:[path stringByAppendingString:@".attempting"]];
+
+    for (NSString *extension in @[ @"bundle", @"js" ])
+    {
+        NSString *otherPath = [NSString pathWithComponents:@[
+            FileSystem.documents, [NSString stringWithFormat:@"unbound.%@", extension]
+        ]];
+        if (![otherPath isEqualToString:targetPath])
         {
-            [FileSystem delete:candidatePath];
+            [FileSystem delete:otherPath];
         }
     }
+    return YES;
+}
 
-    return targetPath;
++ (void)rejectBundle:(NSString *)path
+{
+    if (![path hasSuffix:@".candidate"])
+    {
+        return;
+    }
+    [FileSystem delete:path];
+    [FileSystem delete:[path stringByAppendingString:@".etag"]];
+    [FileSystem delete:[path stringByAppendingString:@".attempting"]];
 }
 
 + (NSURL *)getDownloadURL

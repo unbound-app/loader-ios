@@ -345,7 +345,12 @@ static dispatch_queue_t monitorRegistryQueue(void)
               {
                   [Logger info:LOG_CATEGORY_FILESYSTEM
                         format:@"Saving file from %@ to %@", url, path];
-                  [data writeToFile:path atomically:YES];
+                  if (![data writeToFile:path atomically:YES])
+                  {
+                      exception = [[NSException alloc] initWithName:@"DownloadWriteFailed"
+                                                             reason:@"Downloaded bundle could not be saved"
+                                                           userInfo:nil];
+                  }
               }
 
               dispatch_semaphore_signal(semaphore);
@@ -353,7 +358,14 @@ static dispatch_queue_t monitorRegistryQueue(void)
 
     [task resume];
 
-    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+    if (dispatch_semaphore_wait(semaphore,
+                                dispatch_time(DISPATCH_TIME_NOW, 35 * NSEC_PER_SEC)) != 0)
+    {
+        [task cancel];
+        @throw [[NSException alloc] initWithName:@"DownloadTimedOut"
+                                         reason:@"Bundle download exceeded its time limit"
+                                       userInfo:nil];
+    }
 
     if (exception)
     {

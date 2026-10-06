@@ -139,6 +139,7 @@ static void injectPreBundle(jsi::Runtime &runtime)
 }
 
 static NSData              *gBundle    = nil;
+static NSString            *gBundlePath = nil;
 static dispatch_semaphore_t gBundleSem = nil;
 static std::atomic_uint64_t gPrefetchToken{0};
 
@@ -146,7 +147,7 @@ static void prefetchBundle(void);
 
 static void prepareLoading(id instance)
 {
-    if (!instance || gLoaderPrepared.exchange(true))
+    if (!instance)
     {
         return;
     }
@@ -158,15 +159,22 @@ static void prepareLoading(id instance)
 
     if (![Settings getBoolean:@"unbound" key:@"loader.enabled" def:YES])
     {
+        gPrefetchToken.fetch_add(1);
+        gBundle = nil;
+        gBundlePath = nil;
+        gBundleSem = nil;
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Loader is disabled. Aborting."];
         return;
     }
 
-    [Plugins init];
-    [Themes init];
-    [Fonts init];
+    if (!gLoaderPrepared.exchange(true))
+    {
+        [Plugins init];
+        [Themes init];
+        [Fonts init];
+        [HotReload observe];
+    }
     prefetchBundle();
-    [HotReload observe];
 }
 
 static void prefetchBundle(void)
@@ -175,55 +183,53 @@ static void prefetchBundle(void)
     dispatch_semaphore_t sem = dispatch_semaphore_create(0);
 
     gBundle    = nil;
+    gBundlePath = nil;
     gBundleSem = sem;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSString *bundlePath = [Updater resolveBundlePath];
-        NSString *localBundlePath = bundlePath;
-
+        BOOL signaled = NO;
         @try
         {
-            NSString *downloadedPath = [Updater downloadBundle:bundlePath];
-            if ([FileSystem exists:downloadedPath])
+            NSString *localBundlePath = [Updater resolveBundlePath];
+            if ([FileSystem exists:localBundlePath])
             {
-                bundlePath = downloadedPath;
+                NSData *cachedBundle = [FileSystem readFile:localBundlePath];
+                if (cachedBundle.length && token == gPrefetchToken.load())
+                {
+                    gBundle = cachedBundle;
+                    gBundlePath = localBundlePath;
+                    dispatch_semaphore_signal(sem);
+                    signaled = YES;
+                }
+            }
+
+            NSString *downloadedPath = [Updater downloadBundle:localBundlePath];
+            if (!signaled && [FileSystem exists:downloadedPath] &&
+                token == gPrefetchToken.load())
+            {
+                NSData *downloadedBundle = [FileSystem readFile:downloadedPath];
+                if (downloadedBundle.length)
+                {
+                    gBundle = downloadedBundle;
+                    gBundlePath = downloadedPath;
+                }
             }
         }
         @catch (NSException *e)
         {
             [Logger error:LOG_CATEGORY_DEFAULT format:@"Bundle download failed. (%@)", e];
-            bundlePath = localBundlePath;
         }
-
-        if (![FileSystem exists:bundlePath] && [FileSystem exists:localBundlePath])
-        {
-            bundlePath = localBundlePath;
-        }
-
-        if (token != gPrefetchToken.load())
-        {
-            dispatch_semaphore_signal(sem);
-            return;
-        }
-
-        if ([FileSystem exists:bundlePath])
-        {
-            NSData *bundle = [FileSystem readFile:bundlePath];
-            if (bundle.length)
-            {
-                gBundle = bundle;
-            }
-        }
-
-        if (!gBundle)
+        if (!signaled && token == gPrefetchToken.load() && !gBundle)
         {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [Utilities alert:@"Failed to load Unbound's bundle. Please report "
                                  @"this to the developers."];
             });
         }
-
-        dispatch_semaphore_signal(sem);
+        if (!signaled)
+        {
+            dispatch_semaphore_signal(sem);
+        }
     });
 }
 
@@ -237,6 +243,7 @@ static BOOL runtimeHasRequiredModules(jsi::Runtime &runtime)
 
 static void executeBundle(id instance,
                                  NSData *bundle,
+                                 NSString *bundlePath,
                                  uint64_t token,
                                  NSUInteger attempt)
 {
@@ -245,7 +252,7 @@ static void executeBundle(id instance,
         return;
     }
 
-    [instance callFunctionOnBufferedRuntimeExecutor:[bundle, token, attempt](jsi::Runtime &runtime) {
+    [instance callFunctionOnBufferedRuntimeExecutor:[bundle, bundlePath, token, attempt](jsi::Runtime &runtime) {
         injectModulesPatch(runtime);
         if (!runtimeHasRequiredModules(runtime))
         {
@@ -259,17 +266,26 @@ static void executeBundle(id instance,
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
                            dispatch_get_main_queue(), ^{
-                               executeBundle(gInstance, bundle, token, attempt + 1);
+                               executeBundle(gInstance, bundle, bundlePath, token, attempt + 1);
                            });
             return;
         }
 
+        if (![Updater markBundleAttempted:bundlePath])
+        {
+            [Logger error:LOG_CATEGORY_DEFAULT format:@"Bundle validation marker could not be saved."];
+            return;
+        }
         injectModulesPatch(runtime);
         injectPreBundle(runtime);
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
         BOOL didLoadBundle = [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
         if (didLoadBundle)
         {
+            if (![Updater acceptBundle:bundlePath])
+            {
+                [Logger error:LOG_CATEGORY_DEFAULT format:@"Validated bundle could not be promoted."];
+            }
             [Logger info:LOG_CATEGORY_DEFAULT
                   format:@"Unbound's bundle was successfully executed."];
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -280,6 +296,10 @@ static void executeBundle(id instance,
                 gBundleIsReady = YES;
                 applyPendingBrowserLogin();
             });
+        }
+        else
+        {
+            [Updater rejectBundle:bundlePath];
         }
     }];
 }
@@ -297,7 +317,12 @@ static void enqueueBundle(id self)
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         if (sem)
         {
-            dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+            if (dispatch_semaphore_wait(sem,
+                                        dispatch_time(DISPATCH_TIME_NOW, 40 * NSEC_PER_SEC)) != 0)
+            {
+                [Logger error:LOG_CATEGORY_DEFAULT format:@"Bundle preparation timed out."];
+                return;
+            }
         }
 
         if (token != gPrefetchToken.load())
@@ -306,13 +331,14 @@ static void enqueueBundle(id self)
         }
 
         NSData *bundle = gBundle;
+        NSString *bundlePath = gBundlePath;
         if (bundle.length == 0)
         {
             return;
         }
 
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Scheduling Unbound's bundle for execution..."];
-        executeBundle(self, bundle, token, 0);
+        executeBundle(self, bundle, bundlePath, token, 0);
     });
 }
 

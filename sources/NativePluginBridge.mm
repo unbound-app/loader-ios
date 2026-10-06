@@ -185,15 +185,21 @@ private:
 class PointerHost final : public HostObject
 {
 public:
-    explicit PointerHost(void *value) : value_(value) {}
+    explicit PointerHost(void *value, bool callable = false) : value_(value), callable_(callable) {}
 
     void *value(void) const
     {
         return value_;
     }
 
+    bool callable(void) const
+    {
+        return callable_;
+    }
+
 private:
     void *value_;
+    bool callable_;
 };
 
 static Value structFields(Runtime &runtime, NSString *name, NSValue *value);
@@ -275,7 +281,6 @@ struct HookDispatcher {
     std::vector<std::shared_ptr<HookState>> hooks;
     std::atomic_uint activeCalls{0};
     std::atomic_bool retired{false};
-    std::atomic_bool closureReleased{false};
 };
 
 struct HookState {
@@ -290,6 +295,7 @@ struct HookState {
     bool cacheOnly = false;
     bool once = false;
     std::atomic_bool active{true};
+    std::atomic_bool afterOncePending{false};
 };
 
 class HookTokenHost final : public HostObject
@@ -310,17 +316,19 @@ private:
 
 static std::mutex gHookMutex;
 static std::unordered_map<std::string, std::shared_ptr<HookDispatcher>> gDispatchers;
+static std::unordered_map<HookDispatcher *, std::shared_ptr<HookDispatcher>> gClosureDispatchers;
 static std::atomic_uint64_t gNextHookIdentifier{1};
 static __weak id gRuntimeExecutorInstance = nil;
 static __weak id gFabricHostInstance = nil;
+static std::mutex gNativePluginRuntimeMutex;
 static Runtime *gNativePluginRuntime = nullptr;
 static std::thread::id gNativePluginRuntimeThread;
+static std::atomic_uint64_t gNativePluginRuntimeGeneration{0};
 
 static FFITypeSpec ffiType(Runtime &runtime, const std::string &name);
 static ffi_cif prepareFFICif(Runtime &runtime, const FFITypeSpec &result,
                              const std::vector<FFITypeSpec> &arguments);
 static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vector<uint8_t> &bytes);
-static void releaseHookClosure(const std::shared_ptr<HookDispatcher> &dispatcher);
 static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
 static void dispatchFFIHookBody(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
 static void dispatchVoidHook(id object, SEL selector);
@@ -382,24 +390,34 @@ static Value makeFunction(const char *name, unsigned int argCount, Runtime &runt
 {
     HostFunctionType guardedHandler = [handler](Runtime &rt, const Value &thisValue,
                                                 const Value *args, size_t count) -> Value {
-        try
+        @try
         {
-            return handler(rt, thisValue, args, count);
+            try
+            {
+                return handler(rt, thisValue, args, count);
+            }
+            catch (const JSError &error)
+            {
+                attachNativeErrorCode(rt, error);
+                throw;
+            }
+            catch (const std::exception &error)
+            {
+                JSError failure(rt, error.what());
+                attachNativeErrorCode(rt, failure);
+                throw failure;
+            }
+            catch (...)
+            {
+                JSError failure(rt, "Native bridge operation failed");
+                attachNativeErrorCode(rt, failure);
+                throw failure;
+            }
         }
-        catch (const JSError &error)
+        @catch (NSException *exception)
         {
-            attachNativeErrorCode(rt, error);
-            throw;
-        }
-        catch (const std::exception &error)
-        {
-            JSError failure(rt, error.what());
-            attachNativeErrorCode(rt, failure);
-            throw failure;
-        }
-        catch (...)
-        {
-            JSError failure(rt, "Native bridge operation failed");
+            JSError failure(rt, std::string("Objective-C exception: ") +
+                                     (exception.reason.UTF8String ?: "unknown"));
             attachNativeErrorCode(rt, failure);
             throw failure;
         }
@@ -491,18 +509,44 @@ static Value objcHandleResult(Runtime &runtime, id value)
     return Object::createFromHostObject(runtime, std::make_shared<ObjCHandleHost>(value));
 }
 
-static Value pointerResult(Runtime &runtime, void *pointer)
+static Value pointerResult(Runtime &runtime, void *pointer, bool callable = false)
 {
     if (!pointer)
     {
         return Value::null();
     }
 
-    return Object::createFromHostObject(runtime, std::make_shared<PointerHost>(pointer));
+    return Object::createFromHostObject(runtime, std::make_shared<PointerHost>(pointer, callable));
 }
+
+static thread_local size_t gConversionDepth = 0;
+static thread_local size_t gConversionNodes = 0;
+
+struct ConversionGuard
+{
+    explicit ConversionGuard(Runtime &runtime)
+    {
+        if (gConversionDepth == 0)
+        {
+            gConversionNodes = 0;
+        }
+        if (gConversionDepth >= 32 || gConversionNodes >= 4096)
+        {
+            throw JSError(runtime, "Native value exceeds conversion limits");
+        }
+        gConversionDepth++;
+        gConversionNodes++;
+    }
+
+    ~ConversionGuard()
+    {
+        gConversionDepth--;
+    }
+};
 
 static Value objcResult(Runtime &runtime, id value)
 {
+    ConversionGuard guard(runtime);
     if (!value)
     {
         return Value::null();
@@ -557,6 +601,7 @@ static Value objcResult(Runtime &runtime, id value)
 
 static id valueToObjC(Runtime &runtime, const Value &value)
 {
+    ConversionGuard guard(runtime);
     if (value.isNull() || value.isUndefined())
     {
         return [NSNull null];
@@ -1086,11 +1131,18 @@ static Value returnValue(Runtime &runtime, NSInvocation *invocation, NSMethodSig
         return Value::undefined();
     }
 
-    if (code == '@' || code == '#' || code == ':')
+    if (code == '@' || code == '#')
     {
         __unsafe_unretained id object = nil;
         [invocation getReturnValue:&object];
         return objcResult(runtime, object);
+    }
+
+    if (code == ':')
+    {
+        SEL selector = nullptr;
+        [invocation getReturnValue:&selector];
+        return selector ? Value(String::createFromUtf8(runtime, sel_getName(selector))) : Value::null();
     }
 
     if (code == '^' || code == '*')
@@ -1378,7 +1430,8 @@ static void setInvocationArgument(Runtime &runtime, NSInvocation *invocation, NS
     throw JSError(runtime, "Unsupported native argument type");
 }
 
-static Value invokeObject(Runtime &runtime, id target, SEL selector, NSArray *arguments)
+static NSInvocation *prepareInvocation(Runtime &runtime, id target, SEL selector,
+                                       NSArray *arguments)
 {
     if (!target || !selector)
     {
@@ -1411,8 +1464,15 @@ static Value invokeObject(Runtime &runtime, id target, SEL selector, NSArray *ar
         setInvocationArgument(runtime, invocation, signature, arguments[index], index + 2, retained, storage);
     }
 
+    [invocation retainArguments];
+    return invocation;
+}
+
+static Value invokeObject(Runtime &runtime, id target, SEL selector, NSArray *arguments)
+{
+    NSInvocation *invocation = prepareInvocation(runtime, target, selector, arguments);
     [invocation invoke];
-    return returnValue(runtime, invocation, signature);
+    return returnValue(runtime, invocation, invocation.methodSignature);
 }
 
 static std::string nativeFFITypeName(const char *encoding)
@@ -1690,23 +1750,34 @@ static Value invokeWithThreadPolicy(Runtime &runtime, id target, SEL selector, N
         throw JSError(runtime, "Unsupported native thread policy");
     }
 
-    __block Value result = Value::undefined();
-    __block std::exception_ptr failure;
+    NSInvocation *invocation = prepareInvocation(runtime, target, selector, arguments);
+    __block __strong id retainedResult = nil;
+    __block NSException *failure = nil;
     dispatch_sync(dispatch_get_main_queue(), ^{
-        try
+        @try
         {
-            result = invokeObject(runtime, target, selector, arguments);
+            [invocation invoke];
+            char code = normalizedType(invocation.methodSignature.methodReturnType);
+            if (code == '@' || code == '#')
+            {
+                __unsafe_unretained id object = nil;
+                [invocation getReturnValue:&object];
+                retainedResult = object;
+            }
         }
-        catch (...)
+        @catch (NSException *exception)
         {
-            failure = std::current_exception();
+            failure = exception;
         }
     });
     if (failure)
     {
-        std::rethrow_exception(failure);
+        throw JSError(runtime, std::string("Objective-C invocation failed: ") +
+                                 (failure.reason.UTF8String ?: "unknown"));
     }
-    return std::move(result);
+    Value result = returnValue(runtime, invocation, invocation.methodSignature);
+    (void) retainedResult;
+    return result;
 }
 
 static Value invokeSuperWithThreadPolicy(Runtime &runtime, id target, Class currentClass, SEL selector,
@@ -1730,23 +1801,7 @@ static Value invokeSuperWithThreadPolicy(Runtime &runtime, id target, Class curr
         throw JSError(runtime, "Unsupported native thread policy");
     }
 
-    __block Value result = Value::undefined();
-    __block std::exception_ptr failure;
-    dispatch_sync(dispatch_get_main_queue(), ^{
-        try
-        {
-            result = invokeSuperObject(runtime, target, currentClass, selector, arguments);
-        }
-        catch (...)
-        {
-            failure = std::current_exception();
-        }
-    });
-    if (failure)
-    {
-        std::rethrow_exception(failure);
-    }
-    return std::move(result);
+    throw JSError(runtime, "Native super invocation cannot synchronously cross to the main thread");
 }
 
 static NSArray *argumentArray(Runtime &runtime, const Value *args, size_t count, size_t start)
@@ -1784,9 +1839,14 @@ static Class classFromValue(Runtime &runtime, const Value &value)
     return Nil;
 }
 
-static void removeHook(const std::shared_ptr<HookState> &state)
+static void removeHook(const std::shared_ptr<HookState> &state, bool preserveAfter = false)
 {
-    if (!state || !state->active.exchange(false))
+    if (!state)
+    {
+        return;
+    }
+    state->afterOncePending.store(preserveAfter && state->after != nullptr);
+    if (!state->active.exchange(false))
     {
         return;
     }
@@ -1798,7 +1858,6 @@ static void removeHook(const std::shared_ptr<HookState> &state)
         return;
     }
 
-    bool retired = false;
     {
         std::lock_guard<std::mutex> lock(gHookMutex);
         auto iterator = std::find(dispatcher->hooks.begin(), dispatcher->hooks.end(), state);
@@ -1820,12 +1879,9 @@ static void removeHook(const std::shared_ptr<HookState> &state)
                 }
                 dispatcher->retired.store(true);
                 gDispatchers.erase(hookKey(dispatcher->cls, dispatcher->selector));
-                retired = true;
             }
         }
     }
-
-    if (retired) releaseHookClosure(dispatcher);
 }
 
 Value HookTokenHost::get(Runtime &runtime, const PropNameID &name)
@@ -2380,6 +2436,7 @@ struct RuntimeCallState {
     std::exception_ptr failure;
     dispatch_semaphore_t semaphore;
     std::atomic_bool cancelled{false};
+    std::atomic_bool completed{false};
 };
 
 static std::shared_ptr<HookInvocation> hookInvocation(const std::shared_ptr<HookDispatcher> &dispatcher,
@@ -2574,21 +2631,31 @@ static bool executeRuntimeSynchronously(std::function<void(Runtime &)> callback)
         return false;
     }
 
-    if (gNativePluginRuntime && std::this_thread::get_id() == gNativePluginRuntimeThread)
+    Runtime *expectedRuntime = nullptr;
+    std::thread::id expectedThread;
     {
-        callback(*gNativePluginRuntime);
+        std::lock_guard<std::mutex> lock(gNativePluginRuntimeMutex);
+        expectedRuntime = gNativePluginRuntime;
+        expectedThread = gNativePluginRuntimeThread;
+    }
+    uint64_t generation = gNativePluginRuntimeGeneration.load();
+    if (expectedRuntime && std::this_thread::get_id() == expectedThread)
+    {
+        callback(*expectedRuntime);
         return true;
     }
 
     auto state = std::make_shared<RuntimeCallState>(std::move(callback));
-    [instance callFunctionOnBufferedRuntimeExecutor:[state](Runtime &runtime) {
+    [instance callFunctionOnBufferedRuntimeExecutor:[state, expectedRuntime, generation](Runtime &runtime) {
         @autoreleasepool
         {
-            if (!state->cancelled.load())
+            if (!state->cancelled.load() && expectedRuntime == &runtime &&
+                generation == gNativePluginRuntimeGeneration.load())
             {
                 try
                 {
                     state->callback(runtime);
+                    state->completed.store(true);
                 }
                 catch (...)
                 {
@@ -2609,7 +2676,7 @@ static bool executeRuntimeSynchronously(std::function<void(Runtime &)> callback)
     {
         std::rethrow_exception(state->failure);
     }
-    return true;
+    return state->completed.load();
 }
 
 static void executeRuntimeAsynchronously(std::function<void(Runtime &)> callback)
@@ -2620,9 +2687,21 @@ static void executeRuntimeAsynchronously(std::function<void(Runtime &)> callback
         return;
     }
 
-    [instance callFunctionOnBufferedRuntimeExecutor:[callback = std::move(callback)](Runtime &runtime) {
+    Runtime *expectedRuntime = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(gNativePluginRuntimeMutex);
+        expectedRuntime = gNativePluginRuntime;
+    }
+    uint64_t generation = gNativePluginRuntimeGeneration.load();
+    [instance callFunctionOnBufferedRuntimeExecutor:
+        [callback = std::move(callback), expectedRuntime, generation](Runtime &runtime) {
         @autoreleasepool
         {
+            if (expectedRuntime != &runtime ||
+                generation != gNativePluginRuntimeGeneration.load())
+            {
+                return;
+            }
             try
             {
                 callback(runtime);
@@ -2995,10 +3074,11 @@ static Value ffiCallValue(Runtime &runtime, const Value *args, size_t count)
         throw JSError(runtime, "ffi.call expects a pointer handle");
     }
 
-    void *address = pointer.getHostObject<PointerHost>(runtime)->value();
-    if (!address)
+    std::shared_ptr<PointerHost> host = pointer.getHostObject<PointerHost>(runtime);
+    void *address = host->value();
+    if (!address || !host->callable() || !isExecutableAddress(address))
     {
-        throw JSError(runtime, "ffi.call cannot invoke a null pointer");
+        throw JSError(runtime, "ffi.call requires an executable symbol pointer");
     }
 
     FFISignature signature = parseFFISignature(runtime, args[1]);
@@ -3009,25 +3089,20 @@ static Value ffiCallValue(Runtime &runtime, const Value *args, size_t count)
     return ffiCall(runtime, address, signature, args + 2);
 }
 
-static void releaseHookClosure(const std::shared_ptr<HookDispatcher> &dispatcher)
-{
-    if (!dispatcher || !dispatcher->retired || dispatcher->activeCalls.load() != 0 ||
-        dispatcher->closureReleased.exchange(true))
-    {
-        return;
-    }
-
-    ffi_closure *closure = dispatcher->closure;
-    dispatcher->closure = nullptr;
-    if (closure)
-    {
-        ffi_closure_free(closure);
-    }
-}
-
-static std::shared_ptr<HookDispatcher> findHookDispatcher(id object, SEL selector)
+static std::shared_ptr<HookDispatcher> findHookDispatcher(id object, SEL selector,
+                                                           void *closureData = nullptr)
 {
     std::lock_guard<std::mutex> lock(gHookMutex);
+    if (closureData)
+    {
+        auto closure = gClosureDispatchers.find(static_cast<HookDispatcher *>(closureData));
+        if (closure == gClosureDispatchers.end())
+        {
+            return nullptr;
+        }
+        closure->second->activeCalls.fetch_add(1);
+        return closure->second;
+    }
     auto iterator = gDispatchers.find(hookKey(object_getClass(object), selector));
     if (iterator == gDispatchers.end())
     {
@@ -3055,10 +3130,7 @@ struct HookCallGuard {
 
     ~HookCallGuard()
     {
-        if (dispatcher->activeCalls.fetch_sub(1) == 1)
-        {
-            releaseHookClosure(dispatcher);
-        }
+        dispatcher->activeCalls.fetch_sub(1);
     }
 
     std::shared_ptr<HookDispatcher> dispatcher;
@@ -3074,18 +3146,13 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
     __unsafe_unretained id object = nil;
     memcpy(&object, arguments[0], sizeof(object));
     SEL selector = *reinterpret_cast<SEL *>(arguments[1]);
-    auto dispatcher = findHookDispatcher(object, selector);
+    auto dispatcher = findHookDispatcher(object, selector, userData);
     if (!dispatcher)
     {
         return;
     }
 
     HookCallGuard guard(dispatcher);
-    if (userData && dispatcher.get() != userData)
-    {
-        return;
-    }
-
     std::vector<std::shared_ptr<HookState>> hooks;
     {
         std::lock_guard<std::mutex> lock(gHookMutex);
@@ -3258,7 +3325,8 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         std::shared_ptr<Function> callback = state->after;
         __strong id retainedObject = object;
         executeRuntimeAsynchronously([invocation, retainedObject, selector, callback, state](Runtime &runtime) {
-            if (!state->active.load())
+            bool pending = state->afterOncePending.exchange(false);
+            if (!state->active.load() && !pending)
             {
                 return;
             }
@@ -3274,7 +3342,7 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
 
     for (const std::shared_ptr<HookState> &state : onceHooks)
     {
-        removeHook(state);
+        removeHook(state, true);
     }
 }
 
@@ -3625,7 +3693,8 @@ static void dispatchVoidHook(id object, SEL selector)
             std::shared_ptr<Function> callback = state->after;
             __strong id retainedObject = object;
             executeRuntimeAsynchronously([invocation, retainedObject, selector, callback, state](Runtime &runtime) {
-                if (!state->active.load())
+                bool pending = state->afterOncePending.exchange(false);
+                if (!state->active.load() && !pending)
                 {
                     return;
                 }
@@ -3641,7 +3710,7 @@ static void dispatchVoidHook(id object, SEL selector)
 
         for (const std::shared_ptr<HookState> &state : onceHooks)
         {
-            removeHook(state);
+            removeHook(state, true);
         }
     }
 }
@@ -3795,6 +3864,10 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
                     prepareClosure();
                 }
             }
+            if (dispatcher->closure)
+            {
+                gClosureDispatchers[dispatcher.get()] = dispatcher;
+            }
             MSHookMessageEx(cls, selector, (IMP) dispatcher->code, &dispatcher->original);
             gDispatchers[key] = dispatcher;
         }
@@ -3856,7 +3929,7 @@ static Value ffiSymbol(Runtime &runtime, const Value *args, size_t count)
     {
         dlclose(handle);
     }
-    return pointerResult(runtime, symbol);
+    return pointerResult(runtime, symbol, true);
 }
 
 static Value objcFunction(Runtime &runtime, const Value &target, const Value &selectorValue,
@@ -4509,8 +4582,12 @@ void setNativePluginFabricHost(id instance)
 
 void registerNativePluginBridge(Runtime &runtime)
 {
-    gNativePluginRuntime = &runtime;
-    gNativePluginRuntimeThread = std::this_thread::get_id();
+    {
+        std::lock_guard<std::mutex> lock(gNativePluginRuntimeMutex);
+        gNativePluginRuntime = &runtime;
+        gNativePluginRuntimeThread = std::this_thread::get_id();
+        gNativePluginRuntimeGeneration.fetch_add(1);
+    }
     Object bridge(runtime);
     bridge.setProperty(runtime, "apiVersion", String::createFromUtf8(runtime, kNativePluginApiVersion));
     bridge.setProperty(runtime, "abiVersion", String::createFromUtf8(runtime, kNativePluginAbiVersion));

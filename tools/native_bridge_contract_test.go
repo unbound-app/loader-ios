@@ -182,3 +182,61 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		t.Fatal("native evaluation records can throw into JavaScript on bad input")
 	}
 }
+
+func TestNativeBridgeSafetyGuards(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	bridge, err := os.ReadFile(filepath.Join(root, "sources", "NativePluginBridge.mm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loader, err := os.ReadFile(filepath.Join(root, "sources", "Unbound.xm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	filesystem, err := os.ReadFile(filepath.Join(root, "sources", "FileSystem.m"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	updater, err := os.ReadFile(filepath.Join(root, "sources", "Updater.m"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"Native value exceeds conversion limits",
+		"ffi.call requires an executable symbol pointer",
+		"if (code == ':')",
+		"[invocation retainArguments]",
+		"Native super invocation cannot synchronously cross to the main thread",
+	} {
+		if !strings.Contains(string(bridge), required) {
+			t.Fatalf("native bridge safety guard %q is missing", required)
+		}
+	}
+	if strings.Contains(string(bridge), "result = invokeObject(runtime, target, selector, arguments)") {
+		t.Fatal("Objective-C invocation still creates JSI values on the main thread")
+	}
+	for _, required := range []string{"Bundle preparation timed out.", "if (!gLoaderPrepared.exchange(true))"} {
+		if !strings.Contains(string(loader), required) {
+			t.Fatalf("loader lifecycle guard %q is missing", required)
+		}
+	}
+	for _, required := range []string{"markBundleAttempted:bundlePath", "acceptBundle:bundlePath", "rejectBundle:bundlePath"} {
+		if !strings.Contains(string(loader), required) {
+			t.Fatalf("bundle promotion step %q is missing", required)
+		}
+	}
+	for _, required := range []string{".candidate", "BundleCandidateMissing", "rename(path.fileSystemRepresentation", ".attempting"} {
+		if !strings.Contains(string(updater), required) {
+			t.Fatalf("transactional bundle step %q is missing", required)
+		}
+	}
+	for _, required := range []string{"DownloadTimedOut", "DownloadWriteFailed"} {
+		if !strings.Contains(string(filesystem), required) {
+			t.Fatalf("bundle download guard %q is missing", required)
+		}
+	}
+}

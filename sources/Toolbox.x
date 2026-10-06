@@ -540,7 +540,14 @@ static UIWindowScene *activeWindowScene(void)
     [Settings set:@"unbound" key:@"loader.update.url" value:nil];
     [Settings set:@"unbound" key:@"loader.update.force" value:nil];
 
-    [[NSFileManager defaultManager] removeItemAtPath:[Updater resolveBundlePath] error:nil];
+    for (NSString *extension in @[ @"bundle", @"js" ])
+    {
+        NSString *path = [NSString pathWithComponents:@[
+            FileSystem.documents, [NSString stringWithFormat:@"unbound.%@", extension]
+        ]];
+        [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+        [Updater rejectBundle:[path stringByAppendingString:@".candidate"]];
+    }
     [self dismissViewControllerAnimated:YES completion:^{ [Utilities reloadApp]; }];
 }
 
