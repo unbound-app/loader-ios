@@ -4,6 +4,7 @@
 #import <mach/mach.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <ptrauth.h>
 #import <substrate.h>
 #import <UIKit/UIKit.h>
 
@@ -25,6 +26,7 @@
 #import "Evaluations.h"
 #import "JSI.h"
 #import "Logger.h"
+#import "NativeAddressValidation.h"
 #import "NativePluginFFI.h"
 #import "NativeNumericValidation.h"
 #import "NativeTypeEncoding.h"
@@ -483,7 +485,11 @@ static bool isExecutableAddress(void *address)
         return false;
     }
 
-    vm_address_t region = reinterpret_cast<vm_address_t>(address);
+    void *regionAddress = address;
+#if __has_feature(ptrauth_calls)
+    regionAddress = ptrauth_strip(address, ptrauth_key_function_pointer);
+#endif
+    vm_address_t region = reinterpret_cast<vm_address_t>(regionAddress);
     vm_size_t size = 0;
     vm_region_basic_info_data_64_t info{};
     mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
@@ -495,7 +501,9 @@ static bool isExecutableAddress(void *address)
     {
         mach_port_deallocate(mach_task_self(), object);
     }
-    return result == KERN_SUCCESS && (info.protection & VM_PROT_EXECUTE) != 0;
+    vm_address_t target = reinterpret_cast<vm_address_t>(regionAddress);
+    return result == KERN_SUCCESS && addressWithinRegion(target, region, size) &&
+           (info.protection & VM_PROT_EXECUTE) != 0;
 }
 
 static std::shared_ptr<ObjCHandleHost> objcHost(Runtime &runtime, const Value &value)
