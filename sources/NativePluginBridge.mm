@@ -2,6 +2,7 @@
 
 #import <dlfcn.h>
 #import <mach/mach.h>
+#import <mach-o/loader.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <ptrauth.h>
@@ -478,6 +479,81 @@ static std::string hookKey(Class cls, SEL selector)
     return std::string(class_getName(cls)) + ":" + sel_getName(selector);
 }
 
+static bool isInstructionSectionAddress(void *address)
+{
+    Dl_info image{};
+    if (dladdr(address, &image) == 0 || !image.dli_fbase)
+    {
+        return false;
+    }
+
+    const auto *header = reinterpret_cast<const mach_header_64 *>(image.dli_fbase);
+    if (header->magic != MH_MAGIC_64)
+    {
+        return false;
+    }
+
+    const auto *command = reinterpret_cast<const load_command *>(header + 1);
+    std::uintptr_t slide = 0;
+    bool foundText = false;
+    for (uint32_t index = 0; index < header->ncmds; index++)
+    {
+        if (command->cmdsize < sizeof(load_command))
+        {
+            return false;
+        }
+        if (command->cmd == LC_SEGMENT_64)
+        {
+            const auto *segment = reinterpret_cast<const segment_command_64 *>(command);
+            if (command->cmdsize < sizeof(segment_command_64) ||
+                segment->nsects > (command->cmdsize - sizeof(segment_command_64)) /
+                                      sizeof(section_64))
+            {
+                return false;
+            }
+            if (strncmp(segment->segname, SEG_TEXT, sizeof(segment->segname)) == 0)
+            {
+                slide = reinterpret_cast<std::uintptr_t>(header) - segment->vmaddr;
+                foundText = true;
+                break;
+            }
+        }
+        command = reinterpret_cast<const load_command *>(reinterpret_cast<const uint8_t *>(command) +
+                                                          command->cmdsize);
+    }
+    if (!foundText)
+    {
+        return false;
+    }
+
+    command = reinterpret_cast<const load_command *>(header + 1);
+    for (uint32_t index = 0; index < header->ncmds; index++)
+    {
+        if (command->cmd == LC_SEGMENT_64)
+        {
+            const auto *segment = reinterpret_cast<const segment_command_64 *>(command);
+            if ((segment->initprot & VM_PROT_EXECUTE) != 0)
+            {
+                const auto *sections = reinterpret_cast<const section_64 *>(segment + 1);
+                for (uint32_t sectionIndex = 0; sectionIndex < segment->nsects; sectionIndex++)
+                {
+                    const auto &section = sections[sectionIndex];
+                    if ((section.flags & (S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS)) !=
+                            0 &&
+                        addressWithinRegion(reinterpret_cast<std::uintptr_t>(address),
+                                            section.addr + slide, section.size))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        command = reinterpret_cast<const load_command *>(reinterpret_cast<const uint8_t *>(command) +
+                                                          command->cmdsize);
+    }
+    return false;
+}
+
 static bool isExecutableAddress(void *address)
 {
     if (!address)
@@ -506,7 +582,8 @@ static bool isExecutableAddress(void *address)
         }
         if (!info.is_submap)
         {
-            return (info.protection & VM_PROT_EXECUTE) != 0;
+            return (info.protection & VM_PROT_EXECUTE) != 0 &&
+                   isInstructionSectionAddress(regionAddress);
         }
         depth++;
     }
