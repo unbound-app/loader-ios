@@ -489,21 +489,28 @@ static bool isExecutableAddress(void *address)
 #if __has_feature(ptrauth_calls)
     regionAddress = ptrauth_strip(address, ptrauth_key_function_pointer);
 #endif
-    vm_address_t region = reinterpret_cast<vm_address_t>(regionAddress);
-    vm_size_t size = 0;
-    vm_region_basic_info_data_64_t info{};
-    mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
-    mach_port_t object = MACH_PORT_NULL;
-    kern_return_t result = vm_region_64(
-        mach_task_self(), &region, &size, VM_REGION_BASIC_INFO_64,
-        reinterpret_cast<vm_region_info_t>(&info), &count, &object);
-    if (object != MACH_PORT_NULL)
-    {
-        mach_port_deallocate(mach_task_self(), object);
-    }
     vm_address_t target = reinterpret_cast<vm_address_t>(regionAddress);
-    return result == KERN_SUCCESS && addressWithinRegion(target, region, size) &&
-           (info.protection & VM_PROT_EXECUTE) != 0;
+    natural_t depth = 0;
+    for (unsigned int attempt = 0; attempt < 16; attempt++)
+    {
+        vm_address_t region = target;
+        vm_size_t size = 0;
+        vm_region_submap_short_info_data_64_t info{};
+        mach_msg_type_number_t count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
+        kern_return_t result = vm_region_recurse_64(
+            mach_task_self(), &region, &size, &depth,
+            reinterpret_cast<vm_region_recurse_info_t>(&info), &count);
+        if (result != KERN_SUCCESS || !addressWithinRegion(target, region, size))
+        {
+            return false;
+        }
+        if (!info.is_submap)
+        {
+            return (info.protection & VM_PROT_EXECUTE) != 0;
+        }
+        depth++;
+    }
+    return false;
 }
 
 static std::shared_ptr<ObjCHandleHost> objcHost(Runtime &runtime, const Value &value)
