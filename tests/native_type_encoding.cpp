@@ -17,6 +17,17 @@ int main()
     assert(nativeFFITypeName("{CGRect={CGPoint=dd}{CGSize=dd}}") == "struct:CGRect");
     assert(nativeFFITypeName("r{_NSRange=QQ}") == "struct:NSRange");
     assert(nativeFFITypeName("{UIEdgeInsets=dddd}") == "struct:UIEdgeInsets");
+    assert(nativeFFITypeName("{CGAffineTransform=dddddd}") == "struct:CGAffineTransform");
+    assert(nativeFFITypeName("{_CGRect={_CGPoint=dd}{_CGSize=dd}}") == "struct:CGRect");
+    assert(nativeFFITypeName("i24").empty());
+    assert(nativeFFITypeName("dgarbage").empty());
+    assert(nativeFFITypeName("@?").empty());
+    assert(nativeFFITypeName("{CGRect=dddd}").empty());
+    assert(nativeFFITypeName("{CGRect={CGPoint=dd}{CGSize=ff}}").empty());
+    assert(nativeFFITypeName("{CGRect={CGPoint=dd}{CGSize=dd}}extra").empty());
+    assert(nativeFFITypeName("{NSRange=ii}").empty());
+    assert(nativeFFITypeName("{UIEdgeInsets=ffff}").empty());
+    assert(nativeFFITypeName("{CGAffineTransform=dddddd}extra").empty());
     assert(nativeFFITypeName("{Unknown=CGRect}").empty());
     assert(nativeFFITypeName("{Unknown=dd}").empty());
     assert(nativeFFITypeName("(Union=ii)").empty());

@@ -122,10 +122,9 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	if !strings.Contains(sourceText, `signature.arguments[2].name == "struct:CGRect"`) {
 		t.Fatal("native object-return CGRect hooks do not have a precompiled fallback")
 	}
-	rectEncoding := strings.Index(typeText, `name == "CGRect"`)
-	pointEncoding := strings.Index(typeText, `name == "CGPoint"`)
-	if rectEncoding < 0 || pointEncoding < 0 || rectEncoding > pointEncoding {
-		t.Fatal("native type parsing must recognize CGRect before its nested CGPoint encoding")
+	if !strings.Contains(typeText, `fields == "{CGPoint=dd}{CGSize=dd}"`) ||
+		!strings.Contains(typeText, `fields == "dd"`) {
+		t.Fatal("native type parsing must validate CGRect and CGPoint field layouts")
 	}
 	if !strings.Contains(sourceText, `signature.result.name != "struct:CGSize"`) ||
 		!strings.Contains(sourceText, `signature.arguments.size() == 2`) {
