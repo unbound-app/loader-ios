@@ -240,6 +240,9 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 		"Native batch can only reference earlier results",
 		"Native batch method return type is unsupported",
 		"Native batch method argument type is unsupported",
+		"Native batch scalar argument is out of range",
+		"Native batch object argument cannot be a pointer",
+		"Native batch struct argument has the wrong layout",
 		"executeMainAsynchronously(",
 	} {
 		if !strings.Contains(string(bridge), required) {

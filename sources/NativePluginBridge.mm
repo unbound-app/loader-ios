@@ -2325,6 +2325,69 @@ static NSInteger batchResultIndex(Runtime &runtime, const Value &value, size_t s
     return static_cast<NSInteger>(index);
 }
 
+static void validateBatchArgument(id value, const char *encoding)
+{
+    std::string type = nativeFFITypeName(encoding);
+    if (type.empty() || type == "void")
+    {
+        throw std::runtime_error("Native batch method argument type is unsupported");
+    }
+    if (type == "object")
+    {
+        if ([value isKindOfClass:[NSValue class]] &&
+            strncmp([(NSValue *) value objCType], "^", 1) == 0)
+        {
+            throw std::runtime_error("Native batch object argument cannot be a pointer");
+        }
+        return;
+    }
+    if (type == "class")
+    {
+        if (value == [NSNull null] || object_isClass(value)) return;
+        throw std::runtime_error("Native batch class argument is invalid");
+    }
+    if (type == "selector")
+    {
+        if (value == [NSNull null] || [value isKindOfClass:[NSString class]]) return;
+        throw std::runtime_error("Native batch selector argument is invalid");
+    }
+    if (type == "pointer")
+    {
+        if (value == [NSNull null] ||
+            ([value isKindOfClass:[NSValue class]] &&
+             strncmp([(NSValue *) value objCType], "^", 1) == 0) ||
+            (normalizedType(encoding) == '*' && [value isKindOfClass:[NSString class]])) return;
+        throw std::runtime_error("Native batch pointer argument is invalid");
+    }
+    if (type.starts_with("struct:"))
+    {
+        if ([value isKindOfClass:[NSValue class]] &&
+            nativeFFITypeName([(NSValue *) value objCType]) == type) return;
+        throw std::runtime_error("Native batch struct argument has the wrong layout");
+    }
+    if (![value isKindOfClass:[NSNumber class]])
+    {
+        throw std::runtime_error("Native batch scalar argument must be a number");
+    }
+    NSNumber *number = (NSNumber *) value;
+    if (type == "bool")
+    {
+        double raw = number.doubleValue;
+        if (raw == 0 || raw == 1) return;
+        throw std::runtime_error("Native batch boolean argument is invalid");
+    }
+    const char *numberType = number.objCType;
+    bool signedInteger = strcmp(numberType, @encode(long long)) == 0 ||
+                         strcmp(numberType, @encode(long)) == 0;
+    bool unsignedInteger = strcmp(numberType, @encode(unsigned long long)) == 0 ||
+                           strcmp(numberType, @encode(unsigned long)) == 0;
+    if ((type == "i64" && signedInteger) || (type == "u64" && unsignedInteger)) return;
+    if (!validNativeNumericValue(number.doubleValue, type))
+    {
+        throw std::runtime_error("Native batch scalar argument is out of range");
+    }
+}
+
 static id batchNativeResult(NSInvocation *invocation)
 {
     NSMethodSignature *signature = invocation.methodSignature;
@@ -2514,10 +2577,8 @@ static Value invokeBatch(Runtime &runtime, const Value *args, size_t count)
                 }
                 for (NSUInteger index = 2; index < signature.numberOfArguments; index++)
                 {
-                    if (nativeFFITypeName([signature getArgumentTypeAtIndex:index]).empty())
-                    {
-                        throw std::runtime_error("Native batch method argument type is unsupported");
-                    }
+                    validateBatchArgument(arguments[index - 2],
+                                          [signature getArgumentTypeAtIndex:index]);
                 }
                 NSInvocation *invocation = prepareInvocation(target, selector, arguments);
                 [invocation invoke];

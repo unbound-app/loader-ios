@@ -7,7 +7,7 @@ TARGET := iphone:clang:latest:15.0
 COMMIT_HASH := $(shell git rev-parse HEAD)
 COMMIT_SHORT_HASH := $(shell git rev-parse --short HEAD)
 # Strip quotes/backslashes so they can't break the -DCOMMIT_SUBJECT='@"..."' flag.
-COMMIT_SUBJECT := $(shell git log -1 --pretty=format:%s | tr -d '"'\''\\')
+COMMIT_SUBJECT := $(shell git log -1 --pretty=format:%s | LC_ALL=C tr -cd 'A-Za-z0-9 ._:-')
 COMMIT_BRANCH := $(shell git branch --show-current 2>/dev/null || echo detached)
 BUILD_TIMESTAMP := $(shell date "+%Y-%m-%d %H:%M:%S %Z")
 
