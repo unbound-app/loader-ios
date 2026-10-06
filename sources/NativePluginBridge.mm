@@ -502,8 +502,12 @@ static bool isExecutableAddress(void *address)
         mach_port_deallocate(mach_task_self(), object);
     }
     vm_address_t target = reinterpret_cast<vm_address_t>(regionAddress);
-    return result == KERN_SUCCESS && addressWithinRegion(target, region, size) &&
-           (info.protection & VM_PROT_EXECUTE) != 0;
+    if (result == KERN_SUCCESS && addressWithinRegion(target, region, size) &&
+        (info.protection & VM_PROT_EXECUTE) != 0)
+    {
+        return true;
+    }
+    return isExecutableImageAddress(regionAddress);
 }
 
 static std::shared_ptr<ObjCHandleHost> objcHost(Runtime &runtime, const Value &value)
@@ -3088,6 +3092,14 @@ static void setFFIArgument(Runtime &runtime, const Value &value, const FFITypeSp
                 argument.pointer = object.getHostObject<PointerHost>(runtime)->value();
             }
         }
+        return;
+    }
+
+    if (spec.name == "object" && !value.isNull() && !value.isUndefined() &&
+        !(value.isObject() && value.asObject(runtime).isHostObject<PointerHost>(runtime)))
+    {
+        argument.object = valueToObjC(runtime, value);
+        argument.pointer = (__bridge void *) argument.object;
         return;
     }
 
