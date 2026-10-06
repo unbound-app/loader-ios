@@ -285,6 +285,7 @@ struct HookDispatcher {
 
 struct HookState {
     uint64_t identifier;
+    uint64_t runtimeGeneration;
     std::shared_ptr<Function> before;
     std::shared_ptr<Function> after;
     std::shared_ptr<Function> replace;
@@ -3413,7 +3414,8 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         std::lock_guard<std::mutex> lock(gHookMutex);
         for (const std::shared_ptr<HookState> &state : dispatcher->hooks)
         {
-            if (state->active && (!state->instanceTarget || state->instanceTarget == object))
+            if (state->active && state->runtimeGeneration == gNativePluginRuntimeGeneration.load() &&
+                (!state->instanceTarget || state->instanceTarget == object))
             {
                 hooks.push_back(state);
             }
@@ -3856,7 +3858,8 @@ static void dispatchVoidHook(id object, SEL selector)
             std::lock_guard<std::mutex> lock(gHookMutex);
             for (const std::shared_ptr<HookState> &state : dispatcher->hooks)
             {
-                if (state->active && (!state->instanceTarget || state->instanceTarget == object))
+                if (state->active && state->runtimeGeneration == gNativePluginRuntimeGeneration.load() &&
+                    (!state->instanceTarget || state->instanceTarget == object))
                 {
                     hooks.push_back(state);
                 }
@@ -4135,6 +4138,7 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
 
     auto state = std::make_shared<HookState>();
     state->identifier = gNextHookIdentifier.fetch_add(1);
+    state->runtimeGeneration = gNativePluginRuntimeGeneration.load();
     state->before = std::move(before);
     state->after = std::move(after);
     state->replace = std::move(replace);
@@ -4841,9 +4845,12 @@ void registerNativePluginBridge(Runtime &runtime)
 {
     {
         std::lock_guard<std::mutex> lock(gNativePluginRuntimeMutex);
+        if (gNativePluginRuntime != &runtime)
+        {
+            gNativePluginRuntimeGeneration.fetch_add(1);
+        }
         gNativePluginRuntime = &runtime;
         gNativePluginRuntimeThread = std::this_thread::get_id();
-        gNativePluginRuntimeGeneration.fetch_add(1);
     }
     Object bridge(runtime);
     bridge.setProperty(runtime, "apiVersion", String::createFromUtf8(runtime, kNativePluginApiVersion));
