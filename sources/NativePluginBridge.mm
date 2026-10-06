@@ -11,6 +11,7 @@
 
 #import <algorithm>
 #import <atomic>
+#import <cmath>
 #import <cstdint>
 #import <cstring>
 #import <functional>
@@ -2596,6 +2597,108 @@ static Value invokeBatch(Runtime &runtime, const Value *args, size_t count)
                                                    invocation.methodSignature));
             }
             (void) values;
+            return result;
+        });
+}
+
+static Value snapshotUI(Runtime &runtime, const Value *args, size_t count)
+{
+    id root = count ? objcValue(runtime, args[0]) : nil;
+    if (![root isKindOfClass:[UIView class]])
+    {
+        throw JSError(runtime, "objc.snapshot expects a UIView handle");
+    }
+
+    NSUInteger maxDepth = 8;
+    NSUInteger maxNodes = 100;
+    if (count > 1 && args[1].isObject())
+    {
+        Object options = args[1].asObject(runtime);
+        Value depth = options.getProperty(runtime, "maxDepth");
+        Value nodes = options.getProperty(runtime, "maxNodes");
+        if (!depth.isUndefined())
+        {
+            double value = depth.isNumber() ? depth.asNumber() : NAN;
+            if (!std::isfinite(value) || value < 0 || value > 12 || std::floor(value) != value)
+            {
+                throw JSError(runtime, "Native UI snapshot depth must be an integer from 0 to 12");
+            }
+            maxDepth = static_cast<NSUInteger>(value);
+        }
+        if (!nodes.isUndefined())
+        {
+            double value = nodes.isNumber() ? nodes.asNumber() : NAN;
+            if (!std::isfinite(value) || value < 1 || value > 256 || std::floor(value) != value)
+            {
+                throw JSError(runtime, "Native UI snapshot size must be an integer from 1 to 256");
+            }
+            maxNodes = static_cast<NSUInteger>(value);
+        }
+    }
+
+    NSMutableArray<NSDictionary *> *captured = [NSMutableArray arrayWithCapacity:maxNodes];
+    return executeMainAsynchronously(
+        runtime,
+        [root, captured, maxDepth, maxNodes]() {
+            NSMutableArray<NSDictionary *> *queue = [NSMutableArray arrayWithCapacity:maxNodes];
+            [queue addObject:@{ @"view": root, @"parent": @(-1), @"depth": @(0) }];
+            for (NSUInteger index = 0; index < queue.count && captured.count < maxNodes; index++)
+            {
+                NSDictionary *queued = queue[index];
+                UIView *view = queued[@"view"];
+                NSUInteger depth = [queued[@"depth"] unsignedIntegerValue];
+                NSString *text = nil;
+                SEL textSelector = @selector(text);
+                if ([view respondsToSelector:textSelector])
+                {
+                    NSMethodSignature *signature = [view methodSignatureForSelector:textSelector];
+                    if (signature && normalizedType(signature.methodReturnType) == '@')
+                    {
+                        id value = ((id (*)(id, SEL)) objc_msgSend)(view, textSelector);
+                        if ([value isKindOfClass:[NSString class]]) text = value;
+                    }
+                }
+                [captured addObject:@{
+                    @"view": view,
+                    @"parent": queued[@"parent"],
+                    @"depth": queued[@"depth"],
+                    @"className": NSStringFromClass([view class]),
+                    @"frame": [NSValue valueWithCGRect:view.frame],
+                    @"text": text ?: [NSNull null],
+                    @"visible": @(!view.hidden && view.alpha > 0 && view.window != nil),
+                }];
+                if (depth >= maxDepth) continue;
+                NSNumber *parent = @(captured.count - 1);
+                for (UIView *child in view.subviews)
+                {
+                    if (queue.count >= maxNodes) break;
+                    [queue addObject:@{ @"view": child, @"parent": parent, @"depth": @(depth + 1) }];
+                }
+            }
+        },
+        [captured](Runtime &completionRuntime) -> Value {
+            Array result(completionRuntime, captured.count);
+            for (NSUInteger index = 0; index < captured.count; index++)
+            {
+                NSDictionary *node = captured[index];
+                CGRect frame = [node[@"frame"] CGRectValue];
+                Object item(completionRuntime);
+                Object bounds(completionRuntime);
+                bounds.setProperty(completionRuntime, "x", Value((double) frame.origin.x));
+                bounds.setProperty(completionRuntime, "y", Value((double) frame.origin.y));
+                bounds.setProperty(completionRuntime, "width", Value((double) frame.size.width));
+                bounds.setProperty(completionRuntime, "height", Value((double) frame.size.height));
+                item.setProperty(completionRuntime, "view", objcHandleResult(completionRuntime, node[@"view"]));
+                item.setProperty(completionRuntime, "parent", Value([node[@"parent"] doubleValue]));
+                item.setProperty(completionRuntime, "depth", Value([node[@"depth"] doubleValue]));
+                item.setProperty(completionRuntime, "className", [JSI fromObjC:node[@"className"] runtime:completionRuntime]);
+                item.setProperty(completionRuntime, "frame", std::move(bounds));
+                item.setProperty(completionRuntime, "text", node[@"text"] == [NSNull null]
+                                                           ? Value::null()
+                                                           : [JSI fromObjC:node[@"text"] runtime:completionRuntime]);
+                item.setProperty(completionRuntime, "visible", Value([node[@"visible"] boolValue]));
+                result.setValueAtIndex(completionRuntime, index, std::move(item));
+            }
             return result;
         });
 }
@@ -5456,6 +5559,7 @@ static void installObjC(Runtime &runtime, Object &objc)
         }));
 
     objc.setProperty(runtime, "batch", makeFunction("batch", 1, runtime, invokeBatch));
+    objc.setProperty(runtime, "snapshot", makeFunction("snapshot", 2, runtime, snapshotUI));
 
     objc.setProperty(runtime, "invokeSuper", makeFunction(
         "invokeSuper", 4, runtime, [](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
@@ -5759,6 +5863,7 @@ void registerNativePluginBridge(Runtime &runtime)
         "native.objc.invoke",
         "native.objc.invokeAsync",
         "native.objc.batch",
+        "native.objc.snapshot",
         "native.objc.ivars",
         "native.objc.associations",
         "native.objc.hooks",
