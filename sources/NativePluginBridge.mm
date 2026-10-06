@@ -1692,7 +1692,7 @@ static Value returnValue(Runtime &runtime, NSInvocation *invocation, NSMethodSig
     throw JSError(runtime, "Unsupported native return type");
 }
 
-static void setInvocationArgument(Runtime &runtime, NSInvocation *invocation, NSMethodSignature *signature,
+static void setInvocationArgument(NSInvocation *invocation, NSMethodSignature *signature,
                                   id object, NSUInteger index, std::vector<id> &retained,
                                   std::vector<std::vector<uint8_t>> &storage)
 {
@@ -1865,7 +1865,7 @@ static void setInvocationArgument(Runtime &runtime, NSInvocation *invocation, NS
     {
         if (![object isKindOfClass:[NSValue class]])
         {
-            throw JSError(runtime, "Native struct argument expected");
+            throw std::runtime_error("Native struct argument expected");
         }
 
         NSValue *structValue = (NSValue *) object;
@@ -1878,27 +1878,27 @@ static void setInvocationArgument(Runtime &runtime, NSInvocation *invocation, NS
         return;
     }
 
-    throw JSError(runtime, "Unsupported native argument type");
+    throw std::runtime_error("Unsupported native argument type");
 }
 
-static NSInvocation *prepareInvocation(Runtime &runtime, id target, SEL selector,
+static NSInvocation *prepareInvocation(id target, SEL selector,
                                        NSArray *arguments)
 {
     if (!target || !selector)
     {
-        throw JSError(runtime, "Invalid native Objective-C target or selector");
+        throw std::runtime_error("Invalid native Objective-C target or selector");
     }
 
     NSMethodSignature *signature = [target methodSignatureForSelector:selector];
     if (!signature)
     {
-        throw JSError(runtime, "Objective-C selector is not available");
+        throw std::runtime_error("Objective-C selector is not available");
     }
 
     NSUInteger expected = signature.numberOfArguments >= 2 ? signature.numberOfArguments - 2 : 0;
     if (expected != arguments.count)
     {
-        throw JSError(runtime, "Objective-C argument count does not match the method signature");
+        throw std::runtime_error("Objective-C argument count does not match the method signature");
     }
 
     NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
@@ -1912,7 +1912,7 @@ static NSInvocation *prepareInvocation(Runtime &runtime, id target, SEL selector
 
     for (NSUInteger index = 0; index < arguments.count; index++)
     {
-        setInvocationArgument(runtime, invocation, signature, arguments[index], index + 2, retained, storage);
+        setInvocationArgument(invocation, signature, arguments[index], index + 2, retained, storage);
     }
 
     [invocation retainArguments];
@@ -1921,7 +1921,7 @@ static NSInvocation *prepareInvocation(Runtime &runtime, id target, SEL selector
 
 static Value invokeObject(Runtime &runtime, id target, SEL selector, NSArray *arguments)
 {
-    NSInvocation *invocation = prepareInvocation(runtime, target, selector, arguments);
+    NSInvocation *invocation = prepareInvocation(target, selector, arguments);
     [invocation invoke];
     return returnValue(runtime, invocation, invocation.methodSignature);
 }
@@ -2128,7 +2128,7 @@ static Value invokeWithThreadPolicy(Runtime &runtime, id target, SEL selector, N
         throwWrongThread(runtime, "Objective-C invocation cannot synchronously cross to a waiting main thread");
     }
 
-    NSInvocation *invocation = prepareInvocation(runtime, target, selector, arguments);
+    NSInvocation *invocation = prepareInvocation(target, selector, arguments);
     __block __strong id retainedResult = nil;
     __block NSException *failure = nil;
     dispatch_sync(dispatch_get_main_queue(), ^{
@@ -2289,9 +2289,259 @@ static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void
     return promise;
 }
 
+struct NativeBatchArgument {
+    __strong id value = nil;
+    NSInteger resultIndex = -1;
+};
+
+struct NativeBatchStep {
+    __strong id target = nil;
+    NSInteger targetResultIndex = -1;
+    __strong NSString *selector = nil;
+    std::vector<NativeBatchArgument> arguments;
+};
+
+static NSInteger batchResultIndex(Runtime &runtime, const Value &value, size_t stepIndex)
+{
+    if (!value.isObject())
+    {
+        return -1;
+    }
+    Object object = value.asObject(runtime);
+    Value reference = object.getProperty(runtime, "$nativeBatchResult");
+    if (reference.isUndefined())
+    {
+        return -1;
+    }
+    if (!reference.isNumber())
+    {
+        throw JSError(runtime, "Native batch result index must be an integer");
+    }
+    double index = reference.getNumber();
+    if (!(index >= 0 && index < stepIndex) || static_cast<double>(static_cast<size_t>(index)) != index)
+    {
+        throw JSError(runtime, "Native batch can only reference earlier results");
+    }
+    return static_cast<NSInteger>(index);
+}
+
+static id batchNativeResult(NSInvocation *invocation)
+{
+    NSMethodSignature *signature = invocation.methodSignature;
+    const char *type = signature.methodReturnType;
+    char code = normalizedType(type);
+    if (code == 'v' || signature.methodReturnLength == 0)
+    {
+        return [NSNull null];
+    }
+    if (code == '@' || code == '#')
+    {
+        __unsafe_unretained id object = nil;
+        [invocation getReturnValue:&object];
+        return object ?: [NSNull null];
+    }
+    if (code == ':')
+    {
+        SEL selector = NULL;
+        [invocation getReturnValue:&selector];
+        return selector ? NSStringFromSelector(selector) : [NSNull null];
+    }
+    if (code == '^' || code == '*')
+    {
+        void *pointer = nullptr;
+        [invocation getReturnValue:&pointer];
+        return [NSValue valueWithPointer:pointer];
+    }
+    if (code == '{')
+    {
+        std::vector<uint8_t> bytes(signature.methodReturnLength);
+        [invocation getReturnValue:bytes.data()];
+        return [NSValue value:bytes.data() withObjCType:type];
+    }
+    if (code == 'f')
+    {
+        float value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 'd')
+    {
+        double value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 'B')
+    {
+        bool value = false;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 'c')
+    {
+        int8_t value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 'C')
+    {
+        uint8_t value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 's')
+    {
+        int16_t value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 'S')
+    {
+        uint16_t value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 'i')
+    {
+        int32_t value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 'I')
+    {
+        uint32_t value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 'l' || code == 'q')
+    {
+        int64_t value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    if (code == 'L' || code == 'Q')
+    {
+        uint64_t value = 0;
+        [invocation getReturnValue:&value];
+        return @(value);
+    }
+    throw std::runtime_error("Unsupported native batch return type");
+}
+
+static Value invokeBatch(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count == 0 || !args[0].isObject() || !args[0].asObject(runtime).isArray(runtime))
+    {
+        throw JSError(runtime, "objc.batch expects an array of steps");
+    }
+    Array input = args[0].asObject(runtime).asArray(runtime);
+    if (input.size(runtime) > 64)
+    {
+        throw JSError(runtime, "Native batch requires at most 64 steps");
+    }
+
+    std::vector<NativeBatchStep> steps;
+    steps.reserve(input.size(runtime));
+    for (size_t index = 0; index < input.size(runtime); index++)
+    {
+        Value rawStep = input.getValueAtIndex(runtime, index);
+        if (!rawStep.isObject())
+        {
+            throw JSError(runtime, "Native batch step is malformed");
+        }
+        Object stepObject = rawStep.asObject(runtime);
+        Value rawTarget = stepObject.getProperty(runtime, "target");
+        Value rawSelector = stepObject.getProperty(runtime, "selector");
+        Value rawArguments = stepObject.getProperty(runtime, "args");
+        if (!rawSelector.isString() || !rawArguments.isObject() ||
+            !rawArguments.asObject(runtime).isArray(runtime))
+        {
+            throw JSError(runtime, "Native batch step is malformed");
+        }
+        Array arguments = rawArguments.asObject(runtime).asArray(runtime);
+        NSString *selector = [JSI toNSString:rawSelector runtime:runtime];
+        if (selector.length > 256 || arguments.size(runtime) > 16)
+        {
+            throw JSError(runtime, "Native batch step exceeds its limits");
+        }
+
+        NativeBatchStep step;
+        step.targetResultIndex = batchResultIndex(runtime, rawTarget, index);
+        step.target = step.targetResultIndex >= 0 ? nil : objcValue(runtime, rawTarget);
+        if (step.targetResultIndex < 0 && !step.target)
+        {
+            throw JSError(runtime, "Native batch target is not an object handle");
+        }
+        step.selector = selector;
+        step.arguments.reserve(arguments.size(runtime));
+        for (size_t argumentIndex = 0; argumentIndex < arguments.size(runtime); argumentIndex++)
+        {
+            Value rawArgument = arguments.getValueAtIndex(runtime, argumentIndex);
+            NativeBatchArgument argument;
+            argument.resultIndex = batchResultIndex(runtime, rawArgument, index);
+            if (argument.resultIndex < 0)
+            {
+                argument.value = valueToObjC(runtime, rawArgument) ?: [NSNull null];
+            }
+            step.arguments.push_back(argument);
+        }
+        steps.push_back(step);
+    }
+
+    NSMutableArray<NSInvocation *> *invocations = [NSMutableArray arrayWithCapacity:steps.size()];
+    NSMutableArray *values = [NSMutableArray arrayWithCapacity:steps.size()];
+    return executeMainAsynchronously(
+        runtime,
+        [steps = std::move(steps), invocations, values]() {
+            for (const NativeBatchStep &step : steps)
+            {
+                id target = step.targetResultIndex >= 0 ? values[step.targetResultIndex] : step.target;
+                if (target == [NSNull null])
+                {
+                    throw std::runtime_error("Native batch target is null");
+                }
+                NSMutableArray *arguments = [NSMutableArray arrayWithCapacity:step.arguments.size()];
+                for (const NativeBatchArgument &argument : step.arguments)
+                {
+                    [arguments addObject:argument.resultIndex >= 0
+                                             ? values[argument.resultIndex]
+                                             : argument.value ?: [NSNull null]];
+                }
+                SEL selector = NSSelectorFromString(step.selector);
+                NSMethodSignature *signature = [target methodSignatureForSelector:selector];
+                if (!signature || nativeFFITypeName(signature.methodReturnType).empty())
+                {
+                    throw std::runtime_error("Native batch method return type is unsupported");
+                }
+                for (NSUInteger index = 2; index < signature.numberOfArguments; index++)
+                {
+                    if (nativeFFITypeName([signature getArgumentTypeAtIndex:index]).empty())
+                    {
+                        throw std::runtime_error("Native batch method argument type is unsupported");
+                    }
+                }
+                NSInvocation *invocation = prepareInvocation(target, selector, arguments);
+                [invocation invoke];
+                [invocations addObject:invocation];
+                [values addObject:batchNativeResult(invocation)];
+            }
+        },
+        [invocations, values](Runtime &completionRuntime) -> Value {
+            Array result(completionRuntime, invocations.count);
+            for (NSUInteger index = 0; index < invocations.count; index++)
+            {
+                NSInvocation *invocation = invocations[index];
+                result.setValueAtIndex(completionRuntime, index,
+                                       returnValue(completionRuntime, invocation,
+                                                   invocation.methodSignature));
+            }
+            (void) values;
+            return result;
+        });
+}
+
 static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arguments)
 {
-    NSInvocation *invocation = prepareInvocation(runtime, target, selector, arguments);
+    NSInvocation *invocation = prepareInvocation(target, selector, arguments);
     uint64_t generation = gNativePluginRuntimeGeneration.load();
     std::string identifier = std::to_string(gNextInvocationIdentifier.fetch_add(1));
     auto cancelled = std::make_shared<std::atomic_bool>(false);
@@ -5144,6 +5394,8 @@ static void installObjC(Runtime &runtime, Object &objc)
             return invokeAsync(rt, object, NSSelectorFromString(selectorName), arguments);
         }));
 
+    objc.setProperty(runtime, "batch", makeFunction("batch", 1, runtime, invokeBatch));
+
     objc.setProperty(runtime, "invokeSuper", makeFunction(
         "invokeSuper", 4, runtime, [](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
             if (count < 4 || !args[3].isObject() || !args[3].asObject(rt).isArray(rt))
@@ -5445,6 +5697,7 @@ void registerNativePluginBridge(Runtime &runtime)
         "native.objc.classes",
         "native.objc.invoke",
         "native.objc.invokeAsync",
+        "native.objc.batch",
         "native.objc.ivars",
         "native.objc.associations",
         "native.objc.hooks",

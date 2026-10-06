@@ -39,6 +39,7 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"native.objc.classes",
 		"native.objc.invoke",
 		"native.objc.invokeAsync",
+		"native.objc.batch",
 		"native.objc.ivars",
 		"native.objc.associations",
 		"native.objc.hooks",
@@ -234,6 +235,12 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 		"status->compare_exchange_strong(queued, 3)",
 		"gMainThreadRuntimeWaits.fetch_add(1)",
 		"NATIVE_WRONG_THREAD",
+		"static Value invokeBatch(Runtime &runtime, const Value *args, size_t count)",
+		"Native batch requires at most 64 steps",
+		"Native batch can only reference earlier results",
+		"Native batch method return type is unsupported",
+		"Native batch method argument type is unsupported",
+		"executeMainAsynchronously(",
 	} {
 		if !strings.Contains(string(bridge), required) {
 			t.Fatalf("native bridge safety guard %q is missing", required)
