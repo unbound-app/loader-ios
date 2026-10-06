@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 )
 
@@ -118,10 +117,11 @@ func buildAll(options buildOptions, runner commandRunner) error {
 		return err
 	}
 	if options.deb == "" {
-		options.deb, _ = firstMatch(filepath.Join(options.root, "packages"), ".deb")
-	}
-	if options.deb == "" {
-		return errors.New("no .deb package was produced")
+		var err error
+		options.deb, err = selectTweakPackage(options.root, options.configuration)
+		if err != nil {
+			return err
+		}
 	}
 	if options.output == "" {
 		name, err := packageName(options.root)
@@ -189,10 +189,11 @@ func buildIPA(options buildOptions, runner commandRunner) error {
 		options.ipa = resolved
 	}
 	if options.deb == "" {
-		options.deb, _ = firstMatch(filepath.Join(options.root, "packages"), ".deb")
-	}
-	if options.deb == "" {
-		return errors.New("tweak package path is required")
+		var err error
+		options.deb, err = selectTweakPackage(options.root, options.configuration)
+		if err != nil {
+			return err
+		}
 	}
 	if options.output == "" {
 		name, err := packageName(options.root)
@@ -200,6 +201,9 @@ func buildIPA(options buildOptions, runner commandRunner) error {
 			return err
 		}
 		options.output = filepath.Join(options.root, name+".ipa")
+	}
+	if err := requireAvailableOutput(options.ipa, options.output, options.nonInteractive); err != nil {
+		return err
 	}
 	work, err := os.MkdirTemp("", "loader-tools-")
 	if err != nil {
@@ -655,22 +659,46 @@ func copyTree(source, destination string) error {
 	})
 }
 
-func firstMatch(root, suffix string) (string, error) {
-	entries, err := os.ReadDir(root)
+func selectTweakPackage(root, configuration string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(root, "control"))
 	if err != nil {
 		return "", err
 	}
-	paths := []string{}
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), suffix) {
-			paths = append(paths, filepath.Join(root, entry.Name()))
+	identifier := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "Package:") {
+			identifier = strings.TrimSpace(strings.TrimPrefix(line, "Package:"))
+			break
 		}
 	}
-	sort.Strings(paths)
-	if len(paths) == 0 {
-		return "", errors.New("no matching file")
+	version, err := packageVersion(root)
+	if err != nil {
+		return "", err
 	}
-	return paths[0], nil
+	if identifier == "" {
+		return "", errors.New("package identifier not found in control")
+	}
+	if configuration == "debug" {
+		version += "+debug"
+	}
+	prefix := identifier + "_" + version + "_"
+	entries, err := os.ReadDir(filepath.Join(root, "packages"))
+	if err != nil {
+		return "", err
+	}
+	selected := ""
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) && strings.HasSuffix(entry.Name(), ".deb") {
+			if selected != "" {
+				return "", fmt.Errorf("multiple %s tweak packages match %s", configuration, prefix)
+			}
+			selected = filepath.Join(root, "packages", entry.Name())
+		}
+	}
+	if selected == "" {
+		return "", fmt.Errorf("no %s tweak package matches %s", configuration, prefix)
+	}
+	return selected, nil
 }
 
 func toolsCommand() string {
@@ -693,6 +721,18 @@ func samePath(left, right string) bool {
 	leftAbs, leftErr := filepath.Abs(left)
 	rightAbs, rightErr := filepath.Abs(right)
 	return leftErr == nil && rightErr == nil && filepath.Clean(leftAbs) == filepath.Clean(rightAbs)
+}
+
+func requireAvailableOutput(input, output string, nonInteractive bool) error {
+	if !nonInteractive || samePath(input, output) {
+		return nil
+	}
+	if _, err := os.Stat(output); err == nil {
+		return fmt.Errorf("output IPA already exists: %s", output)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func isTerminal(file *os.File) bool {
