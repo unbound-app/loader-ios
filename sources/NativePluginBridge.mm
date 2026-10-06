@@ -2703,6 +2703,107 @@ static Value snapshotUI(Runtime &runtime, const Value *args, size_t count)
         });
 }
 
+static Value findUIViews(Runtime &runtime, const Value *args, size_t count)
+{
+    id root = count ? objcValue(runtime, args[0]) : nil;
+    if (![root isKindOfClass:[UIView class]] || count < 2 || !args[1].isString())
+    {
+        throw JSError(runtime, "objc.findViews expects a UIView handle and class name");
+    }
+    NSString *className = [JSI toNSString:args[1] runtime:runtime];
+    if (className.length == 0 || className.length > 128)
+    {
+        throw JSError(runtime, "Native view class name must contain 1 to 128 characters");
+    }
+
+    NSUInteger maxDepth = 24;
+    NSUInteger maxVisited = 512;
+    NSUInteger maxResults = 64;
+    bool attachedOnly = false;
+    bool stopAtMatch = false;
+    if (count > 2 && args[2].isObject())
+    {
+        Object options = args[2].asObject(runtime);
+        Value depth = options.getProperty(runtime, "maxDepth");
+        Value visited = options.getProperty(runtime, "maxVisited");
+        Value results = options.getProperty(runtime, "maxResults");
+        if (!depth.isUndefined())
+        {
+            double value = depth.isNumber() ? depth.asNumber() : NAN;
+            if (!std::isfinite(value) || value < 0 || value > 40 || std::floor(value) != value)
+            {
+                throw JSError(runtime, "Native view search depth must be an integer from 0 to 40");
+            }
+            maxDepth = static_cast<NSUInteger>(value);
+        }
+        if (!visited.isUndefined())
+        {
+            double value = visited.isNumber() ? visited.asNumber() : NAN;
+            if (!std::isfinite(value) || value < 1 || value > 2048 || std::floor(value) != value)
+            {
+                throw JSError(runtime, "Native view search visit limit must be an integer from 1 to 2048");
+            }
+            maxVisited = static_cast<NSUInteger>(value);
+        }
+        if (!results.isUndefined())
+        {
+            double value = results.isNumber() ? results.asNumber() : NAN;
+            if (!std::isfinite(value) || value < 1 || value > 256 || std::floor(value) != value)
+            {
+                throw JSError(runtime, "Native view search result limit must be an integer from 1 to 256");
+            }
+            maxResults = static_cast<NSUInteger>(value);
+        }
+        Value attached = options.getProperty(runtime, "attachedOnly");
+        Value stop = options.getProperty(runtime, "stopAtMatch");
+        if (!attached.isUndefined())
+        {
+            if (!attached.isBool()) throw JSError(runtime, "Native view search attachedOnly must be boolean");
+            attachedOnly = attached.getBool();
+        }
+        if (!stop.isUndefined())
+        {
+            if (!stop.isBool()) throw JSError(runtime, "Native view search stopAtMatch must be boolean");
+            stopAtMatch = stop.getBool();
+        }
+    }
+
+    NSMutableArray<UIView *> *found = [NSMutableArray arrayWithCapacity:maxResults];
+    return executeMainAsynchronously(
+        runtime,
+        [root, className, found, maxDepth, maxVisited, maxResults, attachedOnly, stopAtMatch]() {
+            NSMutableArray<NSDictionary *> *queue = [NSMutableArray arrayWithCapacity:maxVisited];
+            [queue addObject:@{ @"view": root, @"depth": @(0) }];
+            for (NSUInteger index = 0; index < queue.count && index < maxVisited; index++)
+            {
+                NSDictionary *queued = queue[index];
+                UIView *view = queued[@"view"];
+                NSUInteger depth = [queued[@"depth"] unsignedIntegerValue];
+                bool matches = [NSStringFromClass([view class]) containsString:className];
+                if (matches && (!attachedOnly || view.window != nil))
+                {
+                    [found addObject:view];
+                    if (found.count >= maxResults) break;
+                }
+                if (depth >= maxDepth || (matches && stopAtMatch)) continue;
+                for (UIView *child in view.subviews)
+                {
+                    if (queue.count >= maxVisited) break;
+                    [queue addObject:@{ @"view": child, @"depth": @(depth + 1) }];
+                }
+            }
+        },
+        [found](Runtime &completionRuntime) -> Value {
+            Array result(completionRuntime, found.count);
+            for (NSUInteger index = 0; index < found.count; index++)
+            {
+                result.setValueAtIndex(completionRuntime, index,
+                                       objcHandleResult(completionRuntime, found[index]));
+            }
+            return result;
+        });
+}
+
 static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arguments)
 {
     NSInvocation *invocation = prepareInvocation(target, selector, arguments);
@@ -5560,6 +5661,7 @@ static void installObjC(Runtime &runtime, Object &objc)
 
     objc.setProperty(runtime, "batch", makeFunction("batch", 1, runtime, invokeBatch));
     objc.setProperty(runtime, "snapshot", makeFunction("snapshot", 2, runtime, snapshotUI));
+    objc.setProperty(runtime, "findViews", makeFunction("findViews", 3, runtime, findUIViews));
 
     objc.setProperty(runtime, "invokeSuper", makeFunction(
         "invokeSuper", 4, runtime, [](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
