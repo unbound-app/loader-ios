@@ -582,12 +582,16 @@ static bool isExecutableAddress(void *address)
         }
         if (!info.is_submap)
         {
-            return (info.protection & VM_PROT_EXECUTE) != 0 &&
-                   isInstructionSectionAddress(regionAddress);
+            return (info.protection & VM_PROT_EXECUTE) != 0;
         }
         depth++;
     }
     return false;
+}
+
+static bool isCallableSymbolAddress(void *address)
+{
+    return isExecutableAddress(address) && isInstructionSectionAddress(address);
 }
 
 static std::shared_ptr<ObjCHandleHost> objcHost(Runtime &runtime, const Value &value)
@@ -3881,7 +3885,7 @@ static Value ffiCallValue(Runtime &runtime, const Value *args, size_t count)
 
     std::shared_ptr<PointerHost> host = pointer.getHostObject<PointerHost>(runtime);
     void *address = host->value();
-    if (!address || !host->callable() || !isExecutableAddress(address))
+    if (!address || !host->callable() || !isCallableSymbolAddress(address))
     {
         throw JSError(runtime, "ffi.call requires an executable symbol pointer");
     }
