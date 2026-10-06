@@ -33,7 +33,7 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	for _, capability := range []string{
 		"native.objc.classes",
 		"native.objc.invoke",
-		"native.objc.invoke.async",
+		"native.objc.invokeAsync",
 		"native.objc.ivars",
 		"native.objc.associations",
 		"native.objc.hooks",

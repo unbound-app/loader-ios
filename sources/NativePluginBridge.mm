@@ -521,34 +521,98 @@ static Value pointerResult(Runtime &runtime, void *pointer, bool callable = fals
     return Object::createFromHostObject(runtime, std::make_shared<PointerHost>(pointer, callable));
 }
 
-static thread_local size_t gConversionDepth = 0;
-static thread_local size_t gConversionNodes = 0;
-
-struct ConversionGuard
+struct ConversionState
 {
-    explicit ConversionGuard(Runtime &runtime)
+    size_t depth = 0;
+    size_t entries = 0;
+    size_t bytes = 0;
+    std::vector<const void *> nativePath;
+    std::vector<Object> javascriptPath;
+
+    void enter(Runtime &runtime)
     {
-        if (gConversionDepth == 0)
-        {
-            gConversionNodes = 0;
-        }
-        if (gConversionDepth >= 32 || gConversionNodes >= 4096)
+        if (depth >= 32 || entries >= 10000)
         {
             throw JSError(runtime, "Native value exceeds conversion limits");
         }
-        gConversionDepth++;
-        gConversionNodes++;
+        depth++;
+        entries++;
+    }
+
+    void addBytes(Runtime &runtime, size_t count)
+    {
+        constexpr size_t maximum = 64 * 1024 * 1024;
+        if (count > maximum - bytes)
+        {
+            throw JSError(runtime, "Native value exceeds conversion byte limit");
+        }
+        bytes += count;
+    }
+};
+
+struct ConversionGuard
+{
+    explicit ConversionGuard(Runtime &runtime, ConversionState &state) : state(state)
+    {
+        state.enter(runtime);
     }
 
     ~ConversionGuard()
     {
-        gConversionDepth--;
+        state.depth--;
     }
+
+    ConversionState &state;
 };
 
-static Value objcResult(Runtime &runtime, id value)
+struct NativeConversionVisit
 {
-    ConversionGuard guard(runtime);
+    NativeConversionVisit(Runtime &runtime, ConversionState &state, id value) : state(state)
+    {
+        const void *identity = (__bridge const void *) value;
+        if (std::find(state.nativePath.begin(), state.nativePath.end(), identity) !=
+            state.nativePath.end())
+        {
+            throw JSError(runtime, "Native value contains a collection cycle");
+        }
+        state.nativePath.push_back(identity);
+    }
+
+    ~NativeConversionVisit()
+    {
+        state.nativePath.pop_back();
+    }
+
+    ConversionState &state;
+};
+
+struct JavaScriptConversionVisit
+{
+    JavaScriptConversionVisit(Runtime &runtime, ConversionState &state, const Value &value)
+        : state(state)
+    {
+        Object object = value.asObject(runtime);
+        for (const Object &ancestor : state.javascriptPath)
+        {
+            if (Object::strictEquals(runtime, ancestor, object))
+            {
+                throw JSError(runtime, "JavaScript value contains a collection cycle");
+            }
+        }
+        state.javascriptPath.push_back(std::move(object));
+    }
+
+    ~JavaScriptConversionVisit()
+    {
+        state.javascriptPath.pop_back();
+    }
+
+    ConversionState &state;
+};
+
+static Value objcResultValue(Runtime &runtime, id value, ConversionState &state)
+{
+    ConversionGuard guard(runtime, state);
     if (!value)
     {
         return Value::null();
@@ -556,16 +620,37 @@ static Value objcResult(Runtime &runtime, id value)
 
     if ([value isKindOfClass:[NSString class]])
     {
+        state.addBytes(runtime, [(NSString *) value lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
         return [JSI fromObjC:value runtime:runtime];
     }
 
     if ([value isKindOfClass:[NSNumber class]])
     {
+        NSNumber *number = (NSNumber *) value;
+        const char *type = number.objCType;
+        if (strcmp(type, @encode(long long)) == 0 || strcmp(type, @encode(long)) == 0)
+        {
+            int64_t integer = number.longLongValue;
+            if (integer > 9007199254740991LL || integer < -9007199254740991LL)
+            {
+                return Value(runtime, BigInt::fromInt64(runtime, integer));
+            }
+        }
+        if (strcmp(type, @encode(unsigned long long)) == 0 ||
+            strcmp(type, @encode(unsigned long)) == 0)
+        {
+            uint64_t integer = number.unsignedLongLongValue;
+            if (integer > 9007199254740991ULL)
+            {
+                return Value(runtime, BigInt::fromUint64(runtime, integer));
+            }
+        }
         return [JSI fromObjC:value runtime:runtime];
     }
 
     if ([value isKindOfClass:[NSData class]])
     {
+        state.addBytes(runtime, [(NSData *) value length]);
         auto data = std::make_shared<NativeDataBuffer>((NSData *) value);
         ArrayBuffer buffer(runtime, data);
         return Uint8Array(runtime, buffer, 0, buffer.size(runtime));
@@ -573,17 +658,19 @@ static Value objcResult(Runtime &runtime, id value)
 
     if ([value isKindOfClass:[NSArray class]])
     {
+        NativeConversionVisit visit(runtime, state, value);
         NSArray *array = (NSArray *) value;
         Array result(runtime, array.count);
         for (NSUInteger index = 0; index < array.count; index++)
         {
-            result.setValueAtIndex(runtime, index, objcResult(runtime, array[index]));
+            result.setValueAtIndex(runtime, index, objcResultValue(runtime, array[index], state));
         }
         return result;
     }
 
     if ([value isKindOfClass:[NSDictionary class]])
     {
+        NativeConversionVisit visit(runtime, state, value);
         NSDictionary *dictionary = (NSDictionary *) value;
         Object result(runtime);
         for (id key in dictionary)
@@ -592,8 +679,9 @@ static Value objcResult(Runtime &runtime, id value)
             {
                 continue;
             }
+            state.addBytes(runtime, [(NSString *) key lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
             result.setProperty(runtime, ((NSString *) key).UTF8String,
-                               objcResult(runtime, dictionary[key]));
+                               objcResultValue(runtime, dictionary[key], state));
         }
         return result;
     }
@@ -601,9 +689,15 @@ static Value objcResult(Runtime &runtime, id value)
     return Object::createFromHostObject(runtime, std::make_shared<ObjCHandleHost>(value));
 }
 
-static id valueToObjC(Runtime &runtime, const Value &value)
+static Value objcResult(Runtime &runtime, id value)
 {
-    ConversionGuard guard(runtime);
+    ConversionState state;
+    return objcResultValue(runtime, value, state);
+}
+
+static id valueToObjCValue(Runtime &runtime, const Value &value, ConversionState &state)
+{
+    ConversionGuard guard(runtime, state);
     if (value.isNull() || value.isUndefined())
     {
         return [NSNull null];
@@ -612,6 +706,7 @@ static id valueToObjC(Runtime &runtime, const Value &value)
     if (value.isString())
     {
         NSString *string = [JSI toNSString:value runtime:runtime];
+        state.addBytes(runtime, [string lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
         return string ?: @"";
     }
 
@@ -632,8 +727,11 @@ static id valueToObjC(Runtime &runtime, const Value &value)
         {
             return @((long long) runtime.truncate(bigint));
         }
-
-        return @((unsigned long long) runtime.truncate(bigint));
+        if (runtime.bigintIsUint64(bigint))
+        {
+            return @((unsigned long long) runtime.truncate(bigint));
+        }
+        throw JSError(runtime, "Native integer exceeds 64-bit range");
     }
 
     if (!value.isObject())
@@ -659,15 +757,17 @@ static id valueToObjC(Runtime &runtime, const Value &value)
 
     if (object.isArray(runtime))
     {
+        JavaScriptConversionVisit visit(runtime, state, value);
         Array array = object.asArray(runtime);
         NSMutableArray *result = [NSMutableArray arrayWithCapacity:array.size(runtime)];
         for (size_t index = 0; index < array.size(runtime); index++)
         {
-            [result addObject:valueToObjC(runtime, array.getValueAtIndex(runtime, index)) ?: [NSNull null]];
+            [result addObject:valueToObjCValue(runtime, array.getValueAtIndex(runtime, index), state) ?: [NSNull null]];
         }
         return result;
     }
 
+    JavaScriptConversionVisit visit(runtime, state, value);
     NSMutableDictionary *result = [NSMutableDictionary dictionary];
     Array names = object.getPropertyNames(runtime);
     for (size_t index = 0; index < names.size(runtime); index++)
@@ -684,10 +784,17 @@ static id valueToObjC(Runtime &runtime, const Value &value)
             continue;
         }
 
-        id item = valueToObjC(runtime, object.getProperty(runtime, key.UTF8String));
+        state.addBytes(runtime, [key lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
+        id item = valueToObjCValue(runtime, object.getProperty(runtime, key.UTF8String), state);
         result[key] = item ?: [NSNull null];
     }
     return result;
+}
+
+static id valueToObjC(Runtime &runtime, const Value &value)
+{
+    ConversionState state;
+    return valueToObjCValue(runtime, value, state);
 }
 
 static void executeMainSynchronously(std::function<void(void)> callback)
@@ -2027,7 +2134,6 @@ static void removeHook(const std::shared_ptr<HookState> &state, bool preserveAft
                                     dispatcher->original, nullptr);
                 }
                 dispatcher->retired.store(true);
-                gDispatchers.erase(hookKey(dispatcher->cls, dispatcher->selector));
             }
         }
     }
@@ -3967,7 +4073,7 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
             dispatcher->cls = cls;
             dispatcher->selector = selector;
             dispatcher->signature = signature;
-            auto prepareClosure = [&]() {
+            auto prepareClosure = [&]() -> bool {
                 dispatcher->closure = (ffi_closure *) ffi_closure_alloc(sizeof(ffi_closure),
                                                                           &dispatcher->code);
                 bool closureReady =
@@ -3979,6 +4085,19 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
                     if (dispatcher->closure) ffi_closure_free(dispatcher->closure);
                     dispatcher->closure = nullptr;
                     dispatcher->code = nullptr;
+                }
+                return closureReady;
+            };
+            if (!prepareClosure())
+            {
+                dispatcher->code = fallbackHookCode(*dispatcher->signature);
+                if (!dispatcher->code && signature->result.name == "void" &&
+                    signature->arguments.size() == 2)
+                {
+                    dispatcher->code = (void *) dispatchVoidHook;
+                }
+                if (!dispatcher->code)
+                {
                     std::string signatureName = dispatcher->signature->result.name + "(";
                     for (size_t index = 0; index < dispatcher->signature->arguments.size(); index++)
                     {
@@ -3988,29 +4107,6 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
                     signatureName += ")";
                     throw JSError(runtime, "Native hook closure is unavailable on this device for " +
                                                 signatureName);
-                }
-            };
-            if (signature->result.name == "void")
-            {
-                if (signature->arguments.size() == 2)
-                {
-                    dispatcher->code = (void *) dispatchVoidHook;
-                }
-                else
-                {
-                    dispatcher->code = fallbackHookCode(*dispatcher->signature);
-                    if (!dispatcher->code)
-                    {
-                        prepareClosure();
-                    }
-                }
-            }
-            else
-            {
-                dispatcher->code = fallbackHookCode(*dispatcher->signature);
-                if (!dispatcher->code)
-                {
-                    prepareClosure();
                 }
             }
             if (dispatcher->closure)
@@ -4033,6 +4129,7 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
                 MSHookMessageEx(cls, selector, (IMP) dispatcher->code,
                                 &dispatcher->original);
             }
+            dispatcher->retired.store(false);
         }
     }
 
@@ -4564,13 +4661,7 @@ static void installObjC(Runtime &runtime, Object &objc)
             {
                 return Array(rt, 0);
             }
-            NSArray *array = (NSArray *) object;
-            Array result(rt, array.count);
-            for (NSUInteger index = 0; index < array.count; index++)
-            {
-                result.setValueAtIndex(rt, index, objcResult(rt, array[index]));
-            }
-            return result;
+            return objcResult(rt, object);
         }));
 
     objc.setProperty(runtime, "data", makeFunction(
@@ -4761,7 +4852,7 @@ void registerNativePluginBridge(Runtime &runtime)
     const char *names[] = {
         "native.objc.classes",
         "native.objc.invoke",
-        "native.objc.invoke.async",
+        "native.objc.invokeAsync",
         "native.objc.ivars",
         "native.objc.associations",
         "native.objc.hooks",
