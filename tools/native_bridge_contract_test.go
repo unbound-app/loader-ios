@@ -22,8 +22,13 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	types, err := os.ReadFile(filepath.Join(root, "sources", "NativeTypeEncoding.cpp"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	headerText := string(header)
 	sourceText := string(source)
+	typeText := string(types)
 	if !strings.Contains(headerText, `kNativePluginApiVersion = "1.0.0"`) {
 		t.Fatal("native plugin API version is not v1")
 	}
@@ -117,8 +122,8 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	if !strings.Contains(sourceText, `signature.arguments[2].name == "struct:CGRect"`) {
 		t.Fatal("native object-return CGRect hooks do not have a precompiled fallback")
 	}
-	rectEncoding := strings.Index(sourceText, `if (value.find("CGRect")`)
-	pointEncoding := strings.Index(sourceText, `if (value.find("CGPoint")`)
+	rectEncoding := strings.Index(typeText, `name == "CGRect"`)
+	pointEncoding := strings.Index(typeText, `name == "CGPoint"`)
 	if rectEncoding < 0 || pointEncoding < 0 || rectEncoding > pointEncoding {
 		t.Fatal("native type parsing must recognize CGRect before its nested CGPoint encoding")
 	}

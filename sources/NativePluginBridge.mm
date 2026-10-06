@@ -26,6 +26,7 @@
 #import "JSI.h"
 #import "Logger.h"
 #import "NativePluginFFI.h"
+#import "NativeTypeEncoding.h"
 
 using namespace facebook;
 using namespace facebook::jsi;
@@ -494,21 +495,6 @@ static bool isExecutableAddress(void *address)
         mach_port_deallocate(mach_task_self(), object);
     }
     return result == KERN_SUCCESS && (info.protection & VM_PROT_EXECUTE) != 0;
-}
-
-static char normalizedType(const char *type)
-{
-    if (!type)
-    {
-        return '\0';
-    }
-
-    while (*type && strchr("rnNoORV", *type))
-    {
-        type++;
-    }
-
-    return *type;
 }
 
 static std::shared_ptr<ObjCHandleHost> objcHost(Runtime &runtime, const Value &value)
@@ -1841,83 +1827,6 @@ static Value invokeObject(Runtime &runtime, id target, SEL selector, NSArray *ar
     NSInvocation *invocation = prepareInvocation(runtime, target, selector, arguments);
     [invocation invoke];
     return returnValue(runtime, invocation, invocation.methodSignature);
-}
-
-static std::string nativeFFITypeName(const char *encoding)
-{
-    char code = normalizedType(encoding);
-    switch (code)
-    {
-        case 'v':
-            return "void";
-        case '@':
-            return "object";
-        case '#':
-            return "class";
-        case ':':
-            return "selector";
-        case '^':
-        case '*':
-            return "pointer";
-        case 'B':
-            return "bool";
-        case 'c':
-            return "i8";
-        case 'C':
-            return "u8";
-        case 's':
-            return "i16";
-        case 'S':
-            return "u16";
-        case 'i':
-            return "i32";
-        case 'I':
-            return "u32";
-        case 'l':
-            return "i64";
-        case 'L':
-            return "u64";
-        case 'q':
-            return "i64";
-        case 'Q':
-            return "u64";
-        case 'f':
-            return "float";
-        case 'd':
-            return "double";
-        case '{':
-        {
-            std::string value(encoding ?: "");
-            if (value.find("_NSRange") != std::string::npos)
-            {
-                return "struct:NSRange";
-            }
-            if (value.find("CGRect") != std::string::npos)
-            {
-                return "struct:CGRect";
-            }
-            if (value.find("CGPoint") != std::string::npos)
-            {
-                return "struct:CGPoint";
-            }
-            if (value.find("CGSize") != std::string::npos)
-            {
-                return "struct:CGSize";
-            }
-            if (value.find("UIEdgeInsets") != std::string::npos)
-            {
-                return "struct:UIEdgeInsets";
-            }
-            if (value.find("CGAffineTransform") != std::string::npos)
-            {
-                return "struct:CGAffineTransform";
-            }
-            break;
-        }
-        default:
-            break;
-    }
-    return std::string();
 }
 
 static void setSuperFFIArgument(Runtime &runtime, const char *encoding, id object,
