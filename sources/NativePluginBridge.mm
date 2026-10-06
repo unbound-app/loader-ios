@@ -1917,6 +1917,17 @@ static NSInvocation *prepareInvocation(id target, SEL selector,
     }
 
     [invocation retainArguments];
+    NSMutableArray *backingArguments = [NSMutableArray arrayWithCapacity:retained.size()];
+    for (id argument : retained)
+    {
+        if (argument) [backingArguments addObject:argument];
+    }
+    if (backingArguments.count)
+    {
+        static char backingArgumentsKey;
+        objc_setAssociatedObject(invocation, &backingArgumentsKey, backingArguments,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
     return invocation;
 }
 
