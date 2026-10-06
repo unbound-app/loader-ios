@@ -502,12 +502,8 @@ static bool isExecutableAddress(void *address)
         mach_port_deallocate(mach_task_self(), object);
     }
     vm_address_t target = reinterpret_cast<vm_address_t>(regionAddress);
-    if (result == KERN_SUCCESS && addressWithinRegion(target, region, size) &&
-        (info.protection & VM_PROT_EXECUTE) != 0)
-    {
-        return true;
-    }
-    return isExecutableImageAddress(regionAddress);
+    return result == KERN_SUCCESS && addressWithinRegion(target, region, size) &&
+           (info.protection & VM_PROT_EXECUTE) != 0;
 }
 
 static std::shared_ptr<ObjCHandleHost> objcHost(Runtime &runtime, const Value &value)
