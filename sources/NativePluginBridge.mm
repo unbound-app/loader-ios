@@ -808,11 +808,12 @@ static void executeMainSynchronously(std::function<void(void)> callback)
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
     auto failure = std::make_shared<std::exception_ptr>();
-    auto cancelled = std::make_shared<std::atomic_bool>(false);
+    auto status = std::make_shared<std::atomic_int>(0);
     dispatch_async(dispatch_get_main_queue(), ^{
         @autoreleasepool
         {
-            if (cancelled->load())
+            int queued = 0;
+            if (!status->compare_exchange_strong(queued, 1))
             {
                 return;
             }
@@ -824,14 +825,19 @@ static void executeMainSynchronously(std::function<void(void)> callback)
             {
                 *failure = std::current_exception();
             }
+            status->store(2);
             dispatch_semaphore_signal(semaphore);
         }
     });
 
     if (dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)) != 0)
     {
-        cancelled->store(true);
-        throw std::runtime_error("Native Fabric operation timed out on the main thread");
+        int queued = 0;
+        if (status->compare_exchange_strong(queued, 3))
+        {
+            throw std::runtime_error("Native Fabric operation timed out on the main thread");
+        }
+        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
     }
 
     if (*failure)
