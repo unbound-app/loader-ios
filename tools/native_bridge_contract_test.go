@@ -33,6 +33,7 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	for _, capability := range []string{
 		"native.objc.classes",
 		"native.objc.invoke",
+		"native.objc.invoke.async",
 		"native.objc.ivars",
 		"native.objc.associations",
 		"native.objc.hooks",
@@ -211,6 +212,8 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 		"if (code == ':')",
 		"[invocation retainArguments]",
 		"Native super invocation cannot synchronously cross to the main thread",
+		"Native async invocation was cancelled",
+		"__NativePluginPendingInvocations",
 	} {
 		if !strings.Contains(string(bridge), required) {
 			t.Fatalf("native bridge safety guard %q is missing", required)
