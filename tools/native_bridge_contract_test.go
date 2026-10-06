@@ -40,6 +40,7 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		"native.ffi.symbols",
 		"native.ffi.call",
 		"native.fabric.mount",
+		"native.fabric.async",
 		"native.debug.evaluations",
 		"native.debug.environment",
 	} {
@@ -214,6 +215,16 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 		"Native super invocation cannot synchronously cross to the main thread",
 		"Native async invocation was cancelled",
 		"__NativePluginPendingInvocations",
+		`"invokeSuperAsync"`,
+		`"mountAsync"`,
+		`"updateAsync"`,
+		`"setSizeAsync"`,
+		`"setFrameAsync"`,
+		`"measureAsync"`,
+		`"unmountAsync"`,
+		"status->compare_exchange_strong(queued, 3)",
+		"gMainThreadRuntimeWaits.fetch_add(1)",
+		"NATIVE_WRONG_THREAD",
 	} {
 		if !strings.Contains(string(bridge), required) {
 			t.Fatalf("native bridge safety guard %q is missing", required)

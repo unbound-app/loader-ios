@@ -132,12 +132,13 @@ class FabricSurfaceHost final : public HostObject
 public:
     FabricSurfaceHost(void) = default;
 
-    void setSurface(id surface, UIView *containerView, UIView *surfaceView)
+    void setSurface(id surface, UIView *containerView, UIView *surfaceView, uint64_t generation)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         surface_ = surface;
         view_ = containerView;
         surfaceView_ = surfaceView;
+        generation_ = generation;
         active_ = true;
     }
 
@@ -165,6 +166,12 @@ public:
         return active_;
     }
 
+    uint64_t generation(void) const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return generation_;
+    }
+
     void clear(void)
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -180,6 +187,7 @@ private:
     __strong UIView *view_ = nil;
     __strong UIView *surfaceView_ = nil;
     bool active_ = false;
+    uint64_t generation_ = 0;
 };
 
 class PointerHost final : public HostObject
@@ -326,6 +334,9 @@ static std::mutex gNativePluginRuntimeMutex;
 static Runtime *gNativePluginRuntime = nullptr;
 static std::thread::id gNativePluginRuntimeThread;
 static std::atomic_uint64_t gNativePluginRuntimeGeneration{0};
+static std::atomic_uint gMainThreadRuntimeWaits{0};
+static std::mutex gFabricSurfaceMutex;
+static std::unordered_map<FabricSurfaceHost *, std::shared_ptr<FabricSurfaceHost>> gFabricSurfaces;
 
 static FFITypeSpec ffiType(Runtime &runtime, const std::string &name);
 static ffi_cif prepareFFICif(Runtime &runtime, const FFITypeSpec &result,
@@ -334,6 +345,8 @@ static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vec
 static void dispatchFFIHook(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
 static void dispatchFFIHookBody(ffi_cif *cif, void *returnValue, void **arguments, void *userData);
 static void executeRuntimeAsynchronously(std::function<void(Runtime &)> callback);
+static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void)> operation,
+                                       std::function<Value(Runtime &)> result);
 static void dispatchVoidHook(id object, SEL selector);
 static CGSize dispatchCGSizeHook(id object, SEL selector, CGSize size);
 static CGSize dispatchCGSizeNoArgumentHook(id object, SEL selector);
@@ -378,6 +391,20 @@ static void attachNativeErrorCode(Runtime &runtime, const JSError &error)
                        String::createFromUtf8(runtime, "NATIVE_BRIDGE_ERROR"));
 }
 
+class NativeWrongThreadError final : public std::runtime_error
+{
+public:
+    explicit NativeWrongThreadError(const char *message) : std::runtime_error(message) {}
+};
+
+[[noreturn]] static void throwWrongThread(Runtime &runtime, const char *message)
+{
+    JSError failure(runtime, message);
+    failure.value().asObject(runtime).setProperty(
+        runtime, "code", String::createFromUtf8(runtime, "NATIVE_WRONG_THREAD"));
+    throw failure;
+}
+
 static std::mutex gFFIMutex;
 static std::unordered_map<std::string, std::shared_ptr<FFITypeDefinition>> gFFITypes;
 struct CachedFFICif {
@@ -403,6 +430,10 @@ static Value makeFunction(const char *name, unsigned int argCount, Runtime &runt
             {
                 attachNativeErrorCode(rt, error);
                 throw;
+            }
+            catch (const NativeWrongThreadError &error)
+            {
+                throwWrongThread(rt, error.what());
             }
             catch (const std::exception &error)
             {
@@ -805,6 +836,10 @@ static void executeMainSynchronously(std::function<void(void)> callback)
         callback();
         return;
     }
+    if (gMainThreadRuntimeWaits.load())
+    {
+        throw NativeWrongThreadError("Native Fabric cannot synchronously cross to a waiting main thread");
+    }
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
     auto failure = std::make_shared<std::exception_ptr>();
@@ -944,6 +979,65 @@ static void fabricSetMinimumSize(id surface, CGSize minimumSize, CGSize maximumS
                              maximumSize);
 }
 
+static void fabricMountNative(id host, UIView *containerView, NSString *moduleName,
+                              NSDictionary *properties,
+                              const std::shared_ptr<FabricSurfaceHost> &surfaceHost,
+                              uint64_t generation)
+{
+    if (generation != gNativePluginRuntimeGeneration.load())
+    {
+        throw std::runtime_error("Fabric runtime was replaced before mounting");
+    }
+    if (![host respondsToSelector:@selector(createSurfaceWithModuleName:mode:initialProperties:)])
+    {
+        throw std::runtime_error("Fabric host does not expose surface creation");
+    }
+    id surface = [host createSurfaceWithModuleName:moduleName mode:0 initialProperties:properties];
+    if (!surface)
+    {
+        throw std::runtime_error("Fabric host could not create the requested surface");
+    }
+    if (![surface respondsToSelector:@selector(start)] ||
+        ![surface respondsToSelector:@selector(view)])
+    {
+        throw std::runtime_error("Fabric surface does not expose start and view");
+    }
+
+    fabricStart(surface);
+    UIView *view = fabricView(surface);
+    if (!view)
+    {
+        fabricStop(surface);
+        throw std::runtime_error("Fabric surface did not create a view");
+    }
+
+    FabricContainer *surfaceContainer = [[FabricContainer alloc] initWithFrame:containerView.bounds];
+    surfaceContainer.clipsToBounds = NO;
+    surfaceContainer.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    surfaceContainer.surfaceView = view;
+    view.frame = surfaceContainer.bounds;
+    view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [surfaceContainer addSubview:view];
+    [containerView addSubview:surfaceContainer];
+    [surfaceContainer setNeedsLayout];
+    [surfaceContainer layoutIfNeeded];
+    surfaceHost->setSurface(surface, surfaceContainer, view, generation);
+    bool replaced = false;
+    {
+        std::lock_guard<std::mutex> lock(gFabricSurfaceMutex);
+        replaced = generation != gNativePluginRuntimeGeneration.load();
+        if (!replaced) gFabricSurfaces[surfaceHost.get()] = surfaceHost;
+    }
+    if (replaced)
+    {
+        [surfaceContainer removeFromSuperview];
+        fabricStop(surface);
+        surfaceHost->clear();
+        throw std::runtime_error("Fabric runtime was replaced while mounting");
+    }
+}
+
 static Value fabricMount(Runtime &runtime, const Value *args, size_t count)
 {
     if (count < 2 || !args[1].isString())
@@ -966,49 +1060,129 @@ static Value fabricMount(Runtime &runtime, const Value *args, size_t count)
     NSString *moduleName = [JSI toNSString:args[1] runtime:runtime];
     NSDictionary *properties = fabricProperties(runtime, count > 2 ? &args[2] : nullptr);
     auto surfaceHost = std::make_shared<FabricSurfaceHost>();
+    uint64_t generation = gNativePluginRuntimeGeneration.load();
 
-    executeMainSynchronously([host, container, moduleName, properties, surfaceHost]() {
-        if (![host respondsToSelector:@selector(createSurfaceWithModuleName:mode:initialProperties:)])
-        {
-            throw std::runtime_error("Fabric host does not expose surface creation");
-        }
-        id surface = [host createSurfaceWithModuleName:moduleName mode:0 initialProperties:properties];
-        if (!surface)
-        {
-            throw std::runtime_error("Fabric host could not create the requested surface");
-        }
-
-        if (![surface respondsToSelector:@selector(start)] ||
-            ![surface respondsToSelector:@selector(view)])
-        {
-            throw std::runtime_error("Fabric surface does not expose start and view");
-        }
-
-        fabricStart(surface);
-        UIView *view = fabricView(surface);
-        if (!view)
-        {
-            fabricStop(surface);
-            throw std::runtime_error("Fabric surface did not create a view");
-        }
-
-        UIView *containerView = (UIView *) container;
-        FabricContainer *surfaceContainer =
-            [[FabricContainer alloc] initWithFrame:containerView.bounds];
-        surfaceContainer.clipsToBounds = NO;
-        surfaceContainer.autoresizingMask =
-            UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        surfaceContainer.surfaceView = view;
-        view.frame = surfaceContainer.bounds;
-        view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [surfaceContainer addSubview:view];
-        [containerView addSubview:surfaceContainer];
-        [surfaceContainer setNeedsLayout];
-        [surfaceContainer layoutIfNeeded];
-        surfaceHost->setSurface(surface, surfaceContainer, view);
+    executeMainSynchronously([host, container, moduleName, properties, surfaceHost, generation]() {
+        fabricMountNative(host, (UIView *) container, moduleName, properties, surfaceHost,
+                          generation);
     });
 
     return Object::createFromHostObject(runtime, std::move(surfaceHost));
+}
+
+static Value fabricMountAsync(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count < 2 || !args[1].isString())
+    {
+        throw JSError(runtime, "fabric.mountAsync expects a container and module name");
+    }
+    id container = objcValue(runtime, args[0]);
+    if (![container isKindOfClass:[UIView class]])
+    {
+        throw JSError(runtime, "fabric.mountAsync expects a UIView container");
+    }
+    id host = gFabricHostInstance;
+    if (!host)
+    {
+        throw JSError(runtime, "Fabric host is unavailable");
+    }
+
+    NSString *moduleName = [JSI toNSString:args[1] runtime:runtime];
+    NSDictionary *properties = fabricProperties(runtime, count > 2 ? &args[2] : nullptr);
+    auto surfaceHost = std::make_shared<FabricSurfaceHost>();
+    uint64_t generation = gNativePluginRuntimeGeneration.load();
+    return executeMainAsynchronously(
+        runtime,
+        [host, container, moduleName, properties, surfaceHost, generation]() {
+            fabricMountNative(host, (UIView *) container, moduleName, properties, surfaceHost,
+                              generation);
+        },
+        [surfaceHost](Runtime &completionRuntime) {
+            return Value(Object::createFromHostObject(completionRuntime, surfaceHost));
+        });
+}
+
+static void fabricUpdateNative(id surface, NSDictionary *properties)
+{
+    if ([surface respondsToSelector:@selector(setProps:)])
+    {
+        fabricSetProps(surface, properties);
+    }
+}
+
+static void fabricSetSizeNative(id surface, CGSize minimumSize, CGSize maximumSize)
+{
+    if ([surface respondsToSelector:@selector(setMinimumSize:maximumSize:)])
+    {
+        fabricSetMinimumSize(surface, minimumSize, maximumSize);
+    }
+}
+
+static void fabricSetFrameNative(UIView *view, UIView *surfaceView, CGRect frame)
+{
+    view.autoresizingMask = UIViewAutoresizingNone;
+    if ([view respondsToSelector:@selector(setFabricFrame:)])
+    {
+        [(FabricContainer *) view setFabricFrame:frame];
+    }
+    else
+    {
+        view.frame = frame;
+    }
+    [view setNeedsLayout];
+    [view layoutIfNeeded];
+    if (surfaceView)
+    {
+        surfaceView.frame = view.bounds;
+        surfaceView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    }
+}
+
+static void fabricUnmountNative(id surface, UIView *view)
+{
+    [view removeFromSuperview];
+    if ([surface respondsToSelector:@selector(stop)])
+    {
+        fabricStop(surface);
+    }
+}
+
+static void invalidateRuntimeFabricSurfaces(uint64_t generation)
+{
+    std::vector<std::shared_ptr<FabricSurfaceHost>> stale;
+    {
+        std::lock_guard<std::mutex> lock(gFabricSurfaceMutex);
+        for (auto iterator = gFabricSurfaces.begin(); iterator != gFabricSurfaces.end();)
+        {
+            if (iterator->second->generation() >= generation)
+            {
+                ++iterator;
+                continue;
+            }
+            stale.push_back(iterator->second);
+            iterator = gFabricSurfaces.erase(iterator);
+        }
+    }
+    if (stale.empty()) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @autoreleasepool
+        {
+            for (const auto &surfaceHost : stale)
+            {
+                if (!surfaceHost->active()) continue;
+                @try
+                {
+                    fabricUnmountNative(surfaceHost->surface(), surfaceHost->view());
+                }
+                @catch (NSException *exception)
+                {
+                    [Logger error:LOG_CATEGORY_PLUGINS
+                            format:@"Failed to release a stale Fabric surface: %@", exception.reason];
+                }
+                surfaceHost->clear();
+            }
+        }
+    });
 }
 
 static Value fabricUpdate(Runtime &runtime, const Value *args, size_t count)
@@ -1026,12 +1200,7 @@ static Value fabricUpdate(Runtime &runtime, const Value *args, size_t count)
         return Value::undefined();
     }
 
-    executeMainSynchronously([surface, properties]() {
-        if ([surface respondsToSelector:@selector(setProps:)])
-        {
-            fabricSetProps(surface, properties);
-        }
-    });
+    executeMainSynchronously([surface, properties]() { fabricUpdateNative(surface, properties); });
     return Value::undefined();
 }
 
@@ -1052,10 +1221,7 @@ static Value fabricSetSize(Runtime &runtime, const Value *args, size_t count)
     }
 
     executeMainSynchronously([surface, minimumSize, maximumSize]() {
-        if ([surface respondsToSelector:@selector(setMinimumSize:maximumSize:)])
-        {
-            fabricSetMinimumSize(surface, minimumSize, maximumSize);
-        }
+        fabricSetSizeNative(surface, minimumSize, maximumSize);
     });
     return Value::undefined();
 }
@@ -1077,23 +1243,7 @@ static Value fabricSetFrame(Runtime &runtime, const Value *args, size_t count)
     }
 
     executeMainSynchronously([view, surfaceView, frame]() {
-        view.autoresizingMask = UIViewAutoresizingNone;
-        if ([view respondsToSelector:@selector(setFabricFrame:)])
-        {
-            [(FabricContainer *) view setFabricFrame:frame];
-        }
-        else
-        {
-            view.frame = frame;
-        }
-        [view setNeedsLayout];
-        [view layoutIfNeeded];
-        if (surfaceView)
-        {
-            surfaceView.frame = view.bounds;
-            surfaceView.autoresizingMask =
-                UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        }
+        fabricSetFrameNative(view, surfaceView, frame);
     });
     return Value::undefined();
 }
@@ -1137,15 +1287,117 @@ static Value fabricUnmount(Runtime &runtime, const Value *args, size_t count)
         return Value::undefined();
     }
 
-    executeMainSynchronously([surface, view]() {
-        [view removeFromSuperview];
-        if ([surface respondsToSelector:@selector(stop)])
-        {
-            fabricStop(surface);
-        }
-    });
+    executeMainSynchronously([surface, view]() { fabricUnmountNative(surface, view); });
     surfaceHost->clear();
+    {
+        std::lock_guard<std::mutex> lock(gFabricSurfaceMutex);
+        gFabricSurfaces.erase(surfaceHost.get());
+    }
     return Value::undefined();
+}
+
+static Value fabricVoidResult(Runtime &)
+{
+    return Value::undefined();
+}
+
+static Value fabricUpdateAsync(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count < 2)
+    {
+        throw JSError(runtime, "fabric.updateAsync expects a surface and properties");
+    }
+    auto surfaceHost = fabricSurfaceHost(runtime, args[0]);
+    NSDictionary *properties = fabricProperties(runtime, &args[1]);
+    return executeMainAsynchronously(
+        runtime,
+        [surfaceHost, properties]() {
+            if (surfaceHost->active()) fabricUpdateNative(surfaceHost->surface(), properties);
+        },
+        fabricVoidResult);
+}
+
+static Value fabricSetSizeAsync(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count < 3)
+    {
+        throw JSError(runtime, "fabric.setSizeAsync expects a surface, minimum size, and maximum size");
+    }
+    auto surfaceHost = fabricSurfaceHost(runtime, args[0]);
+    CGSize minimumSize = fabricSize(runtime, args[1]);
+    CGSize maximumSize = fabricSize(runtime, args[2]);
+    return executeMainAsynchronously(
+        runtime,
+        [surfaceHost, minimumSize, maximumSize]() {
+            if (surfaceHost->active())
+            {
+                fabricSetSizeNative(surfaceHost->surface(), minimumSize, maximumSize);
+            }
+        },
+        fabricVoidResult);
+}
+
+static Value fabricSetFrameAsync(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count < 2)
+    {
+        throw JSError(runtime, "fabric.setFrameAsync expects a surface and frame");
+    }
+    auto surfaceHost = fabricSurfaceHost(runtime, args[0]);
+    CGRect frame = fabricFrame(runtime, args[1]);
+    return executeMainAsynchronously(
+        runtime,
+        [surfaceHost, frame]() {
+            if (surfaceHost->active())
+            {
+                fabricSetFrameNative(surfaceHost->view(), surfaceHost->surfaceView(), frame);
+            }
+        },
+        fabricVoidResult);
+}
+
+static Value fabricMeasureAsync(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count == 0)
+    {
+        throw JSError(runtime, "fabric.measureAsync expects a UIView");
+    }
+    id object = objcValue(runtime, args[0]);
+    if (![object isKindOfClass:[UIView class]])
+    {
+        throw JSError(runtime, "fabric.measureAsync expects a UIView");
+    }
+    auto frame = std::make_shared<CGRect>(CGRectZero);
+    return executeMainAsynchronously(
+        runtime,
+        [object, frame]() { *frame = [(UIView *) object frame]; },
+        [frame](Runtime &completionRuntime) {
+            Object result(completionRuntime);
+            result.setProperty(completionRuntime, "x", frame->origin.x);
+            result.setProperty(completionRuntime, "y", frame->origin.y);
+            result.setProperty(completionRuntime, "width", frame->size.width);
+            result.setProperty(completionRuntime, "height", frame->size.height);
+            return Value(std::move(result));
+        });
+}
+
+static Value fabricUnmountAsync(Runtime &runtime, const Value *args, size_t count)
+{
+    if (count == 0)
+    {
+        throw JSError(runtime, "fabric.unmountAsync expects a surface");
+    }
+    auto surfaceHost = fabricSurfaceHost(runtime, args[0]);
+    return executeMainAsynchronously(
+        runtime,
+        [surfaceHost]() {
+            if (!surfaceHost->active()) return;
+            fabricUnmountNative(surfaceHost->surface(), surfaceHost->view());
+            surfaceHost->clear();
+            std::lock_guard<std::mutex> lock(gFabricSurfaceMutex);
+            gFabricSurfaces.erase(surfaceHost.get());
+        },
+        fabricVoidResult);
 }
 
 static id valueToData(Runtime &runtime, const Value &value)
@@ -1865,6 +2117,10 @@ static Value invokeWithThreadPolicy(Runtime &runtime, id target, SEL selector, N
     {
         throw JSError(runtime, "Unsupported native thread policy");
     }
+    if (gMainThreadRuntimeWaits.load())
+    {
+        throwWrongThread(runtime, "Objective-C invocation cannot synchronously cross to a waiting main thread");
+    }
 
     NSInvocation *invocation = prepareInvocation(runtime, target, selector, arguments);
     __block __strong id retainedResult = nil;
@@ -1894,6 +2150,137 @@ static Value invokeWithThreadPolicy(Runtime &runtime, id target, SEL selector, N
     Value result = returnValue(runtime, invocation, invocation.methodSignature);
     (void) retainedResult;
     return result;
+}
+
+static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void)> operation,
+                                       std::function<Value(Runtime &)> result)
+{
+    uint64_t generation = gNativePluginRuntimeGeneration.load();
+    std::string identifier = std::to_string(gNextInvocationIdentifier.fetch_add(1));
+    auto cancelled = std::make_shared<std::atomic_bool>(false);
+    Object global = runtime.global();
+    Value pendingValue = global.getProperty(runtime, "__NativePluginPendingInvocations");
+    Object pending = pendingValue.isObject() ? pendingValue.asObject(runtime) : Object(runtime);
+    if (!pendingValue.isObject())
+    {
+        global.setProperty(runtime, "__NativePluginPendingInvocations", pending);
+    }
+
+    Function executor = Function::createFromHostFunction(
+        runtime, PropNameID::forUtf8(runtime, "nativeMainExecutor"), 2,
+        [operation = std::move(operation), result = std::move(result), identifier, cancelled,
+         generation](Runtime &rt, const Value &, const Value *callbacks, size_t count) -> Value {
+            if (count < 2 || !callbacks[0].isObject() || !callbacks[1].isObject())
+            {
+                throw JSError(rt, "Native asynchronous operation could not create its promise");
+            }
+            Object pair(rt);
+            pair.setProperty(rt, "resolve", callbacks[0].asObject(rt));
+            pair.setProperty(rt, "reject", callbacks[1].asObject(rt));
+            rt.global().getPropertyAsObject(rt, "__NativePluginPendingInvocations")
+                .setProperty(rt, identifier.c_str(), pair);
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                @autoreleasepool
+                {
+                    if (cancelled->load() || generation != gNativePluginRuntimeGeneration.load())
+                    {
+                        return;
+                    }
+                    __strong NSString *failure = nil;
+                    @try
+                    {
+                        try
+                        {
+                            operation();
+                        }
+                        catch (const std::exception &exception)
+                        {
+                            failure = [NSString stringWithUTF8String:exception.what()];
+                        }
+                    }
+                    @catch (NSException *exception)
+                    {
+                        failure = exception.reason ?: @"Native operation failed";
+                    }
+
+                    executeRuntimeAsynchronously(
+                        [identifier, cancelled, generation, result, failure](Runtime &completionRuntime) {
+                            if (generation != gNativePluginRuntimeGeneration.load())
+                            {
+                                return;
+                            }
+                            Object pending = completionRuntime.global().getPropertyAsObject(
+                                completionRuntime, "__NativePluginPendingInvocations");
+                            Value pairValue = pending.getProperty(completionRuntime,
+                                                                   identifier.c_str());
+                            if (!pairValue.isObject())
+                            {
+                                return;
+                            }
+                            Object pair = pairValue.asObject(completionRuntime);
+                            pending.deleteProperty(completionRuntime, identifier.c_str());
+                            if (cancelled->load())
+                            {
+                                return;
+                            }
+                            try
+                            {
+                                if (failure)
+                                {
+                                    throw std::runtime_error(failure.UTF8String ?: "Native operation failed");
+                                }
+                                pair.getPropertyAsFunction(completionRuntime, "resolve")
+                                    .call(completionRuntime, result(completionRuntime));
+                            }
+                            catch (const std::exception &exception)
+                            {
+                                Function errorConstructor = completionRuntime.global()
+                                    .getPropertyAsFunction(completionRuntime, "Error");
+                                Object error = errorConstructor.callAsConstructor(
+                                    completionRuntime,
+                                    String::createFromUtf8(completionRuntime, exception.what()))
+                                                   .asObject(completionRuntime);
+                                error.setProperty(completionRuntime, "code",
+                                                  String::createFromUtf8(completionRuntime,
+                                                                         "NATIVE_BRIDGE_ERROR"));
+                                pair.getPropertyAsFunction(completionRuntime, "reject")
+                                    .call(completionRuntime, std::move(error));
+                            }
+                        });
+                }
+            });
+            return Value::undefined();
+        });
+
+    Function constructor = global.getPropertyAsFunction(runtime, "Promise");
+    Object promise = constructor.callAsConstructor(runtime, std::move(executor)).asObject(runtime);
+    Function cancel = Function::createFromHostFunction(
+        runtime, PropNameID::forUtf8(runtime, "cancel"), 0,
+        [identifier, cancelled](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+            if (cancelled->exchange(true))
+            {
+                return Value::undefined();
+            }
+            Object pending = rt.global().getPropertyAsObject(rt,
+                                                               "__NativePluginPendingInvocations");
+            Value pairValue = pending.getProperty(rt, identifier.c_str());
+            if (pairValue.isObject())
+            {
+                pending.deleteProperty(rt, identifier.c_str());
+                Object pair = pairValue.asObject(rt);
+                Function errorConstructor = rt.global().getPropertyAsFunction(rt, "Error");
+                Object error = errorConstructor.callAsConstructor(
+                    rt, String::createFromUtf8(rt, "Native async invocation was cancelled"))
+                                   .asObject(rt);
+                error.setProperty(rt, "code",
+                                  String::createFromUtf8(rt, "NATIVE_PLUGIN_SCOPE_DISPOSED"));
+                pair.getPropertyAsFunction(rt, "reject").call(rt, std::move(error));
+            }
+            return Value::undefined();
+        });
+    promise.setProperty(runtime, "cancel", std::move(cancel));
+    return promise;
 }
 
 static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arguments)
@@ -2043,6 +2430,103 @@ static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arg
     return promise;
 }
 
+struct AsyncSuperCall {
+    struct objc_super superInfo{};
+    std::vector<FFICallArgument> values;
+    std::vector<void *> argumentValues;
+    std::vector<id> retainedArguments;
+    FFITypeSpec result;
+    ffi_cif cif{};
+    std::vector<uint8_t> output;
+    __strong id retainedTarget = nil;
+    __strong id retainedResult = nil;
+};
+
+static Value invokeSuperAsync(Runtime &runtime, id target, Class currentClass, SEL selector,
+                              NSArray *arguments)
+{
+    if (!target || !currentClass || !selector)
+    {
+        throw JSError(runtime, "Invalid native Objective-C super target");
+    }
+
+    Class superclass = class_getSuperclass(currentClass);
+    Method method = superclass ? class_getInstanceMethod(superclass, selector) : NULL;
+    if (!method)
+    {
+        throw JSError(runtime, "Objective-C super selector is not available");
+    }
+
+    NSMethodSignature *signature = [NSMethodSignature signatureWithObjCTypes:method_getTypeEncoding(method)];
+    NSUInteger expected = signature.numberOfArguments >= 2 ? signature.numberOfArguments - 2 : 0;
+    if (expected != arguments.count)
+    {
+        throw JSError(runtime, "Objective-C super argument count does not match the method signature");
+    }
+
+    auto call = std::make_shared<AsyncSuperCall>();
+    call->retainedTarget = target;
+    call->superInfo = {target, currentClass};
+    call->values.resize(arguments.count + 2);
+    call->argumentValues.resize(arguments.count + 2);
+    call->retainedArguments.reserve(arguments.count);
+    call->values[0].pointer = &call->superInfo;
+    call->values[1].pointer = selector;
+    call->argumentValues[0] = &call->values[0].pointer;
+    call->argumentValues[1] = &call->values[1].pointer;
+
+    std::vector<FFITypeSpec> cifArguments;
+    cifArguments.reserve(arguments.count + 2);
+    cifArguments.push_back({"pointer", &ffi_type_pointer});
+    cifArguments.push_back({"selector", &ffi_type_pointer});
+    for (NSUInteger index = 0; index < arguments.count; index++)
+    {
+        const char *encoding = [signature getArgumentTypeAtIndex:index + 2];
+        std::string name = nativeFFITypeName(encoding);
+        if (name.empty())
+        {
+            throw JSError(runtime, "Unsupported native super argument type encoding");
+        }
+        cifArguments.push_back(ffiType(runtime, name));
+        setSuperFFIArgument(runtime, encoding, arguments[index], call->values[index + 2],
+                            call->retainedArguments);
+        if (name == "object" || name == "class" || name == "selector" || name == "pointer")
+        {
+            call->argumentValues[index + 2] = &call->values[index + 2].pointer;
+        }
+        else
+        {
+            call->argumentValues[index + 2] = call->values[index + 2].bytes.data();
+        }
+    }
+
+    std::string resultName = nativeFFITypeName(signature.methodReturnType);
+    if (resultName.empty())
+    {
+        throw JSError(runtime, "Unsupported native super return type encoding");
+    }
+    call->result = ffiType(runtime, resultName);
+    call->cif = prepareFFICif(runtime, call->result, cifArguments);
+    call->output.resize(std::max<size_t>(call->result.type->size, sizeof(void *)));
+
+    return executeMainAsynchronously(
+        runtime,
+        [call]() {
+            ffi_call(&call->cif, reinterpret_cast<void (*)(void)>(objc_msgSendSuper),
+                     call->result.name == "void" ? nullptr : call->output.data(),
+                     call->argumentValues.data());
+            if (call->result.name == "object" || call->result.name == "class")
+            {
+                __unsafe_unretained id object = nil;
+                memcpy(&object, call->output.data(), sizeof(object));
+                call->retainedResult = object;
+            }
+        },
+        [call](Runtime &completionRuntime) {
+            return ffiResult(completionRuntime, call->result, call->output);
+        });
+}
+
 static Value invokeSuperWithThreadPolicy(Runtime &runtime, id target, Class currentClass, SEL selector,
                                          NSArray *arguments, const Value *options)
 {
@@ -2144,6 +2628,22 @@ static void removeHook(const std::shared_ptr<HookState> &state, bool preserveAft
             }
         }
     }
+}
+
+static void invalidateRuntimeHooks(uint64_t generation)
+{
+    std::vector<std::shared_ptr<HookState>> stale;
+    {
+        std::lock_guard<std::mutex> lock(gHookMutex);
+        for (const auto &entry : gDispatchers)
+        {
+            for (const auto &state : entry.second->hooks)
+            {
+                if (state->runtimeGeneration < generation) stale.push_back(state);
+            }
+        }
+    }
+    for (const auto &state : stale) removeHook(state);
 }
 
 Value HookTokenHost::get(Runtime &runtime, const PropNameID &name)
@@ -2928,8 +3428,12 @@ static bool executeRuntimeSynchronously(std::function<void(Runtime &)> callback)
         }
     }];
 
-    if (dispatch_semaphore_wait(state->semaphore,
-                                dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC)) != 0)
+    bool mainThread = [NSThread isMainThread];
+    if (mainThread) gMainThreadRuntimeWaits.fetch_add(1);
+    long waitResult = dispatch_semaphore_wait(state->semaphore,
+                                               dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC));
+    if (mainThread) gMainThreadRuntimeWaits.fetch_sub(1);
+    if (waitResult != 0)
     {
         state->cancelled.store(true);
         return false;
@@ -4616,6 +5120,24 @@ static void installObjC(Runtime &runtime, Object &objc)
                                                count > 4 ? &args[4] : nullptr);
         }));
 
+    objc.setProperty(runtime, "invokeSuperAsync", makeFunction(
+        "invokeSuperAsync", 4, runtime, [](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+            if (count < 4 || !args[3].isObject() || !args[3].asObject(rt).isArray(rt))
+            {
+                throw JSError(rt, "objc.invokeSuperAsync expects an object, class, selector, and argument array");
+            }
+            id object = objcValue(rt, args[0]);
+            Class cls = classFromValue(rt, args[1]);
+            NSString *selectorName = [JSI toNSString:args[2] runtime:rt];
+            Array array = args[3].asObject(rt).asArray(rt);
+            NSMutableArray *arguments = [NSMutableArray arrayWithCapacity:array.size(rt)];
+            for (size_t index = 0; index < array.size(rt); index++)
+            {
+                [arguments addObject:valueToObjC(rt, array.getValueAtIndex(rt, index)) ?: [NSNull null]];
+            }
+            return invokeSuperAsync(rt, object, cls, NSSelectorFromString(selectorName), arguments);
+        }));
+
     objc.setProperty(runtime, "getIvar", makeFunction("getIvar", 2, runtime, getIvar));
     objc.setProperty(runtime, "setIvar", makeFunction("setIvar", 3, runtime, setIvar));
 
@@ -4696,11 +5218,17 @@ static void installFFI(Runtime &runtime, Object &ffi)
 static void installFabric(Runtime &runtime, Object &fabric)
 {
     fabric.setProperty(runtime, "mount", makeFunction("mount", 3, runtime, fabricMount));
+    fabric.setProperty(runtime, "mountAsync", makeFunction("mountAsync", 3, runtime, fabricMountAsync));
     fabric.setProperty(runtime, "update", makeFunction("update", 2, runtime, fabricUpdate));
+    fabric.setProperty(runtime, "updateAsync", makeFunction("updateAsync", 2, runtime, fabricUpdateAsync));
     fabric.setProperty(runtime, "setSize", makeFunction("setSize", 3, runtime, fabricSetSize));
+    fabric.setProperty(runtime, "setSizeAsync", makeFunction("setSizeAsync", 3, runtime, fabricSetSizeAsync));
     fabric.setProperty(runtime, "setFrame", makeFunction("setFrame", 2, runtime, fabricSetFrame));
+    fabric.setProperty(runtime, "setFrameAsync", makeFunction("setFrameAsync", 2, runtime, fabricSetFrameAsync));
     fabric.setProperty(runtime, "measure", makeFunction("measure", 1, runtime, fabricMeasure));
+    fabric.setProperty(runtime, "measureAsync", makeFunction("measureAsync", 1, runtime, fabricMeasureAsync));
     fabric.setProperty(runtime, "unmount", makeFunction("unmount", 1, runtime, fabricUnmount));
+    fabric.setProperty(runtime, "unmountAsync", makeFunction("unmountAsync", 1, runtime, fabricUnmountAsync));
 }
 
 static bool isOptionalString(const Value &value)
@@ -4849,14 +5377,22 @@ void setNativePluginFabricHost(id instance)
 
 void registerNativePluginBridge(Runtime &runtime)
 {
+    bool changed = false;
+    uint64_t generation = gNativePluginRuntimeGeneration.load();
     {
         std::lock_guard<std::mutex> lock(gNativePluginRuntimeMutex);
         if (gNativePluginRuntime != &runtime)
         {
-            gNativePluginRuntimeGeneration.fetch_add(1);
+            generation = gNativePluginRuntimeGeneration.fetch_add(1) + 1;
+            changed = true;
         }
         gNativePluginRuntime = &runtime;
         gNativePluginRuntimeThread = std::this_thread::get_id();
+    }
+    if (changed)
+    {
+        invalidateRuntimeHooks(generation);
+        invalidateRuntimeFabricSurfaces(generation);
     }
     Object bridge(runtime);
     bridge.setProperty(runtime, "apiVersion", String::createFromUtf8(runtime, kNativePluginApiVersion));
@@ -4872,6 +5408,7 @@ void registerNativePluginBridge(Runtime &runtime)
         "native.ffi.symbols",
         "native.ffi.call",
         "native.fabric.mount",
+        "native.fabric.async",
         "native.debug.evaluations",
         "native.debug.environment",
     };
