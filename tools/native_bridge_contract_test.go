@@ -214,6 +214,11 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 	for _, required := range []string{
 		"Native value exceeds conversion limits",
 		"ffi.call requires an executable symbol pointer",
+		"static bool isCallableSymbolAddress(void *address)",
+		"return isExecutableAddress(address) && isInstructionSectionAddress(address);",
+		"!isCallableSymbolAddress(address)",
+		"dispatcher->closure && isExecutableAddress(dispatcher->code)",
+		"vm_region_recurse_64",
 		"if (code == ':')",
 		"[invocation retainArguments]",
 		"Native super invocation cannot synchronously cross to the main thread",
