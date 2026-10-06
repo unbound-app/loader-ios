@@ -49,6 +49,30 @@ func TestBuildWorkflowInstallsAutotoolsBeforeTweakBuild(t *testing.T) {
 	}
 }
 
+func TestBuildWorkflowArchivesMatchingTweakSymbols(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "build.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(workflow)
+	for _, required := range []string{
+		"find .theos/obj -type d -name 'Unbound.dylib.dSYM'",
+		"dwarfdump --uuid \"$bundle\" >> symbols/uuids.txt",
+		"git rev-parse HEAD > symbols/commit.txt",
+		"name: tweak symbols",
+		"path: symbols/",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Fatalf("build workflow is missing symbol metadata %q", required)
+		}
+	}
+}
+
 func TestBuildWorkflowAllowsManualIPAInput(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -93,6 +117,32 @@ func TestPullRequestWorkflowUsesPinnedCleanDiscordIPA(t *testing.T) {
 	for _, retired := range []string{"ipa.aspy.dev", "files.catbox.moe/pk80qh.ipa"} {
 		if strings.Contains(contents, retired) {
 			t.Fatalf("pull request workflow still references retired IPA source %q", retired)
+		}
+	}
+}
+
+func TestPullRequestWorkflowChecksPinnedSupportedDiscordFixtures(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(workflow)
+	for _, required := range []string{
+		"version: ['347.0', '341.0']",
+		"name: rootless package",
+		"--bundle-id com.hammerandchisel.discord",
+		"--version \"$DISCORD_VERSION\"",
+		"--extensions include",
+		"needs.compatibility-source.outputs.available == 'true'",
+		"link/package checks, not Discord device-runtime validation",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Fatalf("pull request workflow is missing compatibility check %q", required)
 		}
 	}
 }

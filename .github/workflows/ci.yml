@@ -41,6 +41,69 @@ jobs:
             caller_workflow: "ci"
         secrets: inherit
 
+    compatibility-source:
+        name: Check authorized compatibility source
+        runs-on: ubuntu-latest
+        outputs:
+            available: ${{ steps.check.outputs.available }}
+        steps:
+            - name: Check source credentials
+              id: check
+              env:
+                  DKRYPT_API_KEY: ${{ secrets.DKRYPT_API_KEY }}
+              run: |
+                  if [ -n "$DKRYPT_API_KEY" ]; then
+                      echo 'available=true' >> "$GITHUB_OUTPUT"
+                  else
+                      echo 'available=false' >> "$GITHUB_OUTPUT"
+                  fi
+
+    compatibility:
+        name: Discord ${{ matrix.version }} package smoke check
+        needs: [build, compatibility-source]
+        if: needs.compatibility-source.outputs.available == 'true'
+        runs-on: macos-15
+        strategy:
+            fail-fast: false
+            matrix:
+                version: ['347.0', '341.0']
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+              with:
+                  submodules: recursive
+
+            - name: Setup Go
+              uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+              with:
+                  cache: false
+                  go-version-file: go.mod
+
+            - name: Download built tweak
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: rootless package
+                  path: packages
+
+            - name: Fetch pinned Discord fixture
+              env:
+                  DKRYPT_API_KEY: ${{ secrets.DKRYPT_API_KEY }}
+                  DISCORD_VERSION: ${{ matrix.version }}
+              run: |
+                  go run ./tools fetch --base-url https://ipa.dylib.dev --bundle-id com.hammerandchisel.discord --version "$DISCORD_VERSION" --output discord.ipa
+
+            - name: Package compatibility IPA
+              env:
+                  DISCORD_VERSION: ${{ matrix.version }}
+              run: |
+                  go run ./tools build ipa --ipa discord.ipa --deb "$(find packages -maxdepth 1 -name '*.deb' -print -quit)" --channel appstore --extensions include --output "discord-${DISCORD_VERSION}.ipa" --non-interactive
+
+            - name: Upload package smoke artifact
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: discord-${{ matrix.version }}-package-smoke
+                  path: discord-${{ matrix.version }}.ipa
+
     comment-pr:
         name: Comment on PR
         runs-on: ubuntu-latest
@@ -80,6 +143,8 @@ jobs:
                       - [**${{ needs.build.outputs.deb_filename }}**](${{ needs.build.outputs.deb_url }})
                       - [**${{ needs.build.outputs.simulator_filename }}**](${{ needs.build.outputs.simulator_url }})
                       - [**${{ needs.build.outputs.ipa_filename }}**](${{ needs.build.outputs.ipa_url }})
+
+                      Packaging and simulator artifacts are link/package checks, not Discord device-runtime validation.
 
                       <sub>This comment was automatically generated. [View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>
                   comment-tag: build-result

@@ -153,6 +153,23 @@ jobs:
       - name: build package
         run: go run ./tools build tweak --configuration release --non-interactive
 
+      - name: Collect tweak symbols and UUIDs
+        run: |
+          mkdir -p symbols
+          while IFS= read -r bundle; do
+            architecture=$(basename "$(dirname "$bundle")")
+            cp -R "$bundle" "symbols/${architecture}-Unbound.dylib.dSYM"
+            dwarfdump --uuid "$bundle" >> symbols/uuids.txt
+          done < <(find .theos/obj -type d -name 'Unbound.dylib.dSYM' -print)
+          test -s symbols/uuids.txt
+          git rev-parse HEAD > symbols/commit.txt
+
+      - name: Upload tweak symbols
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: tweak symbols
+          path: symbols/
+
       - name: upload rootless package
         id: upload-deb
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
