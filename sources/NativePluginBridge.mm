@@ -1693,12 +1693,53 @@ static Value returnValue(Runtime &runtime, NSInvocation *invocation, NSMethodSig
     throw JSError(runtime, "Unsupported native return type");
 }
 
+static void validateNativeScalarArgument(id value, const std::string &type)
+{
+    if (![value isKindOfClass:[NSNumber class]])
+    {
+        throw std::runtime_error("Native scalar argument must be a number");
+    }
+    NSNumber *number = (NSNumber *) value;
+    if (type == "bool")
+    {
+        double raw = number.doubleValue;
+        if (raw == 0 || raw == 1) return;
+        throw std::runtime_error("Native boolean argument is invalid");
+    }
+    const char *numberType = number.objCType;
+    bool signedInteger = strcmp(numberType, @encode(long long)) == 0 ||
+                         strcmp(numberType, @encode(long)) == 0;
+    bool unsignedInteger = strcmp(numberType, @encode(unsigned long long)) == 0 ||
+                           strcmp(numberType, @encode(unsigned long)) == 0;
+    if (type == "i64")
+    {
+        if (signedInteger ||
+            (unsignedInteger && number.unsignedLongLongValue <= INT64_MAX)) return;
+    }
+    if (type == "u64")
+    {
+        if (unsignedInteger || (signedInteger && number.longLongValue >= 0)) return;
+    }
+    if (!validNativeNumericValue(number.doubleValue, type))
+    {
+        throw std::runtime_error("Native scalar argument is out of range");
+    }
+}
+
 static void setInvocationArgument(NSInvocation *invocation, NSMethodSignature *signature,
                                   id object, NSUInteger index, std::vector<id> &retained,
                                   std::vector<std::vector<uint8_t>> &storage)
 {
     const char *type = [signature getArgumentTypeAtIndex:index];
     char code = normalizedType(type);
+    std::string scalarType = nativeFFITypeName(type);
+    if (scalarType == "bool" || scalarType == "float" || scalarType == "double" ||
+        scalarType == "i8" || scalarType == "u8" || scalarType == "i16" ||
+        scalarType == "u16" || scalarType == "i32" || scalarType == "u32" ||
+        scalarType == "i64" || scalarType == "u64")
+    {
+        validateNativeScalarArgument(object, scalarType);
+    }
 
     if (code == '@')
     {
@@ -2377,27 +2418,7 @@ static void validateBatchArgument(id value, const char *encoding)
             nativeFFITypeName([(NSValue *) value objCType]) == type) return;
         throw std::runtime_error("Native batch struct argument has the wrong layout");
     }
-    if (![value isKindOfClass:[NSNumber class]])
-    {
-        throw std::runtime_error("Native batch scalar argument must be a number");
-    }
-    NSNumber *number = (NSNumber *) value;
-    if (type == "bool")
-    {
-        double raw = number.doubleValue;
-        if (raw == 0 || raw == 1) return;
-        throw std::runtime_error("Native batch boolean argument is invalid");
-    }
-    const char *numberType = number.objCType;
-    bool signedInteger = strcmp(numberType, @encode(long long)) == 0 ||
-                         strcmp(numberType, @encode(long)) == 0;
-    bool unsignedInteger = strcmp(numberType, @encode(unsigned long long)) == 0 ||
-                           strcmp(numberType, @encode(unsigned long)) == 0;
-    if ((type == "i64" && signedInteger) || (type == "u64" && unsignedInteger)) return;
-    if (!validNativeNumericValue(number.doubleValue, type))
-    {
-        throw std::runtime_error("Native batch scalar argument is out of range");
-    }
+    validateNativeScalarArgument(value, type);
 }
 
 static id batchNativeResult(NSInvocation *invocation)
