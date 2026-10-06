@@ -26,6 +26,7 @@
 #import "JSI.h"
 #import "Logger.h"
 #import "NativePluginFFI.h"
+#import "NativeNumericValidation.h"
 #import "NativeTypeEncoding.h"
 
 using namespace facebook;
@@ -2979,6 +2980,35 @@ static FFISignature parseFFISignature(Runtime &runtime, const Value &value)
 static void setFFIScalar(Runtime &runtime, const Value &value, const std::string &name,
                          FFICallArgument &argument)
 {
+    if (name == "bool")
+    {
+        if (!value.isBool())
+        {
+            throw JSError(runtime, "Native FFI boolean argument expected");
+        }
+    }
+    else if (name == "i64" || name == "u64")
+    {
+        if (value.isBigInt())
+        {
+            BigInt bigint = value.asBigInt(runtime);
+            bool inRange = name == "i64" ? runtime.bigintIsInt64(bigint)
+                                          : runtime.bigintIsUint64(bigint);
+            if (!inRange)
+            {
+                throw JSError(runtime, "Native FFI integer exceeds its type range");
+            }
+        }
+        else if (!value.isNumber() || !validNativeNumericValue(value.getNumber(), name))
+        {
+            throw JSError(runtime, "Native FFI integer must be a safe integral value");
+        }
+    }
+    else if (!value.isNumber() || !validNativeNumericValue(value.getNumber(), name))
+    {
+        throw JSError(runtime, "Native FFI numeric argument exceeds its type range");
+    }
+
     id object = valueToObjC(runtime, value);
     if (name == "bool" || name == "i8" || name == "u8")
     {
