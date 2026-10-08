@@ -29,6 +29,7 @@
 #import "JSI.h"
 #import "Logger.h"
 #import "NativeAddressValidation.h"
+#import "NativeConversionBudget.h"
 #import "NativePluginFFI.h"
 #import "NativeNumericValidation.h"
 #import "NativeTypeEncoding.h"
@@ -639,30 +640,32 @@ static Value pointerResult(Runtime &runtime, void *pointer, bool callable = fals
 
 struct ConversionState
 {
-    size_t depth = 0;
-    size_t entries = 0;
-    size_t bytes = 0;
+    NativeConversionBudget budget;
     std::vector<const void *> nativePath;
     std::vector<Object> javascriptPath;
 
     void enter(Runtime &runtime)
     {
-        if (depth >= 32 || entries >= 10000)
+        if (!budget.enter())
         {
             throw JSError(runtime, "Native value exceeds conversion limits");
         }
-        depth++;
-        entries++;
     }
 
     void addBytes(Runtime &runtime, size_t count)
     {
-        constexpr size_t maximum = 64 * 1024 * 1024;
-        if (count > maximum - bytes)
+        if (!budget.addBytes(count))
         {
             throw JSError(runtime, "Native value exceeds conversion byte limit");
         }
-        bytes += count;
+    }
+
+    void ensureEntries(Runtime &runtime, size_t count)
+    {
+        if (!budget.reserveEntries(count))
+        {
+            throw JSError(runtime, "Native value exceeds conversion limits");
+        }
     }
 };
 
@@ -675,7 +678,7 @@ struct ConversionGuard
 
     ~ConversionGuard()
     {
-        state.depth--;
+        state.budget.leave();
     }
 
     ConversionState &state;
@@ -776,6 +779,7 @@ static Value objcResultValue(Runtime &runtime, id value, ConversionState &state)
     {
         NativeConversionVisit visit(runtime, state, value);
         NSArray *array = (NSArray *) value;
+        state.ensureEntries(runtime, array.count);
         Array result(runtime, array.count);
         for (NSUInteger index = 0; index < array.count; index++)
         {
@@ -788,6 +792,7 @@ static Value objcResultValue(Runtime &runtime, id value, ConversionState &state)
     {
         NativeConversionVisit visit(runtime, state, value);
         NSDictionary *dictionary = (NSDictionary *) value;
+        state.ensureEntries(runtime, dictionary.count);
         Object result(runtime);
         for (id key in dictionary)
         {
@@ -875,8 +880,10 @@ static id valueToObjCValue(Runtime &runtime, const Value &value, ConversionState
     {
         JavaScriptConversionVisit visit(runtime, state, value);
         Array array = object.asArray(runtime);
-        NSMutableArray *result = [NSMutableArray arrayWithCapacity:array.size(runtime)];
-        for (size_t index = 0; index < array.size(runtime); index++)
+        size_t count = array.size(runtime);
+        state.ensureEntries(runtime, count);
+        NSMutableArray *result = [NSMutableArray arrayWithCapacity:count];
+        for (size_t index = 0; index < count; index++)
         {
             [result addObject:valueToObjCValue(runtime, array.getValueAtIndex(runtime, index), state) ?: [NSNull null]];
         }
@@ -886,7 +893,9 @@ static id valueToObjCValue(Runtime &runtime, const Value &value, ConversionState
     JavaScriptConversionVisit visit(runtime, state, value);
     NSMutableDictionary *result = [NSMutableDictionary dictionary];
     Array names = object.getPropertyNames(runtime);
-    for (size_t index = 0; index < names.size(runtime); index++)
+    size_t count = names.size(runtime);
+    state.ensureEntries(runtime, count);
+    for (size_t index = 0; index < count; index++)
     {
         Value name = names.getValueAtIndex(runtime, index);
         if (!name.isString())
