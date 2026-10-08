@@ -75,9 +75,34 @@ static NSString *etag = nil;
 
     for (NSString *extension in extensions)
     {
-        NSString *candidate = [NSString pathWithComponents:@[
-            FileSystem.documents, [NSString stringWithFormat:@"unbound.%@.candidate", extension]
+        NSString *target = [NSString pathWithComponents:@[
+            FileSystem.documents, [NSString stringWithFormat:@"unbound.%@", extension]
         ]];
+        NSString *candidate = [target stringByAppendingString:@".candidate"];
+        NSString *promoting = [candidate stringByAppendingString:@".promoting"];
+        if ([FileSystem exists:promoting])
+        {
+            NSString *backup = [target stringByAppendingString:@".previous"];
+            NSString *hadTarget = [NSString stringWithContentsOfFile:promoting
+                                                             encoding:NSUTF8StringEncoding error:nil];
+            if (![hadTarget isEqualToString:@"0"] && ![hadTarget isEqualToString:@"1"])
+            {
+                @throw [[NSException alloc] initWithName:@"BundleRollbackMarkerInvalid"
+                                                 reason:@"Interrupted bundle update marker is invalid"
+                                               userInfo:nil];
+            }
+            if (![FileSystem exists:candidate] && [hadTarget isEqualToString:@"1"] &&
+                !restoreNativeBundle(backup.fileSystemRepresentation,
+                                     target.fileSystemRepresentation))
+            {
+                @throw [[NSException alloc] initWithName:@"BundleRollbackFailed"
+                                                 reason:@"Interrupted bundle update could not be restored"
+                                               userInfo:nil];
+            }
+            [Updater rejectBundle:candidate];
+            [FileSystem delete:promoting];
+            [Settings set:@"unbound" key:@"loader.update.etag" value:@""];
+        }
         if ([FileSystem exists:[candidate stringByAppendingString:@".attempting"]])
         {
             [Updater rejectBundle:candidate];
@@ -202,10 +227,18 @@ static NSString *etag = nil;
 
     NSString *targetPath = [path substringToIndex:path.length - @".candidate".length];
     NSString *backupPath = [targetPath stringByAppendingString:@".previous"];
+    NSString *promotingPath = [path stringByAppendingString:@".promoting"];
+    NSString *hadTarget = [FileSystem exists:targetPath] ? @"1" : @"0";
+    if (![hadTarget writeToFile:promotingPath
+                    atomically:YES encoding:NSUTF8StringEncoding error:nil])
+    {
+        return NO;
+    }
     if (!promoteNativeBundle(path.fileSystemRepresentation,
                              targetPath.fileSystemRepresentation,
                              backupPath.fileSystemRepresentation))
     {
+        [FileSystem delete:promotingPath];
         return NO;
     }
 
@@ -225,6 +258,7 @@ static NSString *etag = nil;
             [FileSystem delete:otherPath];
         }
     }
+    [FileSystem delete:promotingPath];
     return YES;
 }
 

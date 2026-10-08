@@ -18,7 +18,7 @@ static bool copyExistingBundle(const char *sourcePath, const char *backupPath)
     }
 
     struct stat metadata;
-    if (fstat(source, &metadata) != 0 || !S_ISREG(metadata.st_mode))
+    if (fstat(source, &metadata) != 0 || !S_ISREG(metadata.st_mode) || metadata.st_size == 0)
     {
         close(source);
         return false;
@@ -120,4 +120,28 @@ bool promoteNativeBundle(const char *candidatePath, const char *targetPath,
     }
 
     return rename(candidatePath, targetPath) == 0;
+}
+
+bool restoreNativeBundle(const char *backupPath, const char *targetPath)
+{
+    if (!backupPath || !targetPath || !*backupPath || !*targetPath ||
+        strcmp(backupPath, targetPath) == 0)
+    {
+        return false;
+    }
+
+    struct stat targetMetadata;
+    if (lstat(targetPath, &targetMetadata) == 0)
+    {
+        if (!S_ISREG(targetMetadata.st_mode))
+        {
+            return false;
+        }
+    }
+    else if (errno != ENOENT)
+    {
+        return false;
+    }
+
+    return copyExistingBundle(backupPath, targetPath);
 }

@@ -37,6 +37,14 @@ int main()
     assert(readFile(backup) == "old bundle");
     assert(!std::filesystem::exists(candidate));
 
+    assert(restoreNativeBundle(backup.c_str(), target.c_str()));
+    assert(readFile(target) == "old bundle");
+    assert(readFile(backup) == "old bundle");
+
+    writeFile(candidate, "new bundle");
+    assert(promoteNativeBundle(candidate.c_str(), target.c_str(), backup.c_str()));
+    assert(readFile(target) == "new bundle");
+
     assert(!promoteNativeBundle(candidate.c_str(), target.c_str(), backup.c_str()));
     assert(readFile(target) == "new bundle");
     assert(readFile(backup) == "old bundle");
@@ -58,6 +66,9 @@ int main()
     assert(!promoteNativeBundle(candidate.c_str(), target.c_str(), missingBackup.c_str()));
     assert(readFile(target) == "first bundle");
     assert(readFile(candidate) == "blocked bundle");
+
+    assert(!restoreNativeBundle(missingBackup.c_str(), target.c_str()));
+    assert(readFile(target) == "first bundle");
 
     std::filesystem::remove_all(root);
 }
