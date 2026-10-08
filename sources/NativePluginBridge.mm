@@ -1726,6 +1726,14 @@ static void validateNativeScalarArgument(id value, const std::string &type)
     }
 }
 
+static bool isNativeScalarType(const std::string &type)
+{
+    return type == "bool" || type == "float" || type == "double" ||
+           type == "i8" || type == "u8" || type == "i16" ||
+           type == "u16" || type == "i32" || type == "u32" ||
+           type == "i64" || type == "u64";
+}
+
 static void setInvocationArgument(NSInvocation *invocation, NSMethodSignature *signature,
                                   id object, NSUInteger index, std::vector<id> &retained,
                                   std::vector<std::vector<uint8_t>> &storage)
@@ -1733,10 +1741,7 @@ static void setInvocationArgument(NSInvocation *invocation, NSMethodSignature *s
     const char *type = [signature getArgumentTypeAtIndex:index];
     char code = normalizedType(type);
     std::string scalarType = nativeFFITypeName(type);
-    if (scalarType == "bool" || scalarType == "float" || scalarType == "double" ||
-        scalarType == "i8" || scalarType == "u8" || scalarType == "i16" ||
-        scalarType == "u16" || scalarType == "i32" || scalarType == "u32" ||
-        scalarType == "i64" || scalarType == "u64")
+    if (isNativeScalarType(scalarType))
     {
         validateNativeScalarArgument(object, scalarType);
     }
@@ -1982,6 +1987,11 @@ static Value invokeObject(Runtime &runtime, id target, SEL selector, NSArray *ar
 static void setSuperFFIArgument(Runtime &runtime, const char *encoding, id object,
                                  FFICallArgument &argument, std::vector<id> &retained)
 {
+    std::string scalarType = nativeFFITypeName(encoding);
+    if (isNativeScalarType(scalarType))
+    {
+        validateNativeScalarArgument(object, scalarType);
+    }
     char code = normalizedType(encoding);
     id value = object == [NSNull null] ? @0 : object;
     if (code == '@' || code == '#')

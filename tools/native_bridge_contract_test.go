@@ -260,6 +260,12 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 	if strings.Contains(string(bridge), "dispatch_sync(dispatch_get_main_queue()") {
 		t.Fatal("native bridge still uses an unbounded synchronous main-thread dispatch")
 	}
+	superStart := strings.Index(string(bridge), "static void setSuperFFIArgument(")
+	superEnd := strings.Index(string(bridge), "static Value invokeSuperObject(")
+	if superStart < 0 || superEnd <= superStart ||
+		!strings.Contains(string(bridge)[superStart:superEnd], "validateNativeScalarArgument(object, scalarType);") {
+		t.Fatal("Objective-C super arguments bypass scalar validation")
+	}
 	for _, required := range []string{"markBundleAttempted:bundlePath", "acceptBundle:bundlePath", "rejectBundle:bundlePath"} {
 		if !strings.Contains(string(loader), required) {
 			t.Fatalf("bundle promotion step %q is missing", required)
