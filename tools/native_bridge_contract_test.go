@@ -271,7 +271,7 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 			t.Fatalf("bundle promotion step %q is missing", required)
 		}
 	}
-	for _, required := range []string{".candidate", "BundleCandidateMissing", "rename(path.fileSystemRepresentation", ".attempting"} {
+	for _, required := range []string{".candidate", "BundleCandidateMissing", "promoteNativeBundle(path.fileSystemRepresentation", ".attempting"} {
 		if !strings.Contains(string(updater), required) {
 			t.Fatalf("transactional bundle step %q is missing", required)
 		}

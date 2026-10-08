@@ -1,6 +1,5 @@
 #import "Updater.h"
-
-#include <stdio.h>
+#import "NativeBundleTransaction.h"
 
 // `bun run serve` in the client repo serves its build from this port on the Mac.
 static const NSInteger      kDevServerPort         = 3000;
@@ -202,7 +201,10 @@ static NSString *etag = nil;
     }
 
     NSString *targetPath = [path substringToIndex:path.length - @".candidate".length];
-    if (rename(path.fileSystemRepresentation, targetPath.fileSystemRepresentation) != 0)
+    NSString *backupPath = [targetPath stringByAppendingString:@".previous"];
+    if (!promoteNativeBundle(path.fileSystemRepresentation,
+                             targetPath.fileSystemRepresentation,
+                             backupPath.fileSystemRepresentation))
     {
         return NO;
     }
