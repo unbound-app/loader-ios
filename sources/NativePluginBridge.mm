@@ -4849,6 +4849,26 @@ static void dispatchVoidNSUIntegerHook(id object, SEL selector, NSUInteger value
     }
 }
 
+static void dispatchVoidBooleanHook(id object, SEL selector, int8_t value)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &value};
+        dispatchFFIHookBody(nullptr, nullptr, arguments, nullptr);
+    }
+}
+
+static int8_t dispatchBooleanHook(id object, SEL selector)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector};
+        int8_t returnValue = 0;
+        dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
+        return returnValue;
+    }
+}
+
 static id dispatchObjectObjectHook(id object, SEL selector, id value)
 {
     @autoreleasepool
@@ -4896,6 +4916,12 @@ static void dispatchVoidObjectObjectHook(id object, SEL selector, id first, id s
 static void *fallbackHookCode(const HookSignature &signature)
 {
     if ((signature.result.name == "bool" || signature.result.name == "i8") &&
+        signature.arguments.size() == 2)
+    {
+        return reinterpret_cast<void *>(dispatchBooleanHook);
+    }
+
+    if ((signature.result.name == "bool" || signature.result.name == "i8") &&
         signature.arguments.size() == 4 &&
         signature.arguments[2].name == "object" && signature.arguments[3].name == "object")
     {
@@ -4924,6 +4950,12 @@ static void *fallbackHookCode(const HookSignature &signature)
         signature.arguments[2].name == "u64")
     {
         return reinterpret_cast<void *>(dispatchVoidNSUIntegerHook);
+    }
+
+    if (signature.result.name == "void" && signature.arguments.size() == 3 &&
+        (signature.arguments[2].name == "bool" || signature.arguments[2].name == "i8"))
+    {
+        return reinterpret_cast<void *>(dispatchVoidBooleanHook);
     }
 
     if (signature.result.name == "void" && signature.arguments.size() == 4 &&
