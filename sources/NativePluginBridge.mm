@@ -3795,6 +3795,7 @@ struct HookInvocation {
     std::mutex lifecycleMutex;
     std::atomic_bool active{true};
     std::atomic_bool originalCalled{false};
+    std::atomic_bool deferredOriginalRequested{false};
 };
 
 struct RuntimeCallState {
@@ -3867,6 +3868,21 @@ static void copyHookResult(const std::shared_ptr<HookInvocation> &invocation, vo
     invocation->originalResult.resize(size);
     memcpy(invocation->originalResult.data(), returnValue,
            invocation->dispatcher->signature->result.type->size);
+}
+
+static bool invokeDeferredHookOriginal(const std::shared_ptr<HookInvocation> &invocation)
+{
+    if (!invocation->deferredOriginalRequested.exchange(false) ||
+        invocation->originalCalled.load())
+    {
+        return false;
+    }
+
+    invokeHookOriginal(invocation->dispatcher, invocation->nativeArguments,
+                       invocation->returnValue);
+    copyHookResult(invocation, invocation->returnValue);
+    invocation->originalCalled.store(true);
+    return true;
 }
 
 static std::shared_ptr<std::vector<uint8_t>> hookReturnBuffer(
@@ -3981,7 +3997,12 @@ static Object hookContext(Runtime &runtime, const std::shared_ptr<HookInvocation
                 {
                     if (std::this_thread::get_id() != original->hookThread)
                     {
-                        throw JSError(rt, "Native hook original() cannot cross runtime threads");
+                        if (original->dispatcher->signature->result.name != "void")
+                        {
+                            throw JSError(rt, "Native hook original() cannot cross runtime threads");
+                        }
+                        original->deferredOriginalRequested.store(true);
+                        return Value::undefined();
                     }
 
                     invokeHookOriginal(original->dispatcher, original->nativeArguments,
@@ -4635,10 +4656,11 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         {
             try
             {
-                executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
+                bool completed = executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
                     Object context = hookContext(runtime, invocation, object, selector, true);
                     state->before->call(runtime, context);
                 });
+                if (completed && invokeDeferredHookOriginal(invocation)) originalCalled = true;
             }
             catch (const std::exception &exception)
             {
@@ -4671,6 +4693,7 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
                     replacementApplied = true;
                     copyHookReturnBuffer(invocation, replacementResult, returnValue);
                     copyHookResult(invocation, returnValue);
+                    if (invokeDeferredHookOriginal(invocation)) originalCalled = true;
                 }
             }
             catch (const std::exception &exception)
@@ -5005,10 +5028,11 @@ static void dispatchVoidHook(id object, SEL selector)
             {
                 try
                 {
-                    executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
+                    bool completed = executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
                         Object context = hookContext(runtime, invocation, object, selector, true);
                         state->before->call(runtime, context);
                     });
+                    if (completed && invokeDeferredHookOriginal(invocation)) originalCalled = true;
                 }
                 catch (const std::exception &exception)
                 {
@@ -5040,6 +5064,7 @@ static void dispatchVoidHook(id object, SEL selector)
                     {
                         replacementApplied = true;
                         copyHookResult(invocation, nullptr);
+                        if (invokeDeferredHookOriginal(invocation)) originalCalled = true;
                     }
                 }
                 catch (const std::exception &exception)
