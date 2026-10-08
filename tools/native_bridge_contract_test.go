@@ -257,6 +257,9 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 			t.Fatalf("loader lifecycle guard %q is missing", required)
 		}
 	}
+	if strings.Contains(string(bridge), "dispatch_sync(dispatch_get_main_queue()") {
+		t.Fatal("native bridge still uses an unbounded synchronous main-thread dispatch")
+	}
 	for _, required := range []string{"markBundleAttempted:bundlePath", "acceptBundle:bundlePath", "rejectBundle:bundlePath"} {
 		if !strings.Contains(string(loader), required) {
 			t.Fatalf("bundle promotion step %q is missing", required)

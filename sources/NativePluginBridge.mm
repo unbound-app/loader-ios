@@ -922,7 +922,7 @@ static void executeMainSynchronously(std::function<void(void)> callback)
     }
     if (gMainThreadRuntimeWaits.load())
     {
-        throw NativeWrongThreadError("Native Fabric cannot synchronously cross to a waiting main thread");
+        throw NativeWrongThreadError("Native operation cannot synchronously cross to a waiting main thread");
     }
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
@@ -954,7 +954,7 @@ static void executeMainSynchronously(std::function<void(void)> callback)
         int queued = 0;
         if (status->compare_exchange_strong(queued, 3))
         {
-            throw std::runtime_error("Native Fabric operation timed out on the main thread");
+            throw std::runtime_error("Native operation timed out on the main thread");
         }
         dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
     }
@@ -2182,9 +2182,9 @@ static Value invokeWithThreadPolicy(Runtime &runtime, id target, SEL selector, N
     }
 
     NSInvocation *invocation = prepareInvocation(target, selector, arguments);
-    __block __strong id retainedResult = nil;
-    __block NSException *failure = nil;
-    dispatch_sync(dispatch_get_main_queue(), ^{
+    __strong id retainedResult = nil;
+    NSException *failure = nil;
+    executeMainSynchronously([&]() {
         @try
         {
             [invocation invoke];
