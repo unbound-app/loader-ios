@@ -474,9 +474,6 @@ func provisionSimforge(root string, runner commandRunner) (string, error) {
 	cache := filepath.Join(root, ".tools-cache", "simforge-"+simforgeCommit)
 	derivedData := filepath.Join(cache, "derived-data")
 	product := filepath.Join(derivedData, "Build", "Products", "Release", "simforge")
-	if executableExists(product) {
-		return product, nil
-	}
 	if err := os.MkdirAll(filepath.Dir(cache), 0o755); err != nil {
 		return "", err
 	}
@@ -504,6 +501,9 @@ func provisionSimforge(root string, runner commandRunner) (string, error) {
 		if strings.TrimSpace(status) != "" {
 			return "", fmt.Errorf("simforge cache has tracked changes: %s", cache)
 		}
+	}
+	if executableExists(product) {
+		return product, nil
 	}
 	if err := runner(cache, "xcodebuild", []string{"-project", "simforge.xcodeproj", "-scheme", "simforge", "-configuration", "Release", "-derivedDataPath", derivedData, "MACOSX_DEPLOYMENT_TARGET=12.0", "build"}, os.Environ(), os.Stdout, os.Stderr); err != nil {
 		return "", err

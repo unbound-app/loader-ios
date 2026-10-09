@@ -125,6 +125,28 @@ func TestProvisionSimforgeRejectsUnpinnedCache(t *testing.T) {
 	}
 }
 
+func TestProvisionSimforgeRejectsModifiedReadyCache(t *testing.T) {
+	root := t.TempDir()
+	cache := filepath.Join(root, ".tools-cache", "simforge-"+simforgeCommit)
+	product := filepath.Join(cache, "derived-data", "Build", "Products", "Release", "simforge")
+	if err := os.MkdirAll(filepath.Dir(product), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(product, []byte("simforge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := func(work, name string, args []string, env []string, stdout, stderr io.Writer) error {
+		if name == "git" && len(args) > 0 && args[0] == "rev-parse" {
+			_, err := io.WriteString(stdout, "different\n")
+			return err
+		}
+		return errors.New("modified simforge cache must not run build commands")
+	}
+	if _, err := provisionSimforge(root, runner); err == nil {
+		t.Fatal("expected a modified ready cache error")
+	}
+}
+
 func TestZipDirectoryRunsFromPayload(t *testing.T) {
 	payload := filepath.Join(t.TempDir(), "Payload")
 	output := filepath.Join(t.TempDir(), "simulator.zip")
