@@ -4656,16 +4656,16 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         {
             try
             {
-                bool completed = executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
+                executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
                     Object context = hookContext(runtime, invocation, object, selector, true);
                     state->before->call(runtime, context);
                 });
-                if (completed && invokeDeferredHookOriginal(invocation)) originalCalled = true;
             }
             catch (const std::exception &exception)
             {
                 logHookFailure(exception);
             }
+            if (invokeDeferredHookOriginal(invocation)) originalCalled = true;
         }
 
         if (invocation->originalCalled.load() && !originalCalled)
@@ -4693,13 +4693,13 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
                     replacementApplied = true;
                     copyHookReturnBuffer(invocation, replacementResult, returnValue);
                     copyHookResult(invocation, returnValue);
-                    if (invokeDeferredHookOriginal(invocation)) originalCalled = true;
                 }
             }
             catch (const std::exception &exception)
             {
                 logHookFailure(exception);
             }
+            if (invokeDeferredHookOriginal(invocation)) originalCalled = true;
         }
 
         if (state->once)
@@ -5060,16 +5060,16 @@ static void dispatchVoidHook(id object, SEL selector)
             {
                 try
                 {
-                    bool completed = executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
+                    executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
                         Object context = hookContext(runtime, invocation, object, selector, true);
                         state->before->call(runtime, context);
                     });
-                    if (completed && invokeDeferredHookOriginal(invocation)) originalCalled = true;
                 }
                 catch (const std::exception &exception)
                 {
                     logHookFailure(exception);
                 }
+                if (invokeDeferredHookOriginal(invocation)) originalCalled = true;
             }
 
             if (invocation->originalCalled.load() && !originalCalled)
@@ -5096,13 +5096,13 @@ static void dispatchVoidHook(id object, SEL selector)
                     {
                         replacementApplied = true;
                         copyHookResult(invocation, nullptr);
-                        if (invokeDeferredHookOriginal(invocation)) originalCalled = true;
                     }
                 }
                 catch (const std::exception &exception)
                 {
                     logHookFailure(exception);
                 }
+                if (invokeDeferredHookOriginal(invocation)) originalCalled = true;
             }
 
             if (state->once)
