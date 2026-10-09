@@ -33,6 +33,7 @@
 #import "NativeConversionBudget.h"
 #import "NativePluginFFI.h"
 #import "NativeNumericValidation.h"
+#import "NativeOperationGate.h"
 #import "NativeTypeEncoding.h"
 
 using namespace facebook;
@@ -2172,12 +2173,30 @@ static Value invokeWithThreadPolicy(Runtime &runtime, id target, SEL selector, N
     return result;
 }
 
+static void rejectPendingNativeInvocation(Runtime &runtime, const std::string &identifier,
+                                          const char *code, const char *message)
+{
+    Value pendingValue = runtime.global().getProperty(runtime, "__NativePluginPendingInvocations");
+    if (!pendingValue.isObject()) return;
+    Object pending = pendingValue.asObject(runtime);
+    Value pairValue = pending.getProperty(runtime, identifier.c_str());
+    if (!pairValue.isObject()) return;
+    Object pair = pairValue.asObject(runtime);
+    pending.deleteProperty(runtime, identifier.c_str());
+    Function constructor = runtime.global().getPropertyAsFunction(runtime, "Error");
+    Object error = constructor.callAsConstructor(runtime, String::createFromUtf8(runtime, message))
+                       .asObject(runtime);
+    error.setProperty(runtime, "code", String::createFromUtf8(runtime, code));
+    pair.getPropertyAsFunction(runtime, "reject").call(runtime, std::move(error));
+}
+
 static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void)> operation,
                                        std::function<Value(Runtime &)> result)
 {
     uint64_t generation = gNativePluginRuntimeGeneration.load();
     std::string identifier = std::to_string(gNextInvocationIdentifier.fetch_add(1));
     auto cancelled = std::make_shared<std::atomic_bool>(false);
+    auto gate = std::make_shared<loader::NativeOperationGate>();
     Object global = runtime.global();
     Value pendingValue = global.getProperty(runtime, "__NativePluginPendingInvocations");
     Object pending = pendingValue.isObject() ? pendingValue.asObject(runtime) : Object(runtime);
@@ -2188,7 +2207,7 @@ static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void
 
     Function executor = Function::createFromHostFunction(
         runtime, PropNameID::forUtf8(runtime, "nativeMainExecutor"), 2,
-        [operation = std::move(operation), result = std::move(result), identifier, cancelled,
+        [operation = std::move(operation), result = std::move(result), identifier, cancelled, gate,
          generation](Runtime &rt, const Value &, const Value *callbacks, size_t count) -> Value {
             if (count < 2 || !callbacks[0].isObject() || !callbacks[1].isObject())
             {
@@ -2203,7 +2222,8 @@ static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void
             dispatch_async(dispatch_get_main_queue(), ^{
                 @autoreleasepool
                 {
-                    if (cancelled->load() || generation != gNativePluginRuntimeGeneration.load())
+                    if (cancelled->load() || !gate->start() ||
+                        generation != gNativePluginRuntimeGeneration.load())
                     {
                         return;
                     }
@@ -2223,6 +2243,7 @@ static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void
                     {
                         failure = exception.reason ?: @"Native operation failed";
                     }
+                    gate->finish();
 
                     executeRuntimeAsynchronously(
                         [identifier, cancelled, generation, result, failure](Runtime &completionRuntime) {
@@ -2270,6 +2291,17 @@ static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void
                         });
                 }
             });
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC),
+                           dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                if (!gate->expire()) return;
+                cancelled->store(true);
+                executeRuntimeAsynchronously([identifier, generation](Runtime &completionRuntime) {
+                    if (generation != gNativePluginRuntimeGeneration.load()) return;
+                    rejectPendingNativeInvocation(completionRuntime, identifier,
+                                                  "NATIVE_MAIN_THREAD_TIMEOUT",
+                                                  "Native operation timed out before reaching the main thread");
+                });
+            });
             return Value::undefined();
         });
 
@@ -2282,21 +2314,8 @@ static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void
             {
                 return Value::undefined();
             }
-            Object pending = rt.global().getPropertyAsObject(rt,
-                                                               "__NativePluginPendingInvocations");
-            Value pairValue = pending.getProperty(rt, identifier.c_str());
-            if (pairValue.isObject())
-            {
-                pending.deleteProperty(rt, identifier.c_str());
-                Object pair = pairValue.asObject(rt);
-                Function errorConstructor = rt.global().getPropertyAsFunction(rt, "Error");
-                Object error = errorConstructor.callAsConstructor(
-                    rt, String::createFromUtf8(rt, "Native async invocation was cancelled"))
-                                   .asObject(rt);
-                error.setProperty(rt, "code",
-                                  String::createFromUtf8(rt, "NATIVE_PLUGIN_SCOPE_DISPOSED"));
-                pair.getPropertyAsFunction(rt, "reject").call(rt, std::move(error));
-            }
+            rejectPendingNativeInvocation(rt, identifier, "NATIVE_PLUGIN_SCOPE_DISPOSED",
+                                          "Native async invocation was cancelled");
             return Value::undefined();
         });
     promise.setProperty(runtime, "cancel", std::move(cancel));
@@ -2803,6 +2822,7 @@ static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arg
     uint64_t generation = gNativePluginRuntimeGeneration.load();
     std::string identifier = std::to_string(gNextInvocationIdentifier.fetch_add(1));
     auto cancelled = std::make_shared<std::atomic_bool>(false);
+    auto gate = std::make_shared<loader::NativeOperationGate>();
     Object global = runtime.global();
     Value pendingValue = global.getProperty(runtime, "__NativePluginPendingInvocations");
     Object pending = pendingValue.isObject() ? pendingValue.asObject(runtime) : Object(runtime);
@@ -2813,7 +2833,7 @@ static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arg
 
     Function executor = Function::createFromHostFunction(
         runtime, PropNameID::forUtf8(runtime, "nativeInvokeExecutor"), 2,
-        [invocation, identifier, cancelled, generation](Runtime &rt, const Value &,
+        [invocation, identifier, cancelled, gate, generation](Runtime &rt, const Value &,
                                                         const Value *callbacks, size_t count) -> Value {
             if (count < 2 || !callbacks[0].isObject() || !callbacks[1].isObject())
             {
@@ -2828,7 +2848,8 @@ static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arg
             dispatch_async(dispatch_get_main_queue(), ^{
                 @autoreleasepool
                 {
-                    if (cancelled->load() || generation != gNativePluginRuntimeGeneration.load())
+                    if (cancelled->load() || !gate->start() ||
+                        generation != gNativePluginRuntimeGeneration.load())
                     {
                         return;
                     }
@@ -2849,6 +2870,7 @@ static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arg
                     {
                         failure = exception.reason ?: @"Objective-C invocation failed";
                     }
+                    gate->finish();
 
                     executeRuntimeAsynchronously(
                         [invocation, identifier, cancelled, generation, retainedResult,
@@ -2911,6 +2933,17 @@ static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arg
                         });
                 }
             });
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC),
+                           dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                if (!gate->expire()) return;
+                cancelled->store(true);
+                executeRuntimeAsynchronously([identifier, generation](Runtime &completionRuntime) {
+                    if (generation != gNativePluginRuntimeGeneration.load()) return;
+                    rejectPendingNativeInvocation(completionRuntime, identifier,
+                                                  "NATIVE_MAIN_THREAD_TIMEOUT",
+                                                  "Native operation timed out before reaching the main thread");
+                });
+            });
             return Value::undefined();
         });
 
@@ -2923,21 +2956,8 @@ static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arg
             {
                 return Value::undefined();
             }
-            Object pending = rt.global().getPropertyAsObject(rt,
-                                                               "__NativePluginPendingInvocations");
-            Value pairValue = pending.getProperty(rt, identifier.c_str());
-            if (pairValue.isObject())
-            {
-                pending.deleteProperty(rt, identifier.c_str());
-                Object pair = pairValue.asObject(rt);
-                Function errorConstructor = rt.global().getPropertyAsFunction(rt, "Error");
-                Object error = errorConstructor.callAsConstructor(
-                    rt, String::createFromUtf8(rt, "Native async invocation was cancelled"))
-                                   .asObject(rt);
-                error.setProperty(rt, "code",
-                                  String::createFromUtf8(rt, "NATIVE_PLUGIN_SCOPE_DISPOSED"));
-                pair.getPropertyAsFunction(rt, "reject").call(rt, std::move(error));
-            }
+            rejectPendingNativeInvocation(rt, identifier, "NATIVE_PLUGIN_SCOPE_DISPOSED",
+                                          "Native async invocation was cancelled");
             return Value::undefined();
         });
     promise.setProperty(runtime, "cancel", std::move(cancel));
