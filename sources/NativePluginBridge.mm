@@ -1615,123 +1615,19 @@ static Value structValue(Runtime &runtime, NSString *name, const Value &fields)
 
 static Value returnValue(Runtime &runtime, NSInvocation *invocation, NSMethodSignature *signature)
 {
-    const char *type = signature.methodReturnType;
-    char code = normalizedType(type);
+    std::string name = nativeFFITypeName(signature.methodReturnType);
+    if (name.empty()) throw JSError(runtime, "Unsupported native return type");
+    if (name == "void") return Value::undefined();
+
     NSUInteger length = signature.methodReturnLength;
-
-    if (code == 'v' || length == 0)
+    if (length == 0 || length > 4096)
     {
-        return Value::undefined();
+        throw JSError(runtime, "Native return value has an invalid size");
     }
 
-    if (code == '@' || code == '#')
-    {
-        __unsafe_unretained id object = nil;
-        [invocation getReturnValue:&object];
-        return objcResult(runtime, object);
-    }
-
-    if (code == ':')
-    {
-        SEL selector = nullptr;
-        [invocation getReturnValue:&selector];
-        return selector ? Value(String::createFromUtf8(runtime, sel_getName(selector))) : Value::null();
-    }
-
-    if (code == '^' || code == '*')
-    {
-        void *pointer = nullptr;
-        [invocation getReturnValue:&pointer];
-        return pointerResult(runtime, pointer);
-    }
-
-    if (code == 'B')
-    {
-        bool value = false;
-        [invocation getReturnValue:&value];
-        return Value(value);
-    }
-
-    if (code == 'c')
-    {
-        int8_t value = 0;
-        [invocation getReturnValue:&value];
-        return Value((double) value);
-    }
-
-    if (code == 'C')
-    {
-        uint8_t value = 0;
-        [invocation getReturnValue:&value];
-        return Value((double) value);
-    }
-
-    if (code == 's')
-    {
-        int16_t value = 0;
-        [invocation getReturnValue:&value];
-        return Value((double) value);
-    }
-
-    if (code == 'S')
-    {
-        uint16_t value = 0;
-        [invocation getReturnValue:&value];
-        return Value((double) value);
-    }
-
-    if (code == 'i')
-    {
-        int32_t value = 0;
-        [invocation getReturnValue:&value];
-        return Value((double) value);
-    }
-
-    if (code == 'I')
-    {
-        uint32_t value = 0;
-        [invocation getReturnValue:&value];
-        return Value((double) value);
-    }
-
-    if (code == 'l' || code == 'q')
-    {
-        int64_t value = 0;
-        [invocation getReturnValue:&value];
-        return Value(runtime, BigInt::fromInt64(runtime, (int64_t) value));
-    }
-
-    if (code == 'L' || code == 'Q')
-    {
-        uint64_t value = 0;
-        [invocation getReturnValue:&value];
-        return Value(runtime, BigInt::fromUint64(runtime, (uint64_t) value));
-    }
-
-    if (code == 'f')
-    {
-        float value = 0;
-        [invocation getReturnValue:&value];
-        return Value((double) value);
-    }
-
-    if (code == 'd')
-    {
-        double value = 0;
-        [invocation getReturnValue:&value];
-        return Value(value);
-    }
-
-    if (code == '{')
-    {
-        std::vector<uint8_t> bytes(length);
-        [invocation getReturnValue:bytes.data()];
-        NSString *typeName = [NSString stringWithUTF8String:type] ?: @"";
-        NSValue *value = [NSValue value:bytes.data() withObjCType:type];
-        return structResult(runtime, typeName, value);
-    }
-
-    throw JSError(runtime, "Unsupported native return type");
+    std::vector<uint8_t> bytes(length);
+    [invocation getReturnValue:bytes.data()];
+    return ffiResult(runtime, ffiType(runtime, name), bytes);
 }
 
 static void validateNativeScalarArgument(id value, const std::string &type)
@@ -4376,6 +4272,18 @@ static void clearHookReturnCache(const std::shared_ptr<HookState> &state)
     [state->returnCache removeAllObjects];
 }
 
+template <typename T>
+static T readFFIResult(Runtime &runtime, const std::vector<uint8_t> &bytes)
+{
+    if (bytes.size() < sizeof(T))
+    {
+        throw JSError(runtime, "Native result buffer is too small");
+    }
+    T value{};
+    memcpy(&value, bytes.data(), sizeof(value));
+    return value;
+}
+
 static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vector<uint8_t> &bytes)
 {
     if (spec.name == "void")
@@ -4384,68 +4292,70 @@ static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vec
     }
     if (spec.name == "bool")
     {
-        return Value(bytes[0] != 0);
+        return Value(readFFIResult<uint8_t>(runtime, bytes) != 0);
     }
     if (spec.name == "i8")
     {
-        return Value((double) *(const int8_t *) bytes.data());
+        return Value((double) readFFIResult<int8_t>(runtime, bytes));
     }
     if (spec.name == "u8")
     {
-        return Value((double) bytes[0]);
+        return Value((double) readFFIResult<uint8_t>(runtime, bytes));
     }
     if (spec.name == "i16")
     {
-        return Value((double) *(const int16_t *) bytes.data());
+        return Value((double) readFFIResult<int16_t>(runtime, bytes));
     }
     if (spec.name == "u16")
     {
-        return Value((double) *(const uint16_t *) bytes.data());
+        return Value((double) readFFIResult<uint16_t>(runtime, bytes));
     }
     if (spec.name == "i32")
     {
-        return Value((double) *(const int32_t *) bytes.data());
+        return Value((double) readFFIResult<int32_t>(runtime, bytes));
     }
     if (spec.name == "u32")
     {
-        return Value((double) *(const uint32_t *) bytes.data());
+        return Value((double) readFFIResult<uint32_t>(runtime, bytes));
     }
     if (spec.name == "i64")
     {
-        return Value(runtime, BigInt::fromInt64(runtime, *(const int64_t *) bytes.data()));
+        return Value(runtime, BigInt::fromInt64(runtime, readFFIResult<int64_t>(runtime, bytes)));
     }
     if (spec.name == "u64")
     {
-        return Value(runtime, BigInt::fromUint64(runtime, *(const uint64_t *) bytes.data()));
+        return Value(runtime, BigInt::fromUint64(runtime, readFFIResult<uint64_t>(runtime, bytes)));
     }
     if (spec.name == "float")
     {
-        return Value((double) *(const float *) bytes.data());
+        return Value((double) readFFIResult<float>(runtime, bytes));
     }
     if (spec.name == "double")
     {
-        return Value(*(const double *) bytes.data());
+        return Value(readFFIResult<double>(runtime, bytes));
     }
     if (spec.name == "cstring")
     {
-        const char *string = *(const char *const *) bytes.data();
+        const char *string = readFFIResult<const char *>(runtime, bytes);
         return string ? String::createFromUtf8(runtime, string) : Value::null();
     }
     if (spec.name == "object" || spec.name == "class")
     {
+        if (bytes.size() < sizeof(id)) throw JSError(runtime, "Native result buffer is too small");
         __unsafe_unretained id object = nil;
         memcpy(&object, bytes.data(), sizeof(object));
         return objcResult(runtime, object);
     }
     if (spec.name == "selector")
     {
+        if (bytes.size() < sizeof(SEL)) throw JSError(runtime, "Native result buffer is too small");
         SEL selector = NULL;
         memcpy(&selector, bytes.data(), sizeof(selector));
         return selector ? String::createFromUtf8(runtime, sel_getName(selector)) : Value::null();
     }
     if (spec.name == "pointer")
     {
-        return pointerResult(runtime, *(void *const *) bytes.data());
+        return pointerResult(runtime, readFFIResult<void *>(runtime, bytes));
     }
     if (spec.name.rfind("struct:", 0) == 0)
     {
@@ -4455,6 +4365,9 @@ static Value ffiResult(Runtime &runtime, const FFITypeSpec &spec, const std::vec
         {
             throw JSError(runtime, "Native FFI struct result is not registered");
         }
+        NSUInteger size = 0;
+        NSGetSizeAndAlignment(encoding, &size, nullptr);
+        if (bytes.size() < size) throw JSError(runtime, "Native result buffer is too small");
         NSValue *value = [NSValue value:bytes.data() withObjCType:encoding];
         return structResult(runtime, [NSString stringWithUTF8String:name.c_str()] ?: @"", value);
     }

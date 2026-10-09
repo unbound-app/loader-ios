@@ -10,6 +10,8 @@ int main()
     assert(normalizedType("rnNoORV@") == '@');
     assert(nativeFFITypeName("v") == "void");
     assert(nativeFFITypeName("r@") == "object");
+    assert(nativeFFITypeName("@\"NSString\"") == "object");
+    assert(nativeFFITypeName("r@\"<NSCopying>\"") == "object");
     assert(nativeFFITypeName("#") == "class");
     assert(nativeFFITypeName(":") == "selector");
     assert(nativeFFITypeName("^v") == "pointer");
@@ -23,6 +25,8 @@ int main()
     assert(nativeFFITypeName("i24").empty());
     assert(nativeFFITypeName("dgarbage").empty());
     assert(nativeFFITypeName("@?").empty());
+    assert(nativeFFITypeName("@\"\"").empty());
+    assert(nativeFFITypeName("@\"NSString\"trailing").empty());
     assert(nativeFFITypeName("{CGRect=dddd}").empty());
     assert(nativeFFITypeName("{CGRect={CGPoint=dd}{CGSize=ff}}").empty());
     assert(nativeFFITypeName("{CGRect={CGPoint=dd}{CGSize=dd}}extra").empty());

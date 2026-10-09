@@ -29,7 +29,14 @@ std::string nativeFFITypeName(const char *encoding)
     switch (*type)
     {
         case 'v': return value == "v" ? "void" : "";
-        case '@': return value == "@" ? "object" : "";
+        case '@':
+            if (value == "@") return "object";
+            if (value.size() > 3 && value[1] == '"' && value.back() == '"' &&
+                value.find('"', 2) == value.size() - 1)
+            {
+                return "object";
+            }
+            return {};
         case '#': return value == "#" ? "class" : "";
         case ':': return value == ":" ? "selector" : "";
         case '^': return value.size() > 1 ? "pointer" : "";
