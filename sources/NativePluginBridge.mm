@@ -5,6 +5,7 @@
 #import <mach-o/loader.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <os/signpost.h>
 #import <ptrauth.h>
 #import <substrate.h>
 #import <UIKit/UIKit.h>
@@ -344,6 +345,35 @@ static std::atomic_uint64_t gNativePluginRuntimeGeneration{0};
 static std::atomic_uint gMainThreadRuntimeWaits{0};
 static std::mutex gFabricSurfaceMutex;
 static std::unordered_map<FabricSurfaceHost *, std::shared_ptr<FabricSurfaceHost>> gFabricSurfaces;
+
+static os_log_t nativePerformanceLog()
+{
+    static os_log_t log = os_log_create("app.unbound", "NativePluginPerformance");
+    return log;
+}
+
+class NativeOperationSignpost
+{
+public:
+    explicit NativeOperationSignpost(const char *operation)
+        : log_(nativePerformanceLog()), enabled_(os_signpost_enabled(log_))
+    {
+        if (!enabled_) return;
+        identifier_ = os_signpost_id_generate(log_);
+        os_signpost_interval_begin(log_, identifier_, "Native Operation",
+                                   "operation=%{public}s", operation);
+    }
+
+    ~NativeOperationSignpost()
+    {
+        if (enabled_) os_signpost_interval_end(log_, identifier_, "Native Operation");
+    }
+
+private:
+    os_log_t log_;
+    os_signpost_id_t identifier_ = OS_SIGNPOST_ID_INVALID;
+    bool enabled_;
+};
 
 static FFITypeSpec ffiType(Runtime &runtime, const std::string &name);
 static ffi_cif prepareFFICif(Runtime &runtime, const FFITypeSpec &result,
@@ -924,6 +954,7 @@ static id valueToObjC(Runtime &runtime, const Value &value)
 
 static void executeMainSynchronously(std::function<void(void)> callback)
 {
+    NativeOperationSignpost signpost("main thread crossing");
     if ([NSThread isMainThread])
     {
         callback();
@@ -1077,6 +1108,7 @@ static void fabricMountNative(id host, UIView *containerView, NSString *moduleNa
                               const std::shared_ptr<FabricSurfaceHost> &surfaceHost,
                               uint64_t generation)
 {
+    NativeOperationSignpost signpost("fabric mount");
     if (generation != gNativePluginRuntimeGeneration.load())
     {
         throw std::runtime_error("Fabric runtime was replaced before mounting");
@@ -4017,6 +4049,7 @@ static Object hookContext(Runtime &runtime, const std::shared_ptr<HookInvocation
 
 static bool executeRuntimeSynchronously(std::function<void(Runtime &)> callback)
 {
+    NativeOperationSignpost signpost("runtime callback");
     id instance = gRuntimeExecutorInstance;
     if (!instance)
     {
@@ -4520,7 +4553,7 @@ static std::shared_ptr<HookDispatcher> findHookDispatcher(id object, SEL selecto
 
 struct HookCallGuard {
     explicit HookCallGuard(std::shared_ptr<HookDispatcher> dispatcher)
-        : dispatcher(std::move(dispatcher))
+        : dispatcher(std::move(dispatcher)), signpost("hook dispatch")
     {
     }
 
@@ -4530,6 +4563,7 @@ struct HookCallGuard {
     }
 
     std::shared_ptr<HookDispatcher> dispatcher;
+    NativeOperationSignpost signpost;
 };
 
 static void logHookFailure(const std::exception &exception)
