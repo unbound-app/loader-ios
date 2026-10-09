@@ -309,7 +309,7 @@ struct HookState {
     __strong id instanceTarget = nil;
     std::mutex returnCacheMutex;
     __strong NSMutableDictionary<NSArray *, NSData *> *returnCache = [NSMutableDictionary dictionary];
-    __strong NSMutableDictionary<NSArray *, NSNumber *> *sizeHeightDeltas = [NSMutableDictionary dictionary];
+    __strong NSMutableDictionary<NSArray *, NSNumber *> *sizeHeightFloors = [NSMutableDictionary dictionary];
     bool cacheOnly = false;
     bool once = false;
     std::atomic_bool active{true};
@@ -409,9 +409,9 @@ static void setHookReturnCache(Runtime &runtime, const std::shared_ptr<HookState
 static void removeHookReturnCache(Runtime &runtime, const std::shared_ptr<HookState> &state,
                                   const Value *args, size_t count);
 static void clearHookReturnCache(const std::shared_ptr<HookState> &state);
-static void setHookSizeHeightDelta(Runtime &runtime, const std::shared_ptr<HookState> &state,
+static void setHookSizeHeightFloor(Runtime &runtime, const std::shared_ptr<HookState> &state,
                                    const Value *args, size_t count);
-static void removeHookSizeHeightDelta(Runtime &runtime, const std::shared_ptr<HookState> &state,
+static void removeHookSizeHeightFloor(Runtime &runtime, const std::shared_ptr<HookState> &state,
                                       const Value *args, size_t count);
 
 static void attachNativeErrorCode(Runtime &runtime, const JSError &error)
@@ -3198,23 +3198,23 @@ Value HookTokenHost::get(Runtime &runtime, const PropNameID &name)
                 return Value::undefined();
             });
     }
-    if (property == "setSizeHeightDelta")
+    if (property == "setSizeHeightFloor")
     {
         std::shared_ptr<HookState> state = state_;
         return Function::createFromHostFunction(
-            runtime, PropNameID::forUtf8(runtime, "setSizeHeightDelta"), 3,
+            runtime, PropNameID::forUtf8(runtime, "setSizeHeightFloor"), 3,
             [state](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
-                setHookSizeHeightDelta(rt, state, args, count);
+                setHookSizeHeightFloor(rt, state, args, count);
                 return Value::undefined();
             });
     }
-    if (property == "removeSizeHeightDelta")
+    if (property == "removeSizeHeightFloor")
     {
         std::shared_ptr<HookState> state = state_;
         return Function::createFromHostFunction(
-            runtime, PropNameID::forUtf8(runtime, "removeSizeHeightDelta"), 2,
+            runtime, PropNameID::forUtf8(runtime, "removeSizeHeightFloor"), 2,
             [state](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
-                removeHookSizeHeightDelta(rt, state, args, count);
+                removeHookSizeHeightFloor(rt, state, args, count);
                 return Value::undefined();
             });
     }
@@ -4295,50 +4295,50 @@ static void clearHookReturnCache(const std::shared_ptr<HookState> &state)
     }
     std::lock_guard<std::mutex> lock(state->returnCacheMutex);
     [state->returnCache removeAllObjects];
-    [state->sizeHeightDeltas removeAllObjects];
+    [state->sizeHeightFloors removeAllObjects];
 }
 
-static void setHookSizeHeightDelta(Runtime &runtime, const std::shared_ptr<HookState> &state,
+static void setHookSizeHeightFloor(Runtime &runtime, const std::shared_ptr<HookState> &state,
                                    const Value *args, size_t count)
 {
     if (!state || !state->cacheOnly || count < 3 || !args[2].isNumber())
     {
-        throw JSError(runtime, "Native hook size delta requires a number");
+        throw JSError(runtime, "Native hook size floor requires a number");
     }
 
     std::shared_ptr<HookDispatcher> dispatcher = state->dispatcher.lock();
     if (!dispatcher || dispatcher->signature->result.name != "struct:CGSize")
     {
-        throw JSError(runtime, "Native hook size delta requires a CGSize return type");
+        throw JSError(runtime, "Native hook size floor requires a CGSize return type");
     }
 
-    double delta = args[2].getNumber();
-    if (!std::isfinite(delta) || delta < 0 || delta > 4096)
+    double floor = args[2].getNumber();
+    if (!std::isfinite(floor) || floor < 0 || floor > 4096)
     {
-        throw JSError(runtime, "Native hook size delta is outside the supported range");
+        throw JSError(runtime, "Native hook size floor is outside the supported range");
     }
 
     NSArray *key = hookReturnCacheKey(runtime, state, args, count);
     std::lock_guard<std::mutex> lock(state->returnCacheMutex);
-    if (delta == 0)
+    if (floor == 0)
     {
-        [state->sizeHeightDeltas removeObjectForKey:key];
+        [state->sizeHeightFloors removeObjectForKey:key];
     }
     else
     {
-        state->sizeHeightDeltas[key] = @(delta);
+        state->sizeHeightFloors[key] = @(floor);
     }
 }
 
-static void removeHookSizeHeightDelta(Runtime &runtime, const std::shared_ptr<HookState> &state,
+static void removeHookSizeHeightFloor(Runtime &runtime, const std::shared_ptr<HookState> &state,
                                       const Value *args, size_t count)
 {
     NSArray *key = hookReturnCacheKey(runtime, state, args, count);
     std::lock_guard<std::mutex> lock(state->returnCacheMutex);
-    [state->sizeHeightDeltas removeObjectForKey:key];
+    [state->sizeHeightFloors removeObjectForKey:key];
 }
 
-static void applyHookSizeHeightDeltas(const std::shared_ptr<HookDispatcher> &dispatcher,
+static void applyHookSizeHeightFloors(const std::shared_ptr<HookDispatcher> &dispatcher,
                                       const std::vector<std::shared_ptr<HookState>> &hooks,
                                       void **arguments, void *returnValue)
 {
@@ -4363,10 +4363,10 @@ static void applyHookSizeHeightDeltas(const std::shared_ptr<HookDispatcher> &dis
             continue;
         }
 
-        NSNumber *deltaValue = nil;
+        NSNumber *floorValue = nil;
         {
             std::lock_guard<std::mutex> lock(state->returnCacheMutex);
-            if (state->sizeHeightDeltas.count == 0)
+            if (state->sizeHeightFloors.count == 0)
             {
                 continue;
             }
@@ -4376,19 +4376,15 @@ static void applyHookSizeHeightDeltas(const std::shared_ptr<HookDispatcher> &dis
             }
             if (key)
             {
-                deltaValue = state->sizeHeightDeltas[key];
+                floorValue = state->sizeHeightFloors[key];
             }
         }
-        if (!deltaValue)
+        if (!floorValue)
         {
             continue;
         }
 
-        double height = size.height + deltaValue.doubleValue;
-        if (std::isfinite(height) && height <= 100000)
-        {
-            size.height = height;
-        }
+        size.height = std::max(size.height, floorValue.doubleValue);
     }
 
     memcpy(returnValue, &size, sizeof(size));
@@ -4679,7 +4675,7 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         {
             invokeHookOriginal(dispatcher, arguments, returnValue);
         }
-        applyHookSizeHeightDeltas(dispatcher, hooks, arguments, returnValue);
+        applyHookSizeHeightFloors(dispatcher, hooks, arguments, returnValue);
         for (const std::shared_ptr<HookState> &state : onceHooks)
         {
             removeHook(state);
@@ -4784,7 +4780,7 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         copyHookResult(invocation, returnValue);
     }
 
-    applyHookSizeHeightDeltas(dispatcher, hooks, arguments, returnValue);
+    applyHookSizeHeightFloors(dispatcher, hooks, arguments, returnValue);
 
     for (const std::shared_ptr<HookState> &state : hooks)
     {
