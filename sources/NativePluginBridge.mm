@@ -4958,6 +4958,28 @@ static int8_t dispatchBooleanHook(id object, SEL selector)
     }
 }
 
+static id dispatchObjectHook(id object, SEL selector)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector};
+        void *returnValue = nullptr;
+        dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
+        return (__bridge id) returnValue;
+    }
+}
+
+static Class dispatchClassHook(id object, SEL selector)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector};
+        void *returnValue = nullptr;
+        dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
+        return (__bridge Class) returnValue;
+    }
+}
+
 static id dispatchObjectObjectHook(id object, SEL selector, id value)
 {
     @autoreleasepool
@@ -5004,6 +5026,16 @@ static void dispatchVoidObjectObjectHook(id object, SEL selector, id first, id s
 
 static void *fallbackHookCode(const HookSignature &signature)
 {
+    if (signature.result.name == "object" && signature.arguments.size() == 2)
+    {
+        return reinterpret_cast<void *>(dispatchObjectHook);
+    }
+
+    if (signature.result.name == "class" && signature.arguments.size() == 2)
+    {
+        return reinterpret_cast<void *>(dispatchClassHook);
+    }
+
     if ((signature.result.name == "bool" || signature.result.name == "i8") &&
         signature.arguments.size() == 2)
     {
