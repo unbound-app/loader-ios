@@ -23,10 +23,6 @@ on:
         default: true
         description: "Create a GitHub release"
         type: boolean
-      add_extensions:
-        default: true
-        description: "Include extensions (OpenInDiscord & ShareToDiscord)"
-        type: boolean
       only_app_repo:
         default: false
         description: "Build and deploy app-repo"
@@ -52,9 +48,6 @@ on:
       dkrypt_base_url:
         default: "https://ipa.dylib.dev"
         type: string
-      add_extensions:
-        default: true
-        type: boolean
       caller_workflow:
         type: string
     outputs:
@@ -293,9 +286,8 @@ jobs:
       - name: build IPA
         env:
           BUILD_CHANNEL: ${{ needs.resolve-source-ipa.outputs.channel }}
-          BUILD_EXTENSIONS: ${{ inputs.add_extensions == true && 'include' || 'exclude' }}
         run: |
-          go run ./tools build ipa --ipa discord.ipa --deb "$(find . -maxdepth 1 -name '*.deb' -print -quit)" --channel "$BUILD_CHANNEL" --extensions "$BUILD_EXTENSIONS" --output "${APP_NAME}.ipa" --non-interactive
+          go run ./tools build ipa --ipa discord.ipa --deb "$(find . -maxdepth 1 -name '*.deb' -print -quit)" --channel "$BUILD_CHANNEL" --extensions include --output "${APP_NAME}.ipa" --non-interactive
 
       - name: upload ipa as artifact
         id: upload-ipa
