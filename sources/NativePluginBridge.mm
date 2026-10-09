@@ -309,6 +309,7 @@ struct HookState {
     __strong id instanceTarget = nil;
     std::mutex returnCacheMutex;
     __strong NSMutableDictionary<NSArray *, NSData *> *returnCache = [NSMutableDictionary dictionary];
+    __strong NSMutableDictionary<NSArray *, NSNumber *> *sizeHeightDeltas = [NSMutableDictionary dictionary];
     bool cacheOnly = false;
     bool once = false;
     std::atomic_bool active{true};
@@ -408,6 +409,10 @@ static void setHookReturnCache(Runtime &runtime, const std::shared_ptr<HookState
 static void removeHookReturnCache(Runtime &runtime, const std::shared_ptr<HookState> &state,
                                   const Value *args, size_t count);
 static void clearHookReturnCache(const std::shared_ptr<HookState> &state);
+static void setHookSizeHeightDelta(Runtime &runtime, const std::shared_ptr<HookState> &state,
+                                   const Value *args, size_t count);
+static void removeHookSizeHeightDelta(Runtime &runtime, const std::shared_ptr<HookState> &state,
+                                      const Value *args, size_t count);
 
 static void attachNativeErrorCode(Runtime &runtime, const JSError &error)
 {
@@ -3193,6 +3198,26 @@ Value HookTokenHost::get(Runtime &runtime, const PropNameID &name)
                 return Value::undefined();
             });
     }
+    if (property == "setSizeHeightDelta")
+    {
+        std::shared_ptr<HookState> state = state_;
+        return Function::createFromHostFunction(
+            runtime, PropNameID::forUtf8(runtime, "setSizeHeightDelta"), 3,
+            [state](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+                setHookSizeHeightDelta(rt, state, args, count);
+                return Value::undefined();
+            });
+    }
+    if (property == "removeSizeHeightDelta")
+    {
+        std::shared_ptr<HookState> state = state_;
+        return Function::createFromHostFunction(
+            runtime, PropNameID::forUtf8(runtime, "removeSizeHeightDelta"), 2,
+            [state](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+                removeHookSizeHeightDelta(rt, state, args, count);
+                return Value::undefined();
+            });
+    }
     return Value::undefined();
 }
 
@@ -4270,6 +4295,103 @@ static void clearHookReturnCache(const std::shared_ptr<HookState> &state)
     }
     std::lock_guard<std::mutex> lock(state->returnCacheMutex);
     [state->returnCache removeAllObjects];
+    [state->sizeHeightDeltas removeAllObjects];
+}
+
+static void setHookSizeHeightDelta(Runtime &runtime, const std::shared_ptr<HookState> &state,
+                                   const Value *args, size_t count)
+{
+    if (!state || !state->cacheOnly || count < 3 || !args[2].isNumber())
+    {
+        throw JSError(runtime, "Native hook size delta requires a number");
+    }
+
+    std::shared_ptr<HookDispatcher> dispatcher = state->dispatcher.lock();
+    if (!dispatcher || dispatcher->signature->result.name != "struct:CGSize")
+    {
+        throw JSError(runtime, "Native hook size delta requires a CGSize return type");
+    }
+
+    double delta = args[2].getNumber();
+    if (!std::isfinite(delta) || delta < 0 || delta > 4096)
+    {
+        throw JSError(runtime, "Native hook size delta is outside the supported range");
+    }
+
+    NSArray *key = hookReturnCacheKey(runtime, state, args, count);
+    std::lock_guard<std::mutex> lock(state->returnCacheMutex);
+    if (delta == 0)
+    {
+        [state->sizeHeightDeltas removeObjectForKey:key];
+    }
+    else
+    {
+        state->sizeHeightDeltas[key] = @(delta);
+    }
+}
+
+static void removeHookSizeHeightDelta(Runtime &runtime, const std::shared_ptr<HookState> &state,
+                                      const Value *args, size_t count)
+{
+    NSArray *key = hookReturnCacheKey(runtime, state, args, count);
+    std::lock_guard<std::mutex> lock(state->returnCacheMutex);
+    [state->sizeHeightDeltas removeObjectForKey:key];
+}
+
+static void applyHookSizeHeightDeltas(const std::shared_ptr<HookDispatcher> &dispatcher,
+                                      const std::vector<std::shared_ptr<HookState>> &hooks,
+                                      void **arguments, void *returnValue)
+{
+    if (!returnValue || dispatcher->signature->result.name != "struct:CGSize" ||
+        dispatcher->signature->result.type->size < sizeof(CGSize))
+    {
+        return;
+    }
+
+    NSArray *key = nil;
+    CGSize size{};
+    memcpy(&size, returnValue, sizeof(size));
+    if (!std::isfinite(size.height) || size.height < 0)
+    {
+        return;
+    }
+
+    for (const std::shared_ptr<HookState> &state : hooks)
+    {
+        if (!state->active || !state->cacheOnly)
+        {
+            continue;
+        }
+
+        NSNumber *deltaValue = nil;
+        {
+            std::lock_guard<std::mutex> lock(state->returnCacheMutex);
+            if (state->sizeHeightDeltas.count == 0)
+            {
+                continue;
+            }
+            if (!key)
+            {
+                key = hookReturnCacheKey(dispatcher, arguments);
+            }
+            if (key)
+            {
+                deltaValue = state->sizeHeightDeltas[key];
+            }
+        }
+        if (!deltaValue)
+        {
+            continue;
+        }
+
+        double height = size.height + deltaValue.doubleValue;
+        if (std::isfinite(height) && height <= 100000)
+        {
+            size.height = height;
+        }
+    }
+
+    memcpy(returnValue, &size, sizeof(size));
 }
 
 template <typename T>
@@ -4557,6 +4679,7 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         {
             invokeHookOriginal(dispatcher, arguments, returnValue);
         }
+        applyHookSizeHeightDeltas(dispatcher, hooks, arguments, returnValue);
         for (const std::shared_ptr<HookState> &state : onceHooks)
         {
             removeHook(state);
@@ -4660,6 +4783,8 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
         invokeHookOriginal(dispatcher, arguments, returnValue);
         copyHookResult(invocation, returnValue);
     }
+
+    applyHookSizeHeightDeltas(dispatcher, hooks, arguments, returnValue);
 
     for (const std::shared_ptr<HookState> &state : hooks)
     {
