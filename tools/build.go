@@ -480,13 +480,32 @@ func provisionSimforge(root string, runner commandRunner) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(cache), 0o755); err != nil {
 		return "", err
 	}
-	if err := runner(root, "git", []string{"clone", simforgeRepository, cache}, os.Environ(), os.Stdout, os.Stderr); err != nil {
+	if _, err := os.Stat(cache); errors.Is(err, os.ErrNotExist) {
+		if err := runner(root, "git", []string{"clone", simforgeRepository, cache}, os.Environ(), os.Stdout, os.Stderr); err != nil {
+			return "", err
+		}
+		if err := runner(cache, "git", []string{"checkout", "--detach", simforgeCommit}, os.Environ(), os.Stdout, os.Stderr); err != nil {
+			return "", err
+		}
+	} else if err != nil {
 		return "", err
+	} else {
+		revision, err := gitOutput(cache, runner, "rev-parse", "HEAD")
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(revision) != simforgeCommit {
+			return "", fmt.Errorf("simforge cache is not at pinned commit: %s", cache)
+		}
+		status, err := gitOutput(cache, runner, "status", "--porcelain", "--untracked-files=no")
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(status) != "" {
+			return "", fmt.Errorf("simforge cache has tracked changes: %s", cache)
+		}
 	}
-	if err := runner(cache, "git", []string{"checkout", "--detach", simforgeCommit}, os.Environ(), os.Stdout, os.Stderr); err != nil {
-		return "", err
-	}
-	if err := runner(cache, "xcodebuild", []string{"-project", "simforge.xcodeproj", "-scheme", "simforge", "-configuration", "Release", "-derivedDataPath", derivedData, "build"}, os.Environ(), os.Stdout, os.Stderr); err != nil {
+	if err := runner(cache, "xcodebuild", []string{"-project", "simforge.xcodeproj", "-scheme", "simforge", "-configuration", "Release", "-derivedDataPath", derivedData, "MACOSX_DEPLOYMENT_TARGET=12.0", "build"}, os.Environ(), os.Stdout, os.Stderr); err != nil {
 		return "", err
 	}
 	if !executableExists(product) {
