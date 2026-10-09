@@ -287,6 +287,12 @@ struct HookSignature {
 struct HookState;
 struct HookDispatcher;
 
+struct HookCallbacks {
+    std::shared_ptr<Function> before;
+    std::shared_ptr<Function> after;
+    std::shared_ptr<Function> replace;
+};
+
 struct HookDispatcher {
     Class cls;
     SEL selector;
@@ -302,9 +308,10 @@ struct HookDispatcher {
 struct HookState {
     uint64_t identifier;
     uint64_t runtimeGeneration;
-    std::shared_ptr<Function> before;
-    std::shared_ptr<Function> after;
-    std::shared_ptr<Function> replace;
+    std::weak_ptr<HookCallbacks> callbacks;
+    bool hasBefore = false;
+    bool hasAfter = false;
+    bool hasReplace = false;
     std::weak_ptr<HookDispatcher> dispatcher;
     __strong id instanceTarget = nil;
     std::mutex returnCacheMutex;
@@ -319,7 +326,8 @@ struct HookState {
 class HookTokenHost final : public HostObject
 {
 public:
-    explicit HookTokenHost(std::shared_ptr<HookState> state) : state_(std::move(state)) {}
+    HookTokenHost(std::shared_ptr<HookState> state, std::shared_ptr<HookCallbacks> callbacks)
+        : state_(std::move(state)), callbacks_(std::move(callbacks)) {}
 
     std::shared_ptr<HookState> state(void) const
     {
@@ -330,6 +338,7 @@ public:
 
 private:
     std::shared_ptr<HookState> state_;
+    std::shared_ptr<HookCallbacks> callbacks_;
 };
 
 static std::mutex gHookMutex;
@@ -3091,13 +3100,14 @@ static Class classFromValue(Runtime &runtime, const Value &value)
     return Nil;
 }
 
-static void removeHook(const std::shared_ptr<HookState> &state, bool preserveAfter = false)
+static void removeHook(const std::shared_ptr<HookState> &state, bool preserveAfter = false,
+                       bool restoreImplementation = true)
 {
     if (!state)
     {
         return;
     }
-    state->afterOncePending.store(preserveAfter && state->after != nullptr);
+    state->afterOncePending.store(preserveAfter && state->hasAfter);
     if (!state->active.exchange(false))
     {
         return;
@@ -3118,7 +3128,7 @@ static void removeHook(const std::shared_ptr<HookState> &state, bool preserveAft
             dispatcher->hooks.erase(iterator);
         }
 
-        if (dispatcher->hooks.empty() && !dispatcher->retired.load())
+        if (restoreImplementation && dispatcher->hooks.empty() && !dispatcher->retired.load())
         {
             Method method = class_getInstanceMethod(dispatcher->cls, dispatcher->selector);
             IMP current = method ? method_getImplementation(method) : nullptr;
@@ -3148,7 +3158,10 @@ static void invalidateRuntimeHooks(uint64_t generation)
             }
         }
     }
-    for (const auto &state : stale) removeHook(state);
+    for (const auto &state : stale)
+    {
+        removeHook(state, false, false);
+    }
 }
 
 Value HookTokenHost::get(Runtime &runtime, const PropNameID &name)
@@ -4718,13 +4731,15 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
             continue;
         }
 
-        if (state->before)
+        if (state->hasBefore)
         {
             try
             {
                 executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
+                    auto callbacks = state->callbacks.lock();
+                    if (!callbacks || !callbacks->before) return;
                     Object context = hookContext(runtime, invocation, object, selector, true);
-                    state->before->call(runtime, context);
+                    callbacks->before->call(runtime, context);
                 });
             }
             catch (const std::exception &exception)
@@ -4739,15 +4754,20 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
             originalCalled = true;
         }
 
-        if (state->replace)
+        if (state->hasReplace)
         {
             try
             {
                 std::shared_ptr<std::vector<uint8_t>> replacementResult = hookReturnBuffer(invocation);
                 bool completed = executeRuntimeSynchronously(
                     [invocation, object, selector, state, replacementResult](Runtime &runtime) {
+                        auto callbacks = state->callbacks.lock();
+                        if (!callbacks || !callbacks->replace)
+                        {
+                            throw std::runtime_error("Native hook callback expired");
+                        }
                         Object context = hookContext(runtime, invocation, object, selector, true);
-                        Value result = state->replace->call(runtime, context);
+                        Value result = callbacks->replace->call(runtime, context);
                         if (!setHookReturn(runtime, invocation->dispatcher->signature->result, result,
                                            replacementResult->data()))
                         {
@@ -4784,21 +4804,22 @@ static void dispatchFFIHookBody(ffi_cif *, void *returnValue, void **arguments, 
 
     for (const std::shared_ptr<HookState> &state : hooks)
     {
-        if (!state->active || !state->after)
+        if (!state->active || !state->hasAfter)
         {
             continue;
         }
 
-        std::shared_ptr<Function> callback = state->after;
         __strong id retainedObject = object;
-        executeRuntimeAsynchronously([invocation, retainedObject, selector, callback, state](Runtime &runtime) {
+        executeRuntimeAsynchronously([invocation, retainedObject, selector, state](Runtime &runtime) {
             bool pending = state->afterOncePending.exchange(false);
             if (!state->active.load() && !pending)
             {
                 return;
             }
+            auto callbacks = state->callbacks.lock();
+            if (!callbacks || !callbacks->after) return;
             Object context = hookContext(runtime, invocation, retainedObject, selector, false);
-            callback->call(runtime, context);
+            callbacks->after->call(runtime, context);
         });
     }
 
@@ -5124,13 +5145,15 @@ static void dispatchVoidHook(id object, SEL selector)
                 continue;
             }
 
-            if (state->before)
+            if (state->hasBefore)
             {
                 try
                 {
                     executeRuntimeSynchronously([invocation, object, selector, state](Runtime &runtime) {
+                        auto callbacks = state->callbacks.lock();
+                        if (!callbacks || !callbacks->before) return;
                         Object context = hookContext(runtime, invocation, object, selector, true);
-                        state->before->call(runtime, context);
+                        callbacks->before->call(runtime, context);
                     });
                 }
                 catch (const std::exception &exception)
@@ -5145,15 +5168,20 @@ static void dispatchVoidHook(id object, SEL selector)
                 originalCalled = true;
             }
 
-            if (state->replace)
+            if (state->hasReplace)
             {
                 try
                 {
                     std::shared_ptr<std::vector<uint8_t>> replacementResult = hookReturnBuffer(invocation);
                     bool completed = executeRuntimeSynchronously(
                         [invocation, object, selector, state, replacementResult](Runtime &runtime) {
+                            auto callbacks = state->callbacks.lock();
+                            if (!callbacks || !callbacks->replace)
+                            {
+                                throw std::runtime_error("Native hook callback expired");
+                            }
                             Object context = hookContext(runtime, invocation, object, selector, true);
-                            Value result = state->replace->call(runtime, context);
+                            Value result = callbacks->replace->call(runtime, context);
                             if (!setHookReturn(runtime, invocation->dispatcher->signature->result, result,
                                                replacementResult->data()))
                             {
@@ -5187,21 +5215,22 @@ static void dispatchVoidHook(id object, SEL selector)
 
         for (const std::shared_ptr<HookState> &state : hooks)
         {
-            if (!state->active || !state->after)
+            if (!state->active || !state->hasAfter)
             {
                 continue;
             }
 
-            std::shared_ptr<Function> callback = state->after;
             __strong id retainedObject = object;
-            executeRuntimeAsynchronously([invocation, retainedObject, selector, callback, state](Runtime &runtime) {
+            executeRuntimeAsynchronously([invocation, retainedObject, selector, state](Runtime &runtime) {
                 bool pending = state->afterOncePending.exchange(false);
                 if (!state->active.load() && !pending)
                 {
                     return;
                 }
+                auto callbacks = state->callbacks.lock();
+                if (!callbacks || !callbacks->after) return;
                 Object context = hookContext(runtime, invocation, retainedObject, selector, false);
-                callback->call(runtime, context);
+                callbacks->after->call(runtime, context);
             });
         }
 
@@ -5380,12 +5409,17 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
         }
     }
 
+    auto callbacks = std::make_shared<HookCallbacks>();
+    callbacks->before = std::move(before);
+    callbacks->after = std::move(after);
+    callbacks->replace = std::move(replace);
     auto state = std::make_shared<HookState>();
     state->identifier = gNextHookIdentifier.fetch_add(1);
     state->runtimeGeneration = gNativePluginRuntimeGeneration.load();
-    state->before = std::move(before);
-    state->after = std::move(after);
-    state->replace = std::move(replace);
+    state->callbacks = callbacks;
+    state->hasBefore = callbacks->before != nullptr;
+    state->hasAfter = callbacks->after != nullptr;
+    state->hasReplace = callbacks->replace != nullptr;
     state->cacheOnly = cacheOnly;
     state->once = once;
     state->instanceTarget = instanceTarget;
@@ -5394,7 +5428,7 @@ static Value makeHook(Runtime &runtime, const Value *args, size_t count)
         std::lock_guard<std::mutex> lock(gHookMutex);
         dispatcher->hooks.push_back(state);
     }
-    return Object::createFromHostObject(runtime, std::make_shared<HookTokenHost>(state));
+    return Object::createFromHostObject(runtime, std::make_shared<HookTokenHost>(state, callbacks));
 }
 
 static Value ffiSymbol(Runtime &runtime, const Value *args, size_t count)

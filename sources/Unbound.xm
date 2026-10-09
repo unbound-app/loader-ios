@@ -253,6 +253,12 @@ static void executeBundle(id instance,
     }
 
     [instance callFunctionOnBufferedRuntimeExecutor:[bundle, bundlePath, token, attempt](jsi::Runtime &runtime) {
+        jsi::Object global = runtime.global();
+        jsi::Value installed = global.getProperty(runtime, "__loaderBundleInstalled");
+        if (installed.isBool() && installed.getBool())
+        {
+            return;
+        }
         injectModulesPatch(runtime);
         if (!runtimeHasRequiredModules(runtime))
         {
@@ -276,6 +282,7 @@ static void executeBundle(id instance,
             [Logger error:LOG_CATEGORY_DEFAULT format:@"Bundle validation marker could not be saved."];
             return;
         }
+        global.setProperty(runtime, "__loaderBundleInstalled", jsi::Value(true));
         injectModulesPatch(runtime);
         injectPreBundle(runtime);
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
@@ -299,6 +306,7 @@ static void executeBundle(id instance,
         }
         else
         {
+            global.setProperty(runtime, "__loaderBundleInstalled", jsi::Value(false));
             [Updater rejectBundle:bundlePath];
         }
     }];
