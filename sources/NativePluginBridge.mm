@@ -2309,7 +2309,8 @@ static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void
     Object promise = constructor.callAsConstructor(runtime, std::move(executor)).asObject(runtime);
     Function cancel = Function::createFromHostFunction(
         runtime, PropNameID::forUtf8(runtime, "cancel"), 0,
-        [identifier, cancelled](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+        [identifier, cancelled, gate](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+            gate->expire();
             if (cancelled->exchange(true))
             {
                 return Value::undefined();
@@ -2951,7 +2952,8 @@ static Value invokeAsync(Runtime &runtime, id target, SEL selector, NSArray *arg
     Object promise = constructor.callAsConstructor(runtime, std::move(executor)).asObject(runtime);
     Function cancel = Function::createFromHostFunction(
         runtime, PropNameID::forUtf8(runtime, "cancel"), 0,
-        [identifier, cancelled](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+        [identifier, cancelled, gate](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+            gate->expire();
             if (cancelled->exchange(true))
             {
                 return Value::undefined();
