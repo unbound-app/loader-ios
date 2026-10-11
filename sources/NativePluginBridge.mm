@@ -2742,6 +2742,7 @@ static Value findUIViews(Runtime &runtime, const Value *args, size_t count)
     NSUInteger maxResults = 64;
     bool attachedOnly = false;
     bool stopAtMatch = false;
+    bool searchAncestors = false;
     if (count > 2 && args[2].isObject())
     {
         Object options = args[2].asObject(runtime);
@@ -2777,6 +2778,7 @@ static Value findUIViews(Runtime &runtime, const Value *args, size_t count)
         }
         Value attached = options.getProperty(runtime, "attachedOnly");
         Value stop = options.getProperty(runtime, "stopAtMatch");
+        Value direction = options.getProperty(runtime, "direction");
         if (!attached.isUndefined())
         {
             if (!attached.isBool()) throw JSError(runtime, "Native view search attachedOnly must be boolean");
@@ -2787,12 +2789,43 @@ static Value findUIViews(Runtime &runtime, const Value *args, size_t count)
             if (!stop.isBool()) throw JSError(runtime, "Native view search stopAtMatch must be boolean");
             stopAtMatch = stop.getBool();
         }
+        if (!direction.isUndefined())
+        {
+            if (!direction.isString()) throw JSError(runtime, "Native view search direction is invalid");
+            NSString *name = [JSI toNSString:direction runtime:runtime];
+            if ([name isEqualToString:@"ancestors"])
+            {
+                searchAncestors = true;
+            }
+            else if (![name isEqualToString:@"descendants"])
+            {
+                throw JSError(runtime, "Native view search direction is invalid");
+            }
+        }
     }
 
     NSMutableArray<UIView *> *found = [NSMutableArray arrayWithCapacity:maxResults];
     return executeMainAsynchronously(
         runtime,
-        [root, className, found, maxDepth, maxVisited, maxResults, attachedOnly, stopAtMatch]() {
+        [root, className, found, maxDepth, maxVisited, maxResults, attachedOnly, stopAtMatch,
+         searchAncestors]() {
+            Class expectedClass = NSClassFromString(className);
+            if (searchAncestors)
+            {
+                UIView *view = root;
+                for (NSUInteger depth = 0; view && depth <= maxDepth && depth < maxVisited;
+                     view = view.superview, depth++)
+                {
+                    bool matches = [NSStringFromClass([view class]) containsString:className] ||
+                                   (expectedClass && [view isKindOfClass:expectedClass]);
+                    if (matches && (!attachedOnly || view.window != nil))
+                    {
+                        [found addObject:view];
+                        if (found.count >= maxResults || stopAtMatch) break;
+                    }
+                }
+                return;
+            }
             NSMutableArray<NSDictionary *> *queue = [NSMutableArray arrayWithCapacity:maxVisited];
             [queue addObject:@{ @"view": root, @"depth": @(0) }];
             for (NSUInteger index = 0; index < queue.count && index < maxVisited; index++)
@@ -2800,7 +2833,8 @@ static Value findUIViews(Runtime &runtime, const Value *args, size_t count)
                 NSDictionary *queued = queue[index];
                 UIView *view = queued[@"view"];
                 NSUInteger depth = [queued[@"depth"] unsignedIntegerValue];
-                bool matches = [NSStringFromClass([view class]) containsString:className];
+                bool matches = [NSStringFromClass([view class]) containsString:className] ||
+                               (expectedClass && [view isKindOfClass:expectedClass]);
                 if (matches && (!attachedOnly || view.window != nil))
                 {
                     [found addObject:view];
