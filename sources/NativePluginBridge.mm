@@ -2816,8 +2816,8 @@ static Value findUIViews(Runtime &runtime, const Value *args, size_t count)
                 for (NSUInteger depth = 0; view && depth <= maxDepth && depth < maxVisited;
                      view = view.superview, depth++)
                 {
-                    bool matches = [NSStringFromClass([view class]) containsString:className] ||
-                                   (expectedClass && [view isKindOfClass:expectedClass]);
+                    bool matches = expectedClass ? [view isKindOfClass:expectedClass]
+                                                 : [NSStringFromClass([view class]) containsString:className];
                     if (matches && (!attachedOnly || view.window != nil))
                     {
                         [found addObject:view];
@@ -2833,8 +2833,8 @@ static Value findUIViews(Runtime &runtime, const Value *args, size_t count)
                 NSDictionary *queued = queue[index];
                 UIView *view = queued[@"view"];
                 NSUInteger depth = [queued[@"depth"] unsignedIntegerValue];
-                bool matches = [NSStringFromClass([view class]) containsString:className] ||
-                               (expectedClass && [view isKindOfClass:expectedClass]);
+                bool matches = expectedClass ? [view isKindOfClass:expectedClass]
+                                             : [NSStringFromClass([view class]) containsString:className];
                 if (matches && (!attachedOnly || view.window != nil))
                 {
                     [found addObject:view];
