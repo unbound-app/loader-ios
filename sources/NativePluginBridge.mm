@@ -2589,6 +2589,11 @@ static Value invokeBatch(Runtime &runtime, const Value *args, size_t count)
                 {
                     throw std::runtime_error("Native batch method return type is unsupported");
                 }
+                if (signature.numberOfArguments < 2 ||
+                    signature.numberOfArguments - 2 != arguments.count)
+                {
+                    throw std::runtime_error("Native batch argument count does not match the method signature");
+                }
                 for (NSUInteger index = 2; index < signature.numberOfArguments; index++)
                 {
                     validateBatchArgument(arguments[index - 2],
