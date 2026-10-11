@@ -61,8 +61,12 @@ func TestBuildWorkflowArchivesMatchingTweakSymbols(t *testing.T) {
 	}
 	contents := string(workflow)
 	for _, required := range []string{
-		"find .theos/obj -type d -name 'Unbound.dylib.dSYM'",
-		"dwarfdump --uuid \"$bundle\" >> symbols/uuids.txt",
+		"for architecture in arm64 arm64e; do",
+		"test -f \"$binary\"",
+		"test -d \"$bundle\"",
+		"dwarfdump --uuid \"$binary\"",
+		"dwarfdump --uuid \"$bundle\"",
+		"test \"$binary_uuid\" = \"$symbols_uuid\"",
 		"git rev-parse HEAD > symbols/commit.txt",
 		"name: tweak symbols",
 		"path: symbols/",

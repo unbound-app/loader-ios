@@ -148,12 +148,20 @@ jobs:
 
       - name: Collect tweak symbols and UUIDs
         run: |
+          set -euo pipefail
           mkdir -p symbols
-          while IFS= read -r bundle; do
-            architecture=$(basename "$(dirname "$bundle")")
+          for architecture in arm64 arm64e; do
+            binary=".theos/obj/${architecture}/Unbound.dylib"
+            bundle="${binary}.dSYM"
+            test -f "$binary"
+            test -d "$bundle"
+            binary_uuid=$(dwarfdump --uuid "$binary" | awk '{print $2}')
+            symbols_uuid=$(dwarfdump --uuid "$bundle" | awk '{print $2}')
+            test -n "$binary_uuid"
+            test "$binary_uuid" = "$symbols_uuid"
             cp -R "$bundle" "symbols/${architecture}-Unbound.dylib.dSYM"
-            dwarfdump --uuid "$bundle" >> symbols/uuids.txt
-          done < <(find .theos/obj -type d -name 'Unbound.dylib.dSYM' -print)
+            printf '%s %s\n' "$architecture" "$binary_uuid" >> symbols/uuids.txt
+          done
           test -s symbols/uuids.txt
           git rev-parse HEAD > symbols/commit.txt
 
