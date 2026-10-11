@@ -405,6 +405,9 @@ static CGSize dispatchCGSizeDoublePriorityHook(id object, SEL selector, CGSize s
 static CGRect dispatchCGRectObjectHook(id object, SEL selector, id indexPath);
 static double dispatchDoubleObjectObjectHook(id object, SEL selector, id tableView, id indexPath);
 static int8_t dispatchBoolObjectObjectHook(id object, SEL selector, id first, id second);
+static int8_t dispatchBoolObjectHook(id object, SEL selector, id value);
+static int8_t dispatchBoolClassHook(id object, SEL selector, Class value);
+static int8_t dispatchBoolSelectorHook(id object, SEL selector, SEL value);
 static void dispatchVoidObjectHook(id object, SEL selector, id value);
 static void dispatchVoidNSUIntegerHook(id object, SEL selector, NSUInteger value);
 static void dispatchVoidObjectObjectHook(id object, SEL selector, id first, id second);
@@ -5030,6 +5033,39 @@ static int8_t dispatchBoolObjectObjectHook(id object, SEL selector, id first, id
     }
 }
 
+static int8_t dispatchBoolObjectHook(id object, SEL selector, id value)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &value};
+        int8_t returnValue = 0;
+        dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
+        return returnValue;
+    }
+}
+
+static int8_t dispatchBoolClassHook(id object, SEL selector, Class value)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &value};
+        int8_t returnValue = 0;
+        dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
+        return returnValue;
+    }
+}
+
+static int8_t dispatchBoolSelectorHook(id object, SEL selector, SEL value)
+{
+    @autoreleasepool
+    {
+        void *arguments[] = {&object, &selector, &value};
+        int8_t returnValue = 0;
+        dispatchFFIHookBody(nullptr, &returnValue, arguments, nullptr);
+        return returnValue;
+    }
+}
+
 static id dispatchObjectCGRectHook(id object, SEL selector, CGRect rect)
 {
     @autoreleasepool
@@ -5074,6 +5110,24 @@ static void *fallbackHookCode(const HookSignature &signature)
         signature.arguments[2].name == "object" && signature.arguments[3].name == "object")
     {
         return reinterpret_cast<void *>(dispatchBoolObjectObjectHook);
+    }
+
+    if ((signature.result.name == "bool" || signature.result.name == "i8") &&
+        signature.arguments.size() == 3 && signature.arguments[2].name == "object")
+    {
+        return reinterpret_cast<void *>(dispatchBoolObjectHook);
+    }
+
+    if ((signature.result.name == "bool" || signature.result.name == "i8") &&
+        signature.arguments.size() == 3 && signature.arguments[2].name == "class")
+    {
+        return reinterpret_cast<void *>(dispatchBoolClassHook);
+    }
+
+    if ((signature.result.name == "bool" || signature.result.name == "i8") &&
+        signature.arguments.size() == 3 && signature.arguments[2].name == "selector")
+    {
+        return reinterpret_cast<void *>(dispatchBoolSelectorHook);
     }
 
     if (signature.result.name == "object" && signature.arguments.size() == 3 &&
