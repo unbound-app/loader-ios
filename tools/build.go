@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
 	"crypto/ecdsa"
 	"errors"
@@ -265,6 +266,9 @@ func buildIPA(options buildOptions, runner commandRunner) error {
 		return err
 	}
 	if err := validateIPAExtensions(sourceEntries, finalEntries); err != nil {
+		return err
+	}
+	if err := validateIPAExtensionExecutables(options.output); err != nil {
 		return err
 	}
 	if options.configuration == "release" {
@@ -598,6 +602,57 @@ func validateIPAExtensions(sourceEntries, finalEntries []string) error {
 	}
 	sort.Strings(missing)
 	return fmt.Errorf("final IPA is missing required extensions: %s", strings.Join(missing, ", "))
+}
+
+func validateIPAExtensionExecutables(path string) error {
+	archive, err := zip.OpenReader(path)
+	if err != nil {
+		return err
+	}
+	defer archive.Close()
+	entries := make(map[string]*zip.File, len(archive.File))
+	for _, file := range archive.File {
+		entries[file.Name] = file
+	}
+	for _, file := range archive.File {
+		parts := strings.Split(file.Name, "/")
+		if len(parts) != 5 || parts[0] != "Payload" || !strings.HasSuffix(parts[1], ".app") ||
+			parts[2] != "PlugIns" || !strings.HasSuffix(parts[3], ".appex") || parts[4] != "Info.plist" {
+			continue
+		}
+		reader, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("could not read extension %s: %w", parts[3], err)
+		}
+		info, err := os.CreateTemp("", "loader-ipa-extension-*.plist")
+		if err != nil {
+			reader.Close()
+			return err
+		}
+		_, copyErr := io.Copy(info, reader)
+		readCloseErr := reader.Close()
+		writeCloseErr := info.Close()
+		if copyErr != nil || readCloseErr != nil || writeCloseErr != nil {
+			os.Remove(info.Name())
+			return fmt.Errorf("could not extract extension %s Info.plist: %w", parts[3], errors.Join(copyErr, readCloseErr, writeCloseErr))
+		}
+		executable, readErr := plistExecutable(info.Name())
+		removeErr := os.Remove(info.Name())
+		if readErr != nil {
+			return fmt.Errorf("could not read extension %s executable: %w", parts[3], readErr)
+		}
+		if removeErr != nil {
+			return removeErr
+		}
+		if executable == "" || filepath.Base(executable) != executable {
+			return fmt.Errorf("extension %s has an invalid executable name %q", parts[3], executable)
+		}
+		binary := strings.TrimSuffix(file.Name, "Info.plist") + executable
+		if candidate := entries[binary]; candidate == nil || candidate.UncompressedSize64 == 0 {
+			return fmt.Errorf("final IPA is missing executable %s", binary)
+		}
+	}
+	return nil
 }
 
 func rewritePlist(path string) error {

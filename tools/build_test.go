@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"errors"
 	"io"
 	"os"
@@ -31,6 +32,55 @@ func TestValidateIPAExtensionsRequiresOriginalAndBuiltExtensions(t *testing.T) {
 		!strings.Contains(err.Error(), "OpenInDiscord") ||
 		!strings.Contains(err.Error(), "Share") {
 		t.Fatalf("missing extension was not detected: %v", err)
+	}
+}
+
+func TestValidateIPAExtensionExecutables(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		executable string
+		include    bool
+		wantError  bool
+	}{
+		{name: "present", executable: "Share", include: true},
+		{name: "missing", executable: "Share", wantError: true},
+		{name: "empty", executable: "", wantError: true},
+		{name: "invalid path", executable: "../Discord", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "Discord.ipa")
+			file, err := os.Create(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			archive := zip.NewWriter(file)
+			info, err := archive.Create("Payload/Discord.app/PlugIns/Share.appex/Info.plist")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := io.WriteString(info, "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>CFBundleExecutable</key><string>"+test.executable+"</string></dict></plist>"); err != nil {
+				t.Fatal(err)
+			}
+			if test.include {
+				binary, err := archive.Create("Payload/Discord.app/PlugIns/Share.appex/Share")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := io.WriteString(binary, "binary"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := archive.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+			err = validateIPAExtensionExecutables(path)
+			if (err != nil) != test.wantError {
+				t.Fatalf("unexpected validation result: %v", err)
+			}
+		})
 	}
 }
 
