@@ -93,6 +93,9 @@ func TestBuildWorkflowAllowsManualIPAInput(t *testing.T) {
 	if !strings.Contains(dispatchInputs, "      ipa_url:\n") {
 		t.Fatal("manual builds must accept an IPA URL to avoid triggering a device decrypt")
 	}
+	if strings.Contains(contents, "--extensions") {
+		t.Fatal("build workflow must not choose whether to include extensions")
+	}
 }
 
 func TestPullRequestWorkflowUsesPinnedCleanDiscordIPA(t *testing.T) {
@@ -137,13 +140,15 @@ func TestPullRequestWorkflowChecksPinnedSupportedDiscordFixtures(t *testing.T) {
 		"name: rootless package",
 		"--bundle-id com.hammerandchisel.discord",
 		"--version \"$DISCORD_VERSION\"",
-		"--extensions include",
 		"needs.compatibility-source.outputs.available == 'true'",
 		"link/package checks, not Discord device-runtime validation",
 	} {
 		if !strings.Contains(contents, required) {
 			t.Fatalf("pull request workflow is missing compatibility check %q", required)
 		}
+	}
+	if strings.Contains(contents, "--extensions") {
+		t.Fatal("pull request workflow must not choose whether to include extensions")
 	}
 }
 

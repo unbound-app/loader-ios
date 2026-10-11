@@ -31,7 +31,6 @@ type buildOptions struct {
 	ipa            string
 	deb            string
 	channel        string
-	extensions     string
 	output         string
 	simulator      bool
 	nonInteractive bool
@@ -82,7 +81,6 @@ func parseBuildOptions(args []string, all bool) (buildOptions, error) {
 	set.StringVar(&options.ipa, "ipa", "", "source or output IPA path/URL")
 	set.StringVar(&options.deb, "deb", "", "tweak package path")
 	set.StringVar(&options.channel, "channel", "appstore", "appstore or testflight")
-	set.StringVar(&options.extensions, "extensions", "auto", "auto, include, or exclude")
 	set.StringVar(&options.output, "output", "", "output path")
 	set.BoolVar(&options.simulator, "simulator", false, "build simulator artifact")
 	set.BoolVar(&options.nonInteractive, "non-interactive", false, "disable prompts")
@@ -95,9 +93,6 @@ func parseBuildOptions(args []string, all bool) (buildOptions, error) {
 	}
 	if options.channel != "appstore" && options.channel != "testflight" {
 		return options, errors.New("channel must be appstore or testflight")
-	}
-	if options.extensions != "auto" && options.extensions != "include" && options.extensions != "exclude" {
-		return options, errors.New("extensions must be auto, include, or exclude")
 	}
 	if !all && options.simulator {
 		return options, errors.New("--simulator is only valid with build all")
@@ -515,10 +510,6 @@ func provisionSimforge(root string, runner commandRunner) (string, error) {
 }
 
 func buildExtensions(options buildOptions, work string, runner commandRunner) ([]string, error) {
-	include := options.extensions == "include" || (options.extensions == "auto" && runtime.GOOS == "darwin")
-	if !include {
-		return nil, nil
-	}
 	if runtime.GOOS != "darwin" {
 		return nil, errors.New("extensions require macOS")
 	}

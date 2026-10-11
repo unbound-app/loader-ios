@@ -10,6 +10,12 @@ import (
 	"testing"
 )
 
+func TestBuildOptionsDoNotAllowOmittingExtensions(t *testing.T) {
+	if _, err := parseBuildOptions([]string{"--extensions", "exclude"}, false); err == nil {
+		t.Fatal("IPA builds must not allow extensions to be omitted")
+	}
+}
+
 func TestProvisionSimforgeUsesBuiltProduct(t *testing.T) {
 	root := t.TempDir()
 	product := filepath.Join(root, ".tools-cache", "simforge-"+simforgeCommit, "derived-data", "Build", "Products", "Release", "simforge")
