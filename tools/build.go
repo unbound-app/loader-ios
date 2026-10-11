@@ -230,6 +230,10 @@ func buildIPA(options buildOptions, runner commandRunner) error {
 	if err := rejectInjectedIPA(patched, work, runner); err != nil {
 		return err
 	}
+	sourceEntries, err := zipList(patched, runner, options.root)
+	if err != nil {
+		return err
+	}
 	extensionPaths, err := buildExtensions(options, work, runner)
 	if err != nil {
 		return err
@@ -255,6 +259,13 @@ func buildIPA(options buildOptions, runner commandRunner) error {
 		if err := os.Rename(injectionOutput, options.output); err != nil {
 			return err
 		}
+	}
+	finalEntries, err := zipList(options.output, runner, options.root)
+	if err != nil {
+		return err
+	}
+	if err := validateIPAExtensions(sourceEntries, finalEntries); err != nil {
+		return err
 	}
 	if options.configuration == "release" {
 		if _, _, keyErr := attestationKeys(); keyErr == nil {
@@ -548,6 +559,45 @@ func buildExtensions(options buildOptions, work string, runner commandRunner) ([
 		paths = append(paths, path)
 	}
 	return paths, nil
+}
+
+func ipaExtensions(entries []string) map[string]struct{} {
+	extensions := map[string]struct{}{}
+	for _, entry := range entries {
+		parts := strings.Split(entry, "/")
+		if len(parts) != 5 || parts[0] != "Payload" || !strings.HasSuffix(parts[1], ".app") ||
+			parts[2] != "PlugIns" || !strings.HasSuffix(parts[3], ".appex") || parts[4] != "Info.plist" {
+			continue
+		}
+		extensions[parts[1]+"/"+strings.TrimSuffix(parts[3], ".appex")] = struct{}{}
+	}
+	return extensions
+}
+
+func validateIPAExtensions(sourceEntries, finalEntries []string) error {
+	appName := "Discord.app"
+	for _, entry := range sourceEntries {
+		parts := strings.Split(entry, "/")
+		if len(parts) >= 3 && parts[0] == "Payload" && strings.HasSuffix(parts[1], ".app") {
+			appName = parts[1]
+			break
+		}
+	}
+	required := ipaExtensions(sourceEntries)
+	required[appName+"/OpenInDiscord"] = struct{}{}
+	required[appName+"/Share"] = struct{}{}
+	installed := ipaExtensions(finalEntries)
+	missing := []string{}
+	for name := range required {
+		if _, ok := installed[name]; !ok {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	return fmt.Errorf("final IPA is missing required extensions: %s", strings.Join(missing, ", "))
 }
 
 func rewritePlist(path string) error {

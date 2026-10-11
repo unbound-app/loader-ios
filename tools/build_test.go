@@ -16,6 +16,24 @@ func TestBuildOptionsDoNotAllowOmittingExtensions(t *testing.T) {
 	}
 }
 
+func TestValidateIPAExtensionsRequiresOriginalAndBuiltExtensions(t *testing.T) {
+	source := []string{
+		"Payload/Discord.app/PlugIns/BroadcastUpload.appex/Info.plist",
+		"Payload/Discord.app/PlugIns/Share.appex/Info.plist",
+	}
+	complete := append(append([]string{}, source...), "Payload/Discord.app/PlugIns/OpenInDiscord.appex/Info.plist")
+	if err := validateIPAExtensions(source, complete); err != nil {
+		t.Fatalf("complete IPA rejected: %v", err)
+	}
+	incomplete := []string{"Payload/Other.app/PlugIns/Share.appex/Info.plist"}
+	if err := validateIPAExtensions(source, incomplete); err == nil ||
+		!strings.Contains(err.Error(), "BroadcastUpload") ||
+		!strings.Contains(err.Error(), "OpenInDiscord") ||
+		!strings.Contains(err.Error(), "Share") {
+		t.Fatalf("missing extension was not detected: %v", err)
+	}
+}
+
 func TestProvisionSimforgeUsesBuiltProduct(t *testing.T) {
 	root := t.TempDir()
 	product := filepath.Join(root, ".tools-cache", "simforge-"+simforgeCommit, "derived-data", "Build", "Products", "Release", "simforge")
