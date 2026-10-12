@@ -22,7 +22,7 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	types, err := os.ReadFile(filepath.Join(root, "sources", "NativeTypeEncoding.cpp"))
+	types, err := os.ReadFile(filepath.Join(root, "sources", "NativeTypeEncoding.mm"))
 	if err != nil {
 		t.Fatal(err)
 	}
