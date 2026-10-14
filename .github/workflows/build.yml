@@ -110,6 +110,9 @@ jobs:
       - name: test tools
         run: go test ./...
 
+      - name: test React remount bridge
+        run: node --test tests/native_react_remount.test.mjs
+
       - name: check cache
         run: echo upstream_heads=`git ls-remote https://github.com/theos/theos | head -n 1 | cut -f 1`-`git ls-remote https://github.com/theos/sdks | head -n 1 | cut -f 1` >> $GITHUB_ENV
 

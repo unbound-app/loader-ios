@@ -199,6 +199,27 @@ private:
     uint64_t generation_ = 0;
 };
 
+class FiberHandleHost final : public HostObject
+{
+public:
+    FiberHandleHost(id view, NSInteger tag, uint64_t identifier, uint64_t generation)
+        : view_(view), tag_(tag), identifier_(identifier), generation_(generation) {}
+
+    UIView *view(void) const { return view_; }
+    NSInteger tag(void) const { return tag_; }
+    uint64_t identifier(void) const { return identifier_; }
+    uint64_t generation(void) const { return generation_; }
+    bool active(void) const { return active_.load(); }
+    void invalidate(void) { active_.store(false); }
+
+private:
+    __strong UIView *view_ = nil;
+    NSInteger tag_ = 0;
+    uint64_t identifier_ = 0;
+    uint64_t generation_ = 0;
+    std::atomic_bool active_{true};
+};
+
 class PointerHost final : public HostObject
 {
 public:
@@ -6150,6 +6171,362 @@ static void installFabric(Runtime &runtime, Object &fabric)
     fabric.setProperty(runtime, "unmountAsync", makeFunction("unmountAsync", 1, runtime, fabricUnmountAsync));
 }
 
+static const char *kReactRemountSource = R"REACT(
+(() => {
+    const entries = new Map();
+    const pending = new Map();
+    let nextIdentifier = 1;
+    let nextMutation = 1;
+    let frameStart = 0;
+    let frameUses = 0;
+
+    function failure(code, message) {
+        const error = new Error(message);
+        error.code = code;
+        return error;
+    }
+
+    function renderer() {
+        if (typeof __r !== 'function') return null;
+        try {
+            const value = __r(116);
+            if (!value || typeof value.render !== 'function' ||
+                value.render.length !== 5 ||
+                typeof value.getNodeFromInternalInstanceHandle !== 'function' ||
+                typeof value.findNodeHandle !== 'function' ||
+                Object.keys(value).sort().join(',') !==
+                'createPortal,dispatchCommand,findHostInstance_DEPRECATED,' +
+                'findNodeHandle,getNodeFromInternalInstanceHandle,' +
+                'getPublicInstanceFromInternalInstanceHandle,' +
+                'getPublicInstanceFromRootTag,isChildPublicInstance,render,' +
+                'sendAccessibilityEvent,stopSurface,unmountComponentAtNode') return null;
+            return value;
+        } catch {
+            return null;
+        }
+    }
+
+    function resolve(tag, x, y) {
+        const manager = globalThis.nativeFabricUIManager;
+        if (!manager || typeof manager.findShadowNodeByTag_DEPRECATED !== 'function' ||
+            typeof manager.findNodeAtPoint !== 'function') return null;
+        const shadow = manager.findShadowNodeByTag_DEPRECATED(tag);
+        if (!shadow) return null;
+        let hit = null;
+        manager.findNodeAtPoint(shadow, x, y, fiber => { hit = fiber; });
+        let host = hit;
+        for (let depth = 0; host && depth < 512; depth++, host = host.return) {
+            if (host.stateNode?.canonical?.nativeTag === tag) break;
+        }
+        if (!host || host.stateNode?.canonical?.nativeTag !== tag) return null;
+        let mountedRoot = host;
+        for (let depth = 0; mountedRoot && depth < 512;
+            depth++, mountedRoot = mountedRoot.return) {
+            if (mountedRoot.tag === 3) break;
+        }
+        if (!mountedRoot || mountedRoot.tag !== 3) return null;
+        if (mountedRoot.stateNode?.current !== mountedRoot) {
+            host = host.alternate;
+            if (!host || host.stateNode?.canonical?.nativeTag !== tag) return null;
+        }
+        let target = host.return;
+        for (let depth = 0; target && depth < 512; depth++, target = target.return) {
+            if (target.tag === 0 || target.tag === 1 ||
+                target.tag === 14 || target.tag === 15) break;
+            if (target.tag === 3) return null;
+        }
+        if (!target || !target.return) return null;
+        let rootFiber = target;
+        for (let depth = 0; rootFiber && depth < 512; depth++, rootFiber = rootFiber.return) {
+            if (rootFiber.tag === 3) break;
+        }
+        if (!rootFiber || rootFiber.tag !== 3) return null;
+        const root = rootFiber.stateNode;
+        const rootTag = root?.containerInfo?.containerTag;
+        if (!root || root.current !== rootFiber ||
+            !Number.isSafeInteger(rootTag) || rootTag <= 0 ||
+            !root.current.memoizedState?.element) return null;
+        return { host, target, root, rootTag, props: target.memoizedProps, tag };
+    }
+
+    function current(entry, tag, x, y) {
+        if (entry.tag !== tag) return null;
+        const found = resolve(tag, x, y);
+        if (!found || found.root !== entry.root ||
+            (found.host !== entry.host && found.host !== entry.host.alternate) ||
+            (found.target !== entry.target && found.target !== entry.target.alternate) ||
+            found.props !== entry.props) return null;
+        return found;
+    }
+
+    function mark(mutations, node, field, value) {
+        if (!node) return;
+        const before = node[field];
+        const after = field === 'key' ? value : before | value;
+        if (before === after) return;
+        node[field] = after;
+        mutations.push({ node, field, before, after });
+    }
+
+    function restore(mutations) {
+        for (let index = mutations.length - 1; index >= 0; index--) {
+            const mutation = mutations[index];
+            if (mutation.node[mutation.field] === mutation.after) {
+                mutation.node[mutation.field] = mutation.before;
+            }
+        }
+    }
+
+    function remounted(target, parent) {
+        const currentParent = parent.alternate ?? parent;
+        let child = currentParent.child;
+        for (let count = 0; child && count < 256; count++, child = child.sibling) {
+            if (child.index !== target.index) continue;
+            return child !== target && child !== target.alternate &&
+                child.elementType === target.elementType && child.key !== target.key;
+        }
+        return false;
+    }
+
+    return {
+        supported() {
+            return renderer() !== null;
+        },
+        lookup(tag, x, y) {
+            if (!renderer() || !Number.isSafeInteger(tag) || tag <= 0 ||
+                !Number.isFinite(x) || !Number.isFinite(y)) return null;
+            const entry = resolve(tag, x, y);
+            if (!entry) return null;
+            if (entries.size >= 256) {
+                const oldest = entries.keys().next().value;
+                if (!pending.has(oldest)) entries.delete(oldest);
+                else return null;
+            }
+            const identifier = nextIdentifier++;
+            entries.set(identifier, entry);
+            return identifier;
+        },
+        release(identifier) {
+            const operation = pending.get(identifier);
+            operation?.cancel();
+            pending.delete(identifier);
+            entries.delete(identifier);
+        },
+        remount(identifier, tag, x, y) {
+            const existing = pending.get(identifier);
+            if (existing) return existing.promise;
+            const entry = entries.get(identifier);
+            if (!entry) throw failure('NATIVE_REACT_STALE_FIBER', 'Fiber handle is no longer active');
+            const found = current(entry, tag, x, y);
+            if (!found) throw failure('NATIVE_REACT_STALE_FIBER', 'Native view or Fiber changed');
+            const reconciler = renderer();
+            if (!reconciler) {
+                throw failure('NATIVE_REACT_UNSUPPORTED_RENDERER', 'React renderer is unavailable');
+            }
+            const { root, rootTag, target } = found;
+            if (root.pendingLanes !== 0) {
+                throw failure('NATIVE_REACT_BUSY', 'React root already has pending work');
+            }
+            const now = Date.now();
+            if (now - frameStart >= 16) {
+                frameStart = now;
+                frameUses = 0;
+            }
+            if (frameUses >= 4) {
+                throw failure('NATIVE_REACT_BUSY', 'Remount frame budget is exhausted');
+            }
+            frameUses++;
+            const parent = target.return;
+            const mutations = [];
+            let settled = false;
+            let timeout = null;
+            let resolvePromise;
+            let rejectPromise;
+            const promise = new Promise((resolve, reject) => {
+                resolvePromise = resolve;
+                rejectPromise = reject;
+            });
+            const finish = (error) => {
+                if (settled) return;
+                settled = true;
+                if (timeout !== null) clearTimeout(timeout);
+                pending.delete(identifier);
+                if (error) {
+                    restore(mutations);
+                    rejectPromise(error);
+                    return;
+                }
+                entries.delete(identifier);
+                resolvePromise();
+            };
+            const operation = {
+                promise,
+                cancel() {
+                    finish(failure('NATIVE_PLUGIN_SCOPE_DISPOSED', 'Remount was cancelled'));
+                },
+            };
+            pending.set(identifier, operation);
+            promise.cancel = operation.cancel;
+            try {
+                const element = root.current.memoizedState.element;
+                reconciler.render(element, rootTag, () => {
+                    if (settled) return;
+                    if (!remounted(target, parent)) {
+                        finish(failure('NATIVE_REACT_UNSUPPORTED_RENDERER',
+                            'React did not remount the requested component'));
+                        return;
+                    }
+                    finish(null);
+                });
+                const lane = root.pendingLanes;
+                if (settled || lane <= 0 || (lane & (lane - 1)) !== 0) {
+                    finish(failure('NATIVE_REACT_UNSUPPORTED_RENDERER',
+                        'React did not schedule an isolated root update'));
+                    return promise;
+                }
+                const marker = '__native_remount_' + identifier + '_' + nextMutation++;
+                mark(mutations, target, 'key', marker);
+                mark(mutations, target.alternate, 'key', marker);
+                mark(mutations, parent, 'lanes', lane);
+                mark(mutations, parent.alternate, 'lanes', lane);
+                for (let node = parent.return, depth = 0; node && depth < 512;
+                    node = node.return, depth++) {
+                    mark(mutations, node, 'childLanes', lane);
+                    mark(mutations, node.alternate, 'childLanes', lane);
+                }
+                timeout = setTimeout(() => {
+                    finish(failure('NATIVE_REACT_TIMEOUT', 'React remount timed out'));
+                }, 3000);
+            } catch (error) {
+                finish(error);
+            }
+            return promise;
+        },
+    };
+})()
+)REACT";
+
+static bool supportsReactRemount(void)
+{
+    NSDictionary *info = NSBundle.mainBundle.infoDictionary;
+    return [info[@"CFBundleShortVersionString"] isEqualToString:@"348.0"] &&
+           [info[@"CFBundleVersion"] isEqualToString:@"113691"];
+}
+
+static void throwReactFailure(Runtime &runtime, const char *code, const char *message)
+{
+    JSError failure(runtime, message);
+    failure.value().asObject(runtime).setProperty(
+        runtime, "code", String::createFromUtf8(runtime, code));
+    throw failure;
+}
+
+struct ReactViewLocation {
+    NSInteger tag = 0;
+    CGPoint point = CGPointZero;
+    bool valid = false;
+};
+
+static ReactViewLocation reactViewLocation(UIView *view)
+{
+    ReactViewLocation location;
+    executeMainSynchronously([view, &location]() {
+        Class rootClass = NSClassFromString(@"RCTRootComponentView");
+        if (!rootClass || [view isKindOfClass:rootClass]) return;
+        UIView *root = view.superview;
+        for (NSUInteger depth = 0; root && depth < 128; depth++, root = root.superview)
+        {
+            if (![root isKindOfClass:rootClass]) continue;
+            CGPoint center = CGPointMake(CGRectGetMidX(view.bounds), CGRectGetMidY(view.bounds));
+            location.tag = view.tag;
+            location.point = [view convertPoint:center toView:root];
+            location.valid = location.tag > 0 &&
+                             std::isfinite(location.point.x) &&
+                             std::isfinite(location.point.y);
+            return;
+        }
+    });
+    return location;
+}
+
+static void installReact(Runtime &runtime, Object &react, bool supported)
+{
+    if (!supported) return;
+    auto buffer = std::make_shared<StringBuffer>(std::string(kReactRemountSource));
+    Value installed = runtime.evaluateJavaScript(buffer, "native-react-remount");
+    if (!installed.isObject()) return;
+    auto helper = std::make_shared<Object>(installed.asObject(runtime));
+
+    react.setProperty(runtime, "isSupported", makeFunction(
+        "isSupported", 0, runtime,
+        [helper](Runtime &rt, const Value &, const Value *, size_t) -> Value {
+            return helper->getPropertyAsFunction(rt, "supported")
+                .callWithThis(rt, *helper);
+        }));
+
+    react.setProperty(runtime, "getFiber", makeFunction(
+        "getFiber", 1, runtime,
+        [helper](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+            id object = count ? objcValue(rt, args[0]) : nil;
+            if (![object isKindOfClass:[UIView class]]) return Value::null();
+            ReactViewLocation location = reactViewLocation((UIView *) object);
+            if (!location.valid) return Value::null();
+            Value identifier = helper->getPropertyAsFunction(rt, "lookup")
+                                   .callWithThis(rt, *helper,
+                                                 Value((double) location.tag),
+                                                 Value((double) location.point.x),
+                                                 Value((double) location.point.y));
+            if (!identifier.isNumber()) return Value::null();
+            auto fiber = std::make_shared<FiberHandleHost>(
+                object, location.tag, static_cast<uint64_t>(identifier.asNumber()),
+                gNativePluginRuntimeGeneration.load());
+            return Object::createFromHostObject(rt, std::move(fiber));
+        }));
+
+    react.setProperty(runtime, "forceRemount", makeFunction(
+        "forceRemount", 1, runtime,
+        [helper](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+            if (!count || !args[0].isObject() ||
+                !args[0].asObject(rt).isHostObject<FiberHandleHost>(rt))
+            {
+                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Expected a Fiber handle");
+            }
+            auto fiber = args[0].asObject(rt).getHostObject<FiberHandleHost>(rt);
+            if (!fiber->active() ||
+                fiber->generation() != gNativePluginRuntimeGeneration.load())
+            {
+                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Fiber handle is no longer active");
+            }
+            UIView *view = fiber->view();
+            ReactViewLocation location = reactViewLocation(view);
+            if (!location.valid || location.tag != fiber->tag())
+            {
+                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Native view was reused");
+            }
+            return helper->getPropertyAsFunction(rt, "remount")
+                .callWithThis(rt, *helper, Value((double) fiber->identifier()),
+                              Value((double) location.tag),
+                              Value((double) location.point.x),
+                              Value((double) location.point.y));
+        }));
+
+    react.setProperty(runtime, "release", makeFunction(
+        "release", 1, runtime,
+        [helper](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
+            if (!count || !args[0].isObject() ||
+                !args[0].asObject(rt).isHostObject<FiberHandleHost>(rt))
+            {
+                return Value::undefined();
+            }
+            auto fiber = args[0].asObject(rt).getHostObject<FiberHandleHost>(rt);
+            if (!fiber->active()) return Value::undefined();
+            fiber->invalidate();
+            helper->getPropertyAsFunction(rt, "release")
+                .callWithThis(rt, *helper, Value((double) fiber->identifier()));
+            return Value::undefined();
+        }));
+}
+
 static bool isOptionalString(const Value &value)
 {
     return value.isUndefined() || value.isNull() || value.isString();
@@ -6316,6 +6693,7 @@ void registerNativePluginBridge(Runtime &runtime)
     Object bridge(runtime);
     bridge.setProperty(runtime, "apiVersion", String::createFromUtf8(runtime, kNativePluginApiVersion));
     bridge.setProperty(runtime, "abiVersion", String::createFromUtf8(runtime, kNativePluginAbiVersion));
+    bool reactSupported = supportsReactRemount();
 
     const char *names[] = {
         "native.objc.classes",
@@ -6333,10 +6711,15 @@ void registerNativePluginBridge(Runtime &runtime)
         "native.debug.evaluations",
         "native.debug.environment",
     };
-    Array capabilities(runtime, std::size(names));
+    Array capabilities(runtime, std::size(names) + (reactSupported ? 1 : 0));
     for (size_t index = 0; index < std::size(names); index++)
     {
         capabilities.setValueAtIndex(runtime, index, String::createFromUtf8(runtime, names[index]));
+    }
+    if (reactSupported)
+    {
+        capabilities.setValueAtIndex(
+            runtime, std::size(names), String::createFromUtf8(runtime, "native.react.remount"));
     }
     bridge.setProperty(runtime, "capabilities", std::move(capabilities));
 
@@ -6351,6 +6734,10 @@ void registerNativePluginBridge(Runtime &runtime)
     Object fabric(runtime);
     installFabric(runtime, fabric);
     bridge.setProperty(runtime, "fabric", std::move(fabric));
+
+    Object react(runtime);
+    installReact(runtime, react, reactSupported);
+    bridge.setProperty(runtime, "react", std::move(react));
 
     Object debug(runtime);
     installDebug(runtime, debug);
