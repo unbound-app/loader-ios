@@ -1,7 +1,6 @@
 #import "NativePluginBridge.h"
 
 #import <dlfcn.h>
-#import <CommonCrypto/CommonDigest.h>
 #import <mach/mach.h>
 #import <mach-o/loader.h>
 #import <objc/message.h>
@@ -35,7 +34,6 @@
 #import "NativePluginFFI.h"
 #import "NativeNumericValidation.h"
 #import "NativeOperationGate.h"
-#import "NativeReactIdentity.h"
 #import "NativeTypeEncoding.h"
 
 using namespace facebook;
@@ -201,32 +199,6 @@ private:
     uint64_t generation_ = 0;
 };
 
-class FiberHandleHost final : public HostObject
-{
-public:
-    FiberHandleHost(id view, NSInteger tag, uint64_t identifier, uint8_t pointIndex,
-                    uint64_t generation)
-        : view_(view), identifier_(identifier), pointIndex_(pointIndex), identity_(tag, generation) {}
-
-    UIView *view(void) const { return view_; }
-    NSInteger tag(void) const { return identity_.tag(); }
-    uint64_t identifier(void) const { return identifier_; }
-    uint8_t pointIndex(void) const { return pointIndex_; }
-    uint64_t generation(void) const { return identity_.generation(); }
-    bool active(void) const { return identity_.active(); }
-    bool valid(NSInteger tag, uint64_t generation) const
-    {
-        return identity_.valid(tag, generation);
-    }
-    void invalidate(void) { identity_.invalidate(); }
-
-private:
-    __strong UIView *view_ = nil;
-    uint64_t identifier_ = 0;
-    uint8_t pointIndex_ = 0;
-    NativeReactIdentity identity_;
-};
-
 class PointerHost final : public HostObject
 {
 public:
@@ -381,8 +353,6 @@ static std::mutex gNativePluginRuntimeMutex;
 static Runtime *gNativePluginRuntime = nullptr;
 static std::thread::id gNativePluginRuntimeThread;
 static std::atomic_uint64_t gNativePluginRuntimeGeneration{0};
-static std::mutex gNativePluginDiscordBundleMutex;
-static NSString *gNativePluginDiscordBundlePath = nil;
 static std::atomic_uint gMainThreadRuntimeWaits{0};
 static std::mutex gFabricSurfaceMutex;
 static std::unordered_map<FabricSurfaceHost *, std::shared_ptr<FabricSurfaceHost>> gFabricSurfaces;
@@ -6180,524 +6150,6 @@ static void installFabric(Runtime &runtime, Object &fabric)
     fabric.setProperty(runtime, "unmountAsync", makeFunction("unmountAsync", 1, runtime, fabricUnmountAsync));
 }
 
-static const char *kReactRemountSource = R"REACT(
-(() => {
-    const entries = new Map();
-    const pending = new Map();
-    const sharedByTarget = new WeakMap();
-    let nextIdentifier = 1;
-    let nextMutation = 1;
-    let frameStart = 0;
-    let frameUses = 0;
-    const rendererModuleId = 116;
-    const nativeWrapperKeys = [
-        'View', 'Text', 'Image', 'ScrollView', 'TextInput', 'SafeAreaView',
-        'Pressable', 'TouchableOpacity', 'TouchableHighlight', 'TouchableWithoutFeedback',
-    ];
-    let nativeWrapperTypes = null;
-
-    function failure(code, message) {
-        const error = new Error(message);
-        error.code = code;
-        return error;
-    }
-
-    function renderer() {
-        if (typeof __r !== 'function') return null;
-        try {
-            const value = __r(rendererModuleId);
-            if (!value || typeof value.render !== 'function' ||
-                value.render.length !== 5 ||
-                typeof value.getNodeFromInternalInstanceHandle !== 'function' ||
-                typeof value.findNodeHandle !== 'function' ||
-                Object.keys(value).sort().join(',') !==
-                'createPortal,dispatchCommand,findHostInstance_DEPRECATED,' +
-                'findNodeHandle,getNodeFromInternalInstanceHandle,' +
-                'getPublicInstanceFromInternalInstanceHandle,' +
-                'getPublicInstanceFromRootTag,isChildPublicInstance,render,' +
-                'sendAccessibilityEvent,stopSurface,unmountComponentAtNode') return null;
-            return value;
-        } catch {
-            return null;
-        }
-    }
-
-    function nativeWrapper(fiber) {
-        if (!nativeWrapperTypes) {
-            const native = globalThis.ReactNative;
-            if (!native) return false;
-            nativeWrapperTypes = new Set();
-            for (const key of nativeWrapperKeys) {
-                const component = native[key];
-                const animated = native.Animated?.[key];
-                if (component) nativeWrapperTypes.add(component);
-                if (animated) nativeWrapperTypes.add(animated);
-            }
-        }
-        return nativeWrapperTypes.has(fiber.elementType);
-    }
-
-    function resolve(tag, x, y) {
-        const manager = globalThis.nativeFabricUIManager;
-        if (!manager || typeof manager.findShadowNodeByTag_DEPRECATED !== 'function' ||
-            typeof manager.findNodeAtPoint !== 'function') return null;
-        const shadow = manager.findShadowNodeByTag_DEPRECATED(tag);
-        if (!shadow) return null;
-        let hit = null;
-        manager.findNodeAtPoint(shadow, x, y, fiber => { hit = fiber; });
-        let host = hit;
-        for (let depth = 0; host && depth < 512; depth++, host = host.return) {
-            if (host.stateNode?.canonical?.nativeTag === tag) break;
-        }
-        if (!host || host.stateNode?.canonical?.nativeTag !== tag) return null;
-        let mountedRoot = host;
-        for (let depth = 0; mountedRoot && depth < 512;
-            depth++, mountedRoot = mountedRoot.return) {
-            if (mountedRoot.tag === 3) break;
-        }
-        if (!mountedRoot || mountedRoot.tag !== 3) return null;
-        if (mountedRoot.stateNode?.current !== mountedRoot) {
-            host = host.alternate;
-            if (!host || host.stateNode?.canonical?.nativeTag !== tag) return null;
-        }
-        let target = host.return;
-        for (let depth = 0; target && depth < 512; depth++, target = target.return) {
-            if ((target.tag === 0 || target.tag === 1 ||
-                 target.tag === 11 || target.tag === 14 || target.tag === 15) &&
-                !nativeWrapper(target)) break;
-            if (target.tag === 3) return null;
-        }
-        if (!target || !target.return) return null;
-        let rootFiber = target;
-        for (let depth = 0; rootFiber && depth < 512; depth++, rootFiber = rootFiber.return) {
-            if (rootFiber.tag === 19 ||
-                ((rootFiber.tag === 13 || rootFiber.tag === 22) &&
-                 rootFiber.memoizedState !== null)) return null;
-            if (rootFiber.tag === 3) break;
-        }
-        if (!rootFiber || rootFiber.tag !== 3) return null;
-        const root = rootFiber.stateNode;
-        const rootTag = root?.containerInfo?.containerTag;
-        if (!root || root.current !== rootFiber ||
-            !Number.isSafeInteger(rootTag) || rootTag <= 0 ||
-            !root.current.memoizedState?.element) return null;
-        return { host, target, root, rootTag, props: target.memoizedProps, tag };
-    }
-
-    function current(entry, tag, x, y) {
-        if (entry.tag !== tag) return null;
-        const found = resolve(tag, x, y);
-        if (!found || found.root !== entry.root ||
-            (found.host !== entry.host && found.host !== entry.host.alternate) ||
-            (found.target !== entry.target && found.target !== entry.target.alternate) ||
-            found.props !== entry.props) return null;
-        return found;
-    }
-
-    function mark(mutations, node, field, value) {
-        if (!node) return;
-        const before = node[field];
-        const after = before | value;
-        if (before === after) return;
-        node[field] = after;
-        mutations.push({ node, field, before, after });
-    }
-
-    function markKey(mutations, node, marker, entry, tag, x, y) {
-        if (!node) return;
-        const descriptor = Object.getOwnPropertyDescriptor(node, 'key');
-        if (!descriptor || !descriptor.configurable || !('value' in descriptor)) {
-            throw failure('NATIVE_REACT_UNSUPPORTED_RENDERER', 'Fiber key cannot be guarded');
-        }
-        const active = { value: true, read: false };
-        const guard = () => {
-            if (!active.value) return descriptor.value;
-            const found = current(entry, tag, x, y);
-            if (!found || node.pendingProps !== entry.props ||
-                node.return?.pendingProps !== node.return?.memoizedProps ||
-                found.target.pendingProps !== entry.props ||
-                found.target.return?.pendingProps !== found.target.return?.memoizedProps) {
-                return descriptor.value;
-            }
-            active.read = true;
-            return marker;
-        };
-        Object.defineProperty(node, 'key', {
-            configurable: true,
-            enumerable: descriptor.enumerable,
-            get: guard,
-        });
-        mutations.push({ node, field: 'key', descriptor, guard, active });
-    }
-
-    function restore(mutations, committed) {
-        for (let index = mutations.length - 1; index >= 0; index--) {
-            const mutation = mutations[index];
-            if (mutation.field === 'key') {
-                mutation.active.value = false;
-                if (Object.getOwnPropertyDescriptor(mutation.node, 'key')?.get === mutation.guard) {
-                    Object.defineProperty(mutation.node, 'key', mutation.descriptor);
-                }
-                continue;
-            }
-            if (committed) continue;
-            if (mutation.node[mutation.field] === mutation.after) {
-                mutation.node[mutation.field] = mutation.before;
-            }
-        }
-    }
-
-    function mounted(node, root) {
-        for (let depth = 0; node && depth < 512; depth++, node = node.return) {
-            if (node === root.current) return true;
-        }
-        return false;
-    }
-
-    function remounted(entry, target, parent, tag, x, y, keyRead) {
-        if (target.pendingProps !== entry.props) return 'target-stale';
-        const currentParent = mounted(parent, entry.root) ? parent : parent.alternate;
-        if (!currentParent || !mounted(currentParent, entry.root) ||
-            currentParent.memoizedProps !== parent.memoizedProps) return 'parent-stale';
-        let child = currentParent.child;
-        for (let count = 0; child && count < 256; count++, child = child.sibling) {
-            if (child.index !== target.index) continue;
-            if (!keyRead || child === target || child === target.alternate ||
-                child.elementType !== target.elementType)
-                return 'target-unchanged';
-            const currentHost = resolve(tag, x, y);
-            if (currentHost &&
-                (currentHost.root !== entry.root || currentHost.target !== child ||
-                 currentHost.props !== entry.props ||
-                 currentHost.host === entry.host ||
-                 currentHost.host === entry.host.alternate)) return 'view-reused';
-            return 'ok';
-        }
-        return 'target-missing';
-    }
-
-    return {
-        supported() {
-            return renderer() !== null;
-        },
-        lookup(tag, x, y) {
-            if (!renderer() || !Number.isSafeInteger(tag) || tag <= 0 ||
-                !Number.isFinite(x) || !Number.isFinite(y)) return null;
-            const entry = resolve(tag, x, y);
-            if (!entry) return null;
-            if (entries.size >= 256) {
-                const oldest = entries.keys().next().value;
-                if (!pending.has(oldest)) entries.delete(oldest);
-                else return null;
-            }
-            const identifier = nextIdentifier++;
-            entries.set(identifier, entry);
-            return identifier;
-        },
-        release(identifier) {
-            const operation = pending.get(identifier);
-            operation?.cancel();
-            pending.delete(identifier);
-            entries.delete(identifier);
-        },
-        shared(identifier) {
-            const entry = entries.get(identifier);
-            return entry ? sharedByTarget.get(entry.target)?.promise ?? null : null;
-        },
-        remount(identifier, tag, x, y) {
-            const existing = pending.get(identifier);
-            if (existing) return existing.promise;
-            const entry = entries.get(identifier);
-            if (!entry) throw failure('NATIVE_REACT_STALE_FIBER', 'Fiber handle is no longer active');
-            const shared = sharedByTarget.get(entry.target);
-            if (shared) return shared.promise;
-            const found = current(entry, tag, x, y);
-            if (!found) throw failure('NATIVE_REACT_STALE_FIBER', 'Native view or Fiber changed');
-            const reconciler = renderer();
-            if (!reconciler) {
-                throw failure('NATIVE_REACT_UNSUPPORTED_RENDERER', 'React renderer is unavailable');
-            }
-            const { root, rootTag, target } = found;
-            if (root.pendingLanes !== 0) {
-                throw failure('NATIVE_REACT_BUSY', 'React root already has pending work');
-            }
-            if (root.tag !== 1 || root.current.mode !== 1 ||
-                (root.current.alternate && root.current.alternate.mode !== 1)) {
-                throw failure('NATIVE_REACT_UNSUPPORTED_RENDERER',
-                    'React root cannot perform an isolated remount');
-            }
-            const now = Date.now();
-            if (now - frameStart >= 16) {
-                frameStart = now;
-                frameUses = 0;
-            }
-            if (frameUses >= 4) {
-                throw failure('NATIVE_REACT_BUSY', 'Remount frame budget is exhausted');
-            }
-            frameUses++;
-            const parent = target.return;
-            const mutations = [];
-            let settled = false;
-            let resolvePromise;
-            let rejectPromise;
-            const promise = new Promise((resolve, reject) => {
-                resolvePromise = resolve;
-                rejectPromise = reject;
-            });
-            const finish = (error, committed = false) => {
-                if (settled) return;
-                settled = true;
-                if (error) {
-                    pending.delete(identifier);
-                    if (sharedByTarget.get(entry.target) === operation) {
-                        sharedByTarget.delete(entry.target);
-                    }
-                    if (committed) entries.delete(identifier);
-                    restore(mutations, committed);
-                    rejectPromise(error);
-                    return;
-                }
-                restore(mutations, committed);
-                resolvePromise();
-                Promise.resolve().then(() => {
-                    pending.delete(identifier);
-                    entries.delete(identifier);
-                    if (sharedByTarget.get(entry.target) === operation) {
-                        sharedByTarget.delete(entry.target);
-                    }
-                });
-            };
-            const operation = {
-                promise,
-                cancel() {
-                    if (settled) return;
-                    const error = failure('NATIVE_PLUGIN_SCOPE_DISPOSED', 'Remount was cancelled');
-                    if (mutations.some(mutation =>
-                        mutation.field === 'key' && mutation.active.read)) {
-                        return;
-                    }
-                    finish(error);
-                },
-            };
-            pending.set(identifier, operation);
-            sharedByTarget.set(entry.target, operation);
-            promise.cancel = operation.cancel;
-            const rootTagBefore = root.tag;
-            const rootModes = new Map();
-            for (const fiber of [root.current, root.current.alternate]) {
-                if (fiber) rootModes.set(fiber, fiber.mode);
-            }
-            try {
-                const element = root.current.memoizedState.element;
-                const marker = '__native_remount_' + identifier + '_' + nextMutation++;
-                markKey(mutations, target, marker, entry, tag, x, y);
-                markKey(mutations, target.alternate, marker, entry, tag, x, y);
-                const lane = 2;
-                mark(mutations, parent, 'lanes', lane);
-                mark(mutations, parent.alternate, 'lanes', lane);
-                for (let node = parent.return, depth = 0; node && depth < 512;
-                    node = node.return, depth++) {
-                    mark(mutations, node, 'childLanes', lane);
-                    mark(mutations, node.alternate, 'childLanes', lane);
-                }
-                root.tag = 0;
-                for (const fiber of rootModes.keys()) fiber.mode &= ~1;
-                reconciler.render(element, rootTag, () => {
-                    if (settled) return;
-                    const keyRead = mutations.some(mutation =>
-                        mutation.field === 'key' && mutation.active.read);
-                    const outcome = remounted(entry, target, parent, tag, x, y, keyRead);
-                    if (outcome !== 'ok') {
-                        const code = outcome === 'target-unchanged'
-                            ? 'NATIVE_REACT_UNSUPPORTED_RENDERER' : 'NATIVE_REACT_STALE_FIBER';
-                        finish(failure(code,
-                            'React did not remount the requested component: ' + outcome), true);
-                        return;
-                    }
-                    finish(null, true);
-                });
-                if (!settled) {
-                    finish(failure('NATIVE_REACT_UNSUPPORTED_RENDERER',
-                        'React did not commit the remount synchronously'));
-                }
-            } catch (error) {
-                const keyRead = mutations.some(mutation =>
-                    mutation.field === 'key' && mutation.active.read);
-                finish(error, keyRead);
-            } finally {
-                root.tag = rootTagBefore;
-                for (const [fiber, mode] of rootModes) fiber.mode = mode;
-                for (const fiber of [root.current, root.current.alternate]) {
-                    if (fiber && !rootModes.has(fiber)) fiber.mode = 1;
-                }
-            }
-            return promise;
-        },
-    };
-})()
-)REACT";
-
-static NSString *const kSupportedDiscordBundleFingerprint =
-    @"f9df38043f50a95caa8303562ffc27f9c8a5ad6c0ef0cddad2c82f5a5670ce6b";
-
-static bool supportsReactRemount(void)
-{
-#ifndef DEBUG
-    return false;
-#else
-    NSDictionary *info = NSBundle.mainBundle.infoDictionary;
-    if (![info[@"CFBundleShortVersionString"] isEqualToString:@"348.0"] ||
-        ![info[@"CFBundleVersion"] isEqualToString:@"113691"]) return false;
-    NSString *path = nil;
-    {
-        std::lock_guard<std::mutex> lock(gNativePluginDiscordBundleMutex);
-        path = gNativePluginDiscordBundlePath;
-    }
-    if (!path) return false;
-    NSData *bundle = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
-    if (!bundle.length || bundle.length > UINT32_MAX) return false;
-    uint8_t digest[CC_SHA256_DIGEST_LENGTH] = {0};
-    CC_SHA256(bundle.bytes, (CC_LONG) bundle.length, digest);
-    NSMutableString *fingerprint = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
-    for (uint8_t byte : digest) [fingerprint appendFormat:@"%02x", byte];
-    return [fingerprint isEqualToString:kSupportedDiscordBundleFingerprint];
-#endif
-}
-
-static void throwReactFailure(Runtime &runtime, const char *code, const char *message)
-{
-    JSError failure(runtime, message);
-    failure.value().asObject(runtime).setProperty(
-        runtime, "code", String::createFromUtf8(runtime, code));
-    throw failure;
-}
-
-struct ReactViewLocation {
-    NSInteger tag = 0;
-    CGPoint points[3] = {CGPointZero, CGPointZero, CGPointZero};
-    size_t count = 0;
-    bool valid = false;
-};
-
-static ReactViewLocation reactViewLocation(UIView *view)
-{
-    ReactViewLocation location;
-    executeMainSynchronously([view, &location]() {
-        Class rootClass = NSClassFromString(@"RCTRootComponentView");
-        if (!rootClass || [view isKindOfClass:rootClass]) return;
-        UIView *root = view.superview;
-        for (NSUInteger depth = 0; root && depth < 128; depth++, root = root.superview)
-        {
-            if (![root isKindOfClass:rootClass]) continue;
-            CGPoint center = CGPointMake(CGRectGetMidX(view.bounds), CGRectGetMidY(view.bounds));
-            location.tag = view.tag;
-            location.points[0] = [view convertPoint:center toView:root];
-            location.points[1] = [view convertPoint:center toView:view.superview];
-            location.points[2] = center;
-            location.count = 3;
-            location.valid = location.tag > 0;
-            return;
-        }
-    });
-    return location;
-}
-
-static void installReact(Runtime &runtime, Object &react, bool supported)
-{
-    if (!supported) return;
-    auto buffer = std::make_shared<StringBuffer>(std::string(kReactRemountSource));
-    Value installed = runtime.evaluateJavaScript(buffer, "native-react-remount");
-    if (!installed.isObject()) return;
-    auto helper = std::make_shared<Object>(installed.asObject(runtime));
-
-    react.setProperty(runtime, "isSupported", makeFunction(
-        "isSupported", 0, runtime,
-        [helper](Runtime &rt, const Value &, const Value *, size_t) -> Value {
-            return helper->getPropertyAsFunction(rt, "supported")
-                .callWithThis(rt, *helper);
-        }));
-
-    react.setProperty(runtime, "getFiber", makeFunction(
-        "getFiber", 1, runtime,
-        [helper](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
-            id object = count ? objcValue(rt, args[0]) : nil;
-            if (![object isKindOfClass:[UIView class]]) return Value::null();
-            ReactViewLocation location = reactViewLocation((UIView *) object);
-            if (!location.valid) return Value::null();
-            for (size_t index = 0; index < location.count; index++)
-            {
-                CGPoint point = location.points[index];
-                if (!std::isfinite(point.x) || !std::isfinite(point.y)) continue;
-                Value identifier = helper->getPropertyAsFunction(rt, "lookup")
-                                       .callWithThis(rt, *helper,
-                                                     Value((double) location.tag),
-                                                     Value((double) point.x),
-                                                     Value((double) point.y));
-                if (!identifier.isNumber()) continue;
-                auto fiber = std::make_shared<FiberHandleHost>(
-                    object, location.tag, static_cast<uint64_t>(identifier.asNumber()),
-                    static_cast<uint8_t>(index), gNativePluginRuntimeGeneration.load());
-                return Object::createFromHostObject(rt, std::move(fiber));
-            }
-            return Value::null();
-        }));
-
-    react.setProperty(runtime, "forceRemount", makeFunction(
-        "forceRemount", 1, runtime,
-        [helper](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
-            if (!count || !args[0].isObject() ||
-                !args[0].asObject(rt).isHostObject<FiberHandleHost>(rt))
-            {
-                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Expected a Fiber handle");
-            }
-            auto fiber = args[0].asObject(rt).getHostObject<FiberHandleHost>(rt);
-            if (!fiber->active() ||
-                fiber->generation() != gNativePluginRuntimeGeneration.load())
-            {
-                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Fiber handle is no longer active");
-            }
-            Value shared = helper->getPropertyAsFunction(rt, "shared")
-                .callWithThis(rt, *helper, Value((double) fiber->identifier()));
-            if (shared.isObject()) return shared;
-            UIView *view = fiber->view();
-            ReactViewLocation location = reactViewLocation(view);
-            if (!location.valid ||
-                !fiber->valid(location.tag, gNativePluginRuntimeGeneration.load()))
-            {
-                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Native view was reused");
-            }
-            size_t pointIndex = fiber->pointIndex();
-            if (pointIndex >= location.count ||
-                !std::isfinite(location.points[pointIndex].x) ||
-                !std::isfinite(location.points[pointIndex].y))
-            {
-                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Native view position is invalid");
-            }
-            CGPoint point = location.points[pointIndex];
-            return helper->getPropertyAsFunction(rt, "remount")
-                .callWithThis(rt, *helper, Value((double) fiber->identifier()),
-                              Value((double) location.tag),
-                              Value((double) point.x),
-                              Value((double) point.y));
-        }));
-
-    react.setProperty(runtime, "release", makeFunction(
-        "release", 1, runtime,
-        [helper](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
-            if (!count || !args[0].isObject() ||
-                !args[0].asObject(rt).isHostObject<FiberHandleHost>(rt))
-            {
-                return Value::undefined();
-            }
-            auto fiber = args[0].asObject(rt).getHostObject<FiberHandleHost>(rt);
-            if (!fiber->active()) return Value::undefined();
-            fiber->invalidate();
-            helper->getPropertyAsFunction(rt, "release")
-                .callWithThis(rt, *helper, Value((double) fiber->identifier()));
-            return Value::undefined();
-        }));
-}
-
 static bool isOptionalString(const Value &value)
 {
     return value.isUndefined() || value.isNull() || value.isString();
@@ -6832,12 +6284,6 @@ static void installDebug(Runtime &runtime, Object &debug)
 
 namespace loader {
 
-void setNativePluginDiscordBundleURL(NSURL *sourceURL)
-{
-    std::lock_guard<std::mutex> lock(gNativePluginDiscordBundleMutex);
-    gNativePluginDiscordBundlePath = sourceURL.isFileURL ? sourceURL.path : nil;
-}
-
 void setNativePluginRuntimeExecutor(id instance)
 {
     gRuntimeExecutorInstance = instance;
@@ -6870,7 +6316,6 @@ void registerNativePluginBridge(Runtime &runtime)
     Object bridge(runtime);
     bridge.setProperty(runtime, "apiVersion", String::createFromUtf8(runtime, kNativePluginApiVersion));
     bridge.setProperty(runtime, "abiVersion", String::createFromUtf8(runtime, kNativePluginAbiVersion));
-    bool reactSupported = supportsReactRemount();
 
     const char *names[] = {
         "native.objc.classes",
@@ -6888,15 +6333,10 @@ void registerNativePluginBridge(Runtime &runtime)
         "native.debug.evaluations",
         "native.debug.environment",
     };
-    Array capabilities(runtime, std::size(names) + (reactSupported ? 1 : 0));
+    Array capabilities(runtime, std::size(names));
     for (size_t index = 0; index < std::size(names); index++)
     {
         capabilities.setValueAtIndex(runtime, index, String::createFromUtf8(runtime, names[index]));
-    }
-    if (reactSupported)
-    {
-        capabilities.setValueAtIndex(
-            runtime, std::size(names), String::createFromUtf8(runtime, "native.react.remount"));
     }
     bridge.setProperty(runtime, "capabilities", std::move(capabilities));
 
@@ -6911,10 +6351,6 @@ void registerNativePluginBridge(Runtime &runtime)
     Object fabric(runtime);
     installFabric(runtime, fabric);
     bridge.setProperty(runtime, "fabric", std::move(fabric));
-
-    Object react(runtime);
-    installReact(runtime, react, reactSupported);
-    bridge.setProperty(runtime, "react", std::move(react));
 
     Object debug(runtime);
     installDebug(runtime, debug);
