@@ -223,6 +223,15 @@ test('rejects unsupported renderers without returning a Fiber handle', () => {
 	assert.equal(fixture.bridge.lookup(42, 10, 20), null);
 });
 
+test('declines a target beneath an interruptible boundary before mutation', () => {
+	for (const tag of [13, 19, 22]) {
+		const fixture = createFixture();
+		fixture.parent.return = { tag, return: fixture.rootFiber };
+		assert.equal(fixture.bridge.lookup(42, 10, 20), null);
+		assert.equal(fixture.target.key, null);
+	}
+});
+
 test('rejects renderer module errors and unexpected renderer exports', () => {
 	const fixture = createFixture();
 	fixture.context.__r = () => {

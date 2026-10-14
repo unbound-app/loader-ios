@@ -6266,6 +6266,7 @@ static const char *kReactRemountSource = R"REACT(
         if (!target || !target.return) return null;
         let rootFiber = target;
         for (let depth = 0; rootFiber && depth < 512; depth++, rootFiber = rootFiber.return) {
+            if (rootFiber.tag === 13 || rootFiber.tag === 19 || rootFiber.tag === 22) return null;
             if (rootFiber.tag === 3) break;
         }
         if (!rootFiber || rootFiber.tag !== 3) return null;
