@@ -204,12 +204,14 @@ private:
 class FiberHandleHost final : public HostObject
 {
 public:
-    FiberHandleHost(id view, NSInteger tag, uint64_t identifier, uint64_t generation)
-        : view_(view), identifier_(identifier), identity_(tag, generation) {}
+    FiberHandleHost(id view, NSInteger tag, uint64_t identifier, uint8_t pointIndex,
+                    uint64_t generation)
+        : view_(view), identifier_(identifier), pointIndex_(pointIndex), identity_(tag, generation) {}
 
     UIView *view(void) const { return view_; }
     NSInteger tag(void) const { return identity_.tag(); }
     uint64_t identifier(void) const { return identifier_; }
+    uint8_t pointIndex(void) const { return pointIndex_; }
     uint64_t generation(void) const { return identity_.generation(); }
     bool active(void) const { return identity_.active(); }
     bool valid(NSInteger tag, uint64_t generation) const
@@ -221,6 +223,7 @@ public:
 private:
     __strong UIView *view_ = nil;
     uint64_t identifier_ = 0;
+    uint8_t pointIndex_ = 0;
     NativeReactIdentity identity_;
 };
 
@@ -6181,6 +6184,7 @@ static const char *kReactRemountSource = R"REACT(
 (() => {
     const entries = new Map();
     const pending = new Map();
+    const sharedByTarget = new WeakMap();
     let nextIdentifier = 1;
     let nextMutation = 1;
     let frameStart = 0;
@@ -6266,7 +6270,9 @@ static const char *kReactRemountSource = R"REACT(
         if (!target || !target.return) return null;
         let rootFiber = target;
         for (let depth = 0; rootFiber && depth < 512; depth++, rootFiber = rootFiber.return) {
-            if (rootFiber.tag === 13 || rootFiber.tag === 19 || rootFiber.tag === 22) return null;
+            if (rootFiber.tag === 19 ||
+                ((rootFiber.tag === 13 || rootFiber.tag === 22) &&
+                 rootFiber.memoizedState !== null)) return null;
             if (rootFiber.tag === 3) break;
         }
         if (!rootFiber || rootFiber.tag !== 3) return null;
@@ -6394,11 +6400,17 @@ static const char *kReactRemountSource = R"REACT(
             pending.delete(identifier);
             entries.delete(identifier);
         },
+        shared(identifier) {
+            const entry = entries.get(identifier);
+            return entry ? sharedByTarget.get(entry.target)?.promise ?? null : null;
+        },
         remount(identifier, tag, x, y) {
             const existing = pending.get(identifier);
             if (existing) return existing.promise;
             const entry = entries.get(identifier);
             if (!entry) throw failure('NATIVE_REACT_STALE_FIBER', 'Fiber handle is no longer active');
+            const shared = sharedByTarget.get(entry.target);
+            if (shared) return shared.promise;
             const found = current(entry, tag, x, y);
             if (!found) throw failure('NATIVE_REACT_STALE_FIBER', 'Native view or Fiber changed');
             const reconciler = renderer();
@@ -6408,6 +6420,11 @@ static const char *kReactRemountSource = R"REACT(
             const { root, rootTag, target } = found;
             if (root.pendingLanes !== 0) {
                 throw failure('NATIVE_REACT_BUSY', 'React root already has pending work');
+            }
+            if (root.tag !== 1 || root.current.mode !== 1 ||
+                (root.current.alternate && root.current.alternate.mode !== 1)) {
+                throw failure('NATIVE_REACT_UNSUPPORTED_RENDERER',
+                    'React root cannot perform an isolated remount');
             }
             const now = Date.now();
             if (now - frameStart >= 16) {
@@ -6421,8 +6438,6 @@ static const char *kReactRemountSource = R"REACT(
             const parent = target.return;
             const mutations = [];
             let settled = false;
-            let cancellation = null;
-            let timeout = null;
             let resolvePromise;
             let rejectPromise;
             const promise = new Promise((resolve, reject) => {
@@ -6432,16 +6447,25 @@ static const char *kReactRemountSource = R"REACT(
             const finish = (error, committed = false) => {
                 if (settled) return;
                 settled = true;
-                if (timeout !== null) clearTimeout(timeout);
-                pending.delete(identifier);
                 if (error) {
+                    pending.delete(identifier);
+                    if (sharedByTarget.get(entry.target) === operation) {
+                        sharedByTarget.delete(entry.target);
+                    }
+                    if (committed) entries.delete(identifier);
                     restore(mutations, committed);
                     rejectPromise(error);
                     return;
                 }
                 restore(mutations, committed);
-                entries.delete(identifier);
                 resolvePromise();
+                Promise.resolve().then(() => {
+                    pending.delete(identifier);
+                    entries.delete(identifier);
+                    if (sharedByTarget.get(entry.target) === operation) {
+                        sharedByTarget.delete(entry.target);
+                    }
+                });
             };
             const operation = {
                 promise,
@@ -6450,25 +6474,39 @@ static const char *kReactRemountSource = R"REACT(
                     const error = failure('NATIVE_PLUGIN_SCOPE_DISPOSED', 'Remount was cancelled');
                     if (mutations.some(mutation =>
                         mutation.field === 'key' && mutation.active.read)) {
-                        cancellation ??= error;
                         return;
                     }
                     finish(error);
                 },
             };
             pending.set(identifier, operation);
+            sharedByTarget.set(entry.target, operation);
             promise.cancel = operation.cancel;
+            const rootTagBefore = root.tag;
+            const rootModes = new Map();
+            for (const fiber of [root.current, root.current.alternate]) {
+                if (fiber) rootModes.set(fiber, fiber.mode);
+            }
             try {
                 const element = root.current.memoizedState.element;
+                const marker = '__native_remount_' + identifier + '_' + nextMutation++;
+                markKey(mutations, target, marker, entry, tag, x, y);
+                markKey(mutations, target.alternate, marker, entry, tag, x, y);
+                const lane = 2;
+                mark(mutations, parent, 'lanes', lane);
+                mark(mutations, parent.alternate, 'lanes', lane);
+                for (let node = parent.return, depth = 0; node && depth < 512;
+                    node = node.return, depth++) {
+                    mark(mutations, node, 'childLanes', lane);
+                    mark(mutations, node.alternate, 'childLanes', lane);
+                }
+                root.tag = 0;
+                for (const fiber of rootModes.keys()) fiber.mode &= ~1;
                 reconciler.render(element, rootTag, () => {
                     if (settled) return;
                     const keyRead = mutations.some(mutation =>
                         mutation.field === 'key' && mutation.active.read);
                     const outcome = remounted(entry, target, parent, tag, x, y, keyRead);
-                    if (cancellation) {
-                        finish(cancellation, true);
-                        return;
-                    }
                     if (outcome !== 'ok') {
                         const code = outcome === 'target-unchanged'
                             ? 'NATIVE_REACT_UNSUPPORTED_RENDERER' : 'NATIVE_REACT_STALE_FIBER';
@@ -6478,30 +6516,20 @@ static const char *kReactRemountSource = R"REACT(
                     }
                     finish(null, true);
                 });
-                const lane = root.pendingLanes;
-                if (settled || lane <= 0 || (lane & (lane - 1)) !== 0) {
+                if (!settled) {
                     finish(failure('NATIVE_REACT_UNSUPPORTED_RENDERER',
-                        'React did not schedule an isolated root update'));
-                    return promise;
+                        'React did not commit the remount synchronously'));
                 }
-                const marker = '__native_remount_' + identifier + '_' + nextMutation++;
-                markKey(mutations, target, marker, entry, tag, x, y);
-                markKey(mutations, target.alternate, marker, entry, tag, x, y);
-                mark(mutations, parent, 'lanes', lane);
-                mark(mutations, parent.alternate, 'lanes', lane);
-                for (let node = parent.return, depth = 0; node && depth < 512;
-                    node = node.return, depth++) {
-                    mark(mutations, node, 'childLanes', lane);
-                    mark(mutations, node.alternate, 'childLanes', lane);
-                }
-                timeout = setTimeout(() => {
-                    const keyRead = mutations.some(mutation =>
-                        mutation.field === 'key' && mutation.active.read);
-                    finish(cancellation ??
-                        failure('NATIVE_REACT_TIMEOUT', 'React remount timed out'), keyRead);
-                }, 3000);
             } catch (error) {
-                finish(error);
+                const keyRead = mutations.some(mutation =>
+                    mutation.field === 'key' && mutation.active.read);
+                finish(error, keyRead);
+            } finally {
+                root.tag = rootTagBefore;
+                for (const [fiber, mode] of rootModes) fiber.mode = mode;
+                for (const fiber of [root.current, root.current.alternate]) {
+                    if (fiber && !rootModes.has(fiber)) fiber.mode = 1;
+                }
             }
             return promise;
         },
@@ -6546,7 +6574,8 @@ static void throwReactFailure(Runtime &runtime, const char *code, const char *me
 
 struct ReactViewLocation {
     NSInteger tag = 0;
-    CGPoint point = CGPointZero;
+    CGPoint points[3] = {CGPointZero, CGPointZero, CGPointZero};
+    size_t count = 0;
     bool valid = false;
 };
 
@@ -6562,10 +6591,11 @@ static ReactViewLocation reactViewLocation(UIView *view)
             if (![root isKindOfClass:rootClass]) continue;
             CGPoint center = CGPointMake(CGRectGetMidX(view.bounds), CGRectGetMidY(view.bounds));
             location.tag = view.tag;
-            location.point = [view convertPoint:center toView:root];
-            location.valid = location.tag > 0 &&
-                             std::isfinite(location.point.x) &&
-                             std::isfinite(location.point.y);
+            location.points[0] = [view convertPoint:center toView:root];
+            location.points[1] = [view convertPoint:center toView:view.superview];
+            location.points[2] = center;
+            location.count = 3;
+            location.valid = location.tag > 0;
             return;
         }
     });
@@ -6594,16 +6624,22 @@ static void installReact(Runtime &runtime, Object &react, bool supported)
             if (![object isKindOfClass:[UIView class]]) return Value::null();
             ReactViewLocation location = reactViewLocation((UIView *) object);
             if (!location.valid) return Value::null();
-            Value identifier = helper->getPropertyAsFunction(rt, "lookup")
-                                   .callWithThis(rt, *helper,
-                                                 Value((double) location.tag),
-                                                 Value((double) location.point.x),
-                                                 Value((double) location.point.y));
-            if (!identifier.isNumber()) return Value::null();
-            auto fiber = std::make_shared<FiberHandleHost>(
-                object, location.tag, static_cast<uint64_t>(identifier.asNumber()),
-                gNativePluginRuntimeGeneration.load());
-            return Object::createFromHostObject(rt, std::move(fiber));
+            for (size_t index = 0; index < location.count; index++)
+            {
+                CGPoint point = location.points[index];
+                if (!std::isfinite(point.x) || !std::isfinite(point.y)) continue;
+                Value identifier = helper->getPropertyAsFunction(rt, "lookup")
+                                       .callWithThis(rt, *helper,
+                                                     Value((double) location.tag),
+                                                     Value((double) point.x),
+                                                     Value((double) point.y));
+                if (!identifier.isNumber()) continue;
+                auto fiber = std::make_shared<FiberHandleHost>(
+                    object, location.tag, static_cast<uint64_t>(identifier.asNumber()),
+                    static_cast<uint8_t>(index), gNativePluginRuntimeGeneration.load());
+                return Object::createFromHostObject(rt, std::move(fiber));
+            }
+            return Value::null();
         }));
 
     react.setProperty(runtime, "forceRemount", makeFunction(
@@ -6620,6 +6656,9 @@ static void installReact(Runtime &runtime, Object &react, bool supported)
             {
                 throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Fiber handle is no longer active");
             }
+            Value shared = helper->getPropertyAsFunction(rt, "shared")
+                .callWithThis(rt, *helper, Value((double) fiber->identifier()));
+            if (shared.isObject()) return shared;
             UIView *view = fiber->view();
             ReactViewLocation location = reactViewLocation(view);
             if (!location.valid ||
@@ -6627,11 +6666,19 @@ static void installReact(Runtime &runtime, Object &react, bool supported)
             {
                 throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Native view was reused");
             }
+            size_t pointIndex = fiber->pointIndex();
+            if (pointIndex >= location.count ||
+                !std::isfinite(location.points[pointIndex].x) ||
+                !std::isfinite(location.points[pointIndex].y))
+            {
+                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Native view position is invalid");
+            }
+            CGPoint point = location.points[pointIndex];
             return helper->getPropertyAsFunction(rt, "remount")
                 .callWithThis(rt, *helper, Value((double) fiber->identifier()),
                               Value((double) location.tag),
-                              Value((double) location.point.x),
-                              Value((double) location.point.y));
+                              Value((double) point.x),
+                              Value((double) point.y));
         }));
 
     react.setProperty(runtime, "release", makeFunction(

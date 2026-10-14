@@ -8,15 +8,15 @@ const source = bridgeSource.match(/kReactRemountSource = R"REACT\(([\s\S]*?)\)RE
 
 assert.ok(source);
 
-function createFixture() {
+function createFixture(options = {}) {
 	const element = {};
 	const props = {};
 	const parentProps = {};
 	const component = function Target() {};
 	const viewComponent = function View() {};
 	const animatedViewComponent = { displayName: 'AnimatedComponent(View)' };
-	const root = { pendingLanes: 0, containerInfo: { containerTag: 31 } };
-	const rootFiber = { tag: 3, stateNode: root, memoizedState: { element }, return: null };
+	const root = { tag: 1, pendingLanes: 0, containerInfo: { containerTag: 31 } };
+	const rootFiber = { tag: 3, mode: 1, stateNode: root, memoizedState: { element }, return: null };
 	const parent = { tag: 5, return: rootFiber, lanes: 0, childLanes: 0, pendingProps: parentProps, memoizedProps: parentProps };
 	const target = {
 		tag: 0,
@@ -38,12 +38,29 @@ function createFixture() {
 	root.current = rootFiber;
 	const callbacks = [];
 	const timers = [];
+	const syncCommits = [];
+	const syncObservations = [];
+	const renderOptions = {};
+	const lifecycle = {};
 	const renderer = {
 		render(receivedElement, tag, callback, _fourth, _fifth) {
 			assert.equal(receivedElement, element);
 			assert.equal(tag, 31);
-			root.pendingLanes = 32;
+			const synchronous = root.tag === 0 && root.current.mode === 0;
+			root.pendingLanes = synchronous ? 2 : 32;
 			callbacks.push(callback);
+			if (synchronous) {
+				lifecycle.beforeKeyRead?.();
+				syncObservations.push({
+					key: target.key,
+					alternateKey: target.alternate?.key,
+					parentLanes: parent.lanes,
+					rootChildLanes: rootFiber.childLanes,
+					rootTag: root.tag,
+					rootMode: root.current.mode,
+				});
+				if (!options.deferSynchronous) syncCommits.push(commit(renderOptions));
+			}
 		},
 		createPortal() {},
 		dispatchCommand() {},
@@ -80,6 +97,7 @@ function createFixture() {
 	function commit({ reusedProps = false, detachedParent = false, removedTag = false } = {}) {
 		if (reusedProps) target.pendingProps = {};
 		const remountRequested = typeof target.key === 'string' && target.key.startsWith('__native_remount_');
+		lifecycle.afterKeyRead?.();
 		const replacement = {
 			tag: 0,
 			key: null,
@@ -91,9 +109,12 @@ function createFixture() {
 		};
 		const currentRoot = {
 			tag: 3,
+			mode: root.current.mode,
 			stateNode: root,
 			memoizedState: { element },
+			alternate: root.current,
 		};
+		root.current.alternate = currentRoot;
 		const currentParent = {
 			tag: 5,
 			return: detachedParent ? {} : currentRoot,
@@ -112,7 +133,7 @@ function createFixture() {
 		return { replacement, remountRequested };
 	}
 
-	return { animatedViewComponent, bridge, callbacks, commit, context, host, manager, parent, root, rootFiber, target, timers, viewComponent };
+	return { animatedViewComponent, bridge, callbacks, commit, context, host, lifecycle, manager, parent, renderOptions, root, rootFiber, syncCommits, syncObservations, target, timers, viewComponent };
 }
 
 test('remounts only after scheduling the target parent and ancestor lanes', async () => {
@@ -120,10 +141,9 @@ test('remounts only after scheduling the target parent and ancestor lanes', asyn
 	const identifier = fixture.bridge.lookup(42, 10, 20);
 	assert.equal(typeof identifier, 'number');
 	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
-	assert.match(fixture.target.key, /^__native_remount_/);
-	assert.equal(fixture.parent.lanes & 32, 32);
-	assert.equal(fixture.rootFiber.childLanes & 32, 32);
-	fixture.commit();
+	assert.match(fixture.syncObservations[0].key, /^__native_remount_/);
+	assert.equal(fixture.syncObservations[0].parentLanes & 2, 2);
+	assert.equal(fixture.syncObservations[0].rootChildLanes & 2, 2);
 	await pending;
 	assert.equal(fixture.target.key, null);
 });
@@ -139,8 +159,7 @@ test('skips native component wrappers when selecting the remount target', async 
 	};
 	const identifier = fixture.bridge.lookup(42, 10, 20);
 	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
-	assert.match(fixture.target.key, /^__native_remount_/);
-	fixture.commit();
+	assert.equal(fixture.syncCommits[0].remountRequested, true);
 	await pending;
 });
 
@@ -150,8 +169,7 @@ test('does not skip a plugin component sharing a native wrapper name', async () 
 	const identifier = fixture.bridge.lookup(42, 10, 20);
 	assert.equal(typeof identifier, 'number');
 	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
-	assert.match(fixture.target.key, /^__native_remount_/);
-	fixture.commit();
+	assert.equal(fixture.syncCommits[0].remountRequested, true);
 	await pending;
 });
 
@@ -161,17 +179,41 @@ test('coalesces duplicate remount requests for one handle', async () => {
 	const first = fixture.bridge.remount(identifier, 42, 10, 20);
 	const second = fixture.bridge.remount(identifier, 42, 10, 20);
 	assert.equal(first, second);
-	assert.equal(fixture.callbacks.length, 1);
-	fixture.commit();
+	assert.equal(fixture.syncCommits.length, 1);
 	await first;
+});
+
+test('coalesces requests from separate handles for the same target', async () => {
+	const fixture = createFixture();
+	const firstIdentifier = fixture.bridge.lookup(42, 10, 20);
+	const secondIdentifier = fixture.bridge.lookup(42, 10, 20);
+	assert.notEqual(firstIdentifier, secondIdentifier);
+	const first = fixture.bridge.remount(firstIdentifier, 42, 10, 20);
+	assert.equal(fixture.bridge.shared(secondIdentifier), first);
+	const second = fixture.bridge.remount(secondIdentifier, 42, 10, 20);
+	assert.equal(first, second);
+	assert.equal(fixture.syncCommits.length, 1);
+	await first;
+});
+
+test('commits an isolated remount before forceRemount returns', async () => {
+	const fixture = createFixture();
+	const identifier = fixture.bridge.lookup(42, 10, 20);
+	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
+	assert.equal(fixture.syncCommits.length, 1);
+	assert.equal(fixture.syncCommits[0].remountRequested, true);
+	assert.equal(fixture.root.pendingLanes, 0);
+	assert.equal(fixture.root.tag, 1);
+	assert.equal(fixture.root.current.mode, 1);
+	await pending;
 });
 
 test('rejects a remount if the view is reused with different props before commit', async () => {
 	const fixture = createFixture();
 	const identifier = fixture.bridge.lookup(42, 10, 20);
+	fixture.renderOptions.reusedProps = true;
 	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
-	const result = fixture.commit({ reusedProps: true });
-	assert.equal(result.remountRequested, false);
+	assert.equal(fixture.syncCommits[0].remountRequested, false);
 	await assert.rejects(pending, { code: 'NATIVE_REACT_STALE_FIBER' });
 });
 
@@ -183,26 +225,26 @@ test('does not mark an alternate Fiber whose pending props changed', async () =>
 	};
 	fixture.target.alternate = alternate;
 	const identifier = fixture.bridge.lookup(42, 10, 20);
-	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
 	alternate.pendingProps = {};
+	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
+	assert.equal(fixture.syncObservations[0].alternateKey, null);
 	assert.equal(alternate.key, null);
-	pending.cancel();
-	await assert.rejects(pending, { code: 'NATIVE_PLUGIN_SCOPE_DISPOSED' });
+	await pending;
 });
 
 test('rejects a remount if the parent is detached before commit', async () => {
 	const fixture = createFixture();
 	const identifier = fixture.bridge.lookup(42, 10, 20);
+	fixture.renderOptions.detachedParent = true;
 	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
-	fixture.commit({ detachedParent: true });
 	await assert.rejects(pending, { code: 'NATIVE_REACT_STALE_FIBER' });
 });
 
 test('accepts a remount when the replaced view tag has been removed', async () => {
 	const fixture = createFixture();
 	const identifier = fixture.bridge.lookup(42, 10, 20);
+	fixture.renderOptions.removedTag = true;
 	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
-	fixture.commit({ removedTag: true });
 	await pending;
 });
 
@@ -226,9 +268,20 @@ test('rejects unsupported renderers without returning a Fiber handle', () => {
 test('declines a target beneath an interruptible boundary before mutation', () => {
 	for (const tag of [13, 19, 22]) {
 		const fixture = createFixture();
-		fixture.parent.return = { tag, return: fixture.rootFiber };
+		fixture.parent.return = { tag, memoizedState: {}, return: fixture.rootFiber };
 		assert.equal(fixture.bridge.lookup(42, 10, 20), null);
 		assert.equal(fixture.target.key, null);
+	}
+});
+
+test('accepts settled Suspense and visible Offscreen ancestors', async () => {
+	for (const tag of [13, 22]) {
+		const fixture = createFixture();
+		fixture.parent.return = { tag, memoizedState: null, return: fixture.rootFiber };
+		const identifier = fixture.bridge.lookup(42, 10, 20);
+		assert.equal(typeof identifier, 'number');
+		await fixture.bridge.remount(identifier, 42, 10, 20);
+		assert.equal(fixture.syncCommits[0].remountRequested, true);
 	}
 });
 
@@ -242,38 +295,54 @@ test('rejects renderer module errors and unexpected renderer exports', () => {
 	assert.equal(fixture.bridge.lookup(42, 10, 20), null);
 });
 
-test('cancellation restores the Fiber before React commits', async () => {
+test('cancellation after a synchronous commit does not report an aborted remount', async () => {
 	const fixture = createFixture();
 	const identifier = fixture.bridge.lookup(42, 10, 20);
 	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
 	pending.cancel();
-	await assert.rejects(pending, { code: 'NATIVE_PLUGIN_SCOPE_DISPOSED' });
-	assert.equal(fixture.target.key, null);
-	assert.equal(fixture.parent.lanes, 0);
-	assert.equal(fixture.rootFiber.childLanes ?? 0, 0);
-	fixture.commit();
-});
-
-test('cancellation after React consumes the key waits for commit cleanup', async () => {
-	const fixture = createFixture();
-	const identifier = fixture.bridge.lookup(42, 10, 20);
-	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
-	assert.match(fixture.target.key, /^__native_remount_/);
-	pending.cancel();
-	assert.equal(typeof Object.getOwnPropertyDescriptor(fixture.target, 'key')?.get, 'function');
-	fixture.commit();
-	await assert.rejects(pending, { code: 'NATIVE_PLUGIN_SCOPE_DISPOSED' });
+	await pending;
+	assert.equal(fixture.syncCommits[0].remountRequested, true);
 	assert.equal(fixture.target.key, null);
 });
 
-test('timeout restores the Fiber when React never commits', async () => {
+test('release before the key is consumed cancels without a remount', async () => {
 	const fixture = createFixture();
 	const identifier = fixture.bridge.lookup(42, 10, 20);
+	fixture.lifecycle.beforeKeyRead = () => fixture.bridge.release(identifier);
 	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
-	fixture.timers[0]();
-	await assert.rejects(pending, { code: 'NATIVE_REACT_TIMEOUT' });
+	await assert.rejects(pending, { code: 'NATIVE_PLUGIN_SCOPE_DISPOSED' });
+	assert.equal(fixture.syncCommits[0].remountRequested, false);
+});
+
+test('release after the key is consumed completes the atomic remount', async () => {
+	const fixture = createFixture();
+	const identifier = fixture.bridge.lookup(42, 10, 20);
+	fixture.lifecycle.afterKeyRead = () => fixture.bridge.release(identifier);
+	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
+	await pending;
+	assert.equal(fixture.syncCommits[0].remountRequested, true);
+});
+
+test('release invalidates a Fiber handle before it can remount', () => {
+	const fixture = createFixture();
+	const identifier = fixture.bridge.lookup(42, 10, 20);
+	fixture.bridge.release(identifier);
+	assert.throws(() => fixture.bridge.remount(identifier, 42, 10, 20), {
+		code: 'NATIVE_REACT_STALE_FIBER',
+	});
+	assert.equal(fixture.target.key, null);
+});
+
+test('restores Fiber fields when the renderer does not commit synchronously', async () => {
+	const fixture = createFixture({ deferSynchronous: true });
+	const identifier = fixture.bridge.lookup(42, 10, 20);
+	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
+	await assert.rejects(pending, { code: 'NATIVE_REACT_UNSUPPORTED_RENDERER' });
 	assert.equal(fixture.target.key, null);
 	assert.equal(fixture.parent.lanes, 0);
+	assert.equal(fixture.root.tag, 1);
+	assert.equal(fixture.root.current.mode, 1);
+	assert.equal(fixture.commit().remountRequested, false);
 });
 
 test('resolves a Fabric instance handle through the mounted alternate', () => {
