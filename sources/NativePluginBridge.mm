@@ -6513,6 +6513,9 @@ static NSString *const kSupportedDiscordBundleFingerprint =
 
 static bool supportsReactRemount(void)
 {
+#ifndef DEBUG
+    return false;
+#else
     NSDictionary *info = NSBundle.mainBundle.infoDictionary;
     if (![info[@"CFBundleShortVersionString"] isEqualToString:@"348.0"] ||
         ![info[@"CFBundleVersion"] isEqualToString:@"113691"]) return false;
@@ -6529,6 +6532,7 @@ static bool supportsReactRemount(void)
     NSMutableString *fingerprint = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
     for (uint8_t byte : digest) [fingerprint appendFormat:@"%02x", byte];
     return [fingerprint isEqualToString:kSupportedDiscordBundleFingerprint];
+#endif
 }
 
 static void throwReactFailure(Runtime &runtime, const char *code, const char *message)
