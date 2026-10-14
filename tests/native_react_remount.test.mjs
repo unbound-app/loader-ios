@@ -325,6 +325,20 @@ test('release before the key is consumed cancels without a remount', async () =>
 	assert.equal(fixture.commit().remountRequested, false);
 });
 
+test('cancels a pending remount without releasing the Fiber handle', async () => {
+	const fixture = createFixture();
+	const identifier = fixture.bridge.lookup(42, 10, 20);
+	const pending = fixture.bridge.remount(identifier, 42, 10, 20);
+	fixture.bridge.cancel(identifier);
+	await assert.rejects(pending, { code: 'NATIVE_PLUGIN_SCOPE_DISPOSED' });
+	assert.equal(fixture.commit().remountRequested, false);
+	const retry = fixture.bridge.remount(identifier, 42, 10, 20);
+	assert.match(fixture.target.key, /^__native_remount_/);
+	fixture.bridge.cancel(identifier);
+	assert.equal(fixture.commit().remountRequested, false);
+	await assert.rejects(retry, { code: 'NATIVE_PLUGIN_SCOPE_DISPOSED' });
+});
+
 test('release after the key is consumed aborts the pending transition', async () => {
 	const fixture = createFixture();
 	const identifier = fixture.bridge.lookup(42, 10, 20);

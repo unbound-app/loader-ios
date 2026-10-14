@@ -6405,6 +6405,9 @@ static const char *kReactRemountSource = R"REACT(
             operation?.cancel();
             entries.delete(identifier);
         },
+        cancel(identifier) {
+            pending.get(identifier)?.cancel();
+        },
         shared(identifier) {
             const entry = entries.get(identifier);
             const operation = entry ? sharedByTarget.get(entry.target) : null;
@@ -6683,7 +6686,7 @@ static void installReact(Runtime &runtime, Object &react, bool supported)
                 .callWithThis(rt, *helper, Value((double) fiber->identifier()));
             if (shared.isObject()) return shared;
             auto location = std::make_shared<ReactViewLocation>();
-            return executeMainAsynchronously(
+            Value pending = executeMainAsynchronously(
                 rt,
                 [fiber, location]() { *location = reactViewLocationOnMain(fiber->view()); },
                 [fiber, location, helper](Runtime &completionRuntime) -> Value {
@@ -6709,6 +6712,20 @@ static void installReact(Runtime &runtime, Object &react, bool supported)
                                       Value((double) point.x),
                                       Value((double) point.y));
                 });
+            Object promise = pending.asObject(rt);
+            auto cancelMain = std::make_shared<Function>(promise.getPropertyAsFunction(rt, "cancel"));
+            Function cancelRemount = Function::createFromHostFunction(
+                rt, PropNameID::forUtf8(rt, "cancel"), 0,
+                [fiber, helper, cancelMain](Runtime &cancelRuntime, const Value &,
+                                            const Value *, size_t) -> Value {
+                    cancelMain->call(cancelRuntime);
+                    helper->getPropertyAsFunction(cancelRuntime, "cancel")
+                        .callWithThis(cancelRuntime, *helper,
+                                      Value((double) fiber->identifier()));
+                    return Value::undefined();
+                });
+            promise.setProperty(rt, "cancel", std::move(cancelRemount));
+            return promise;
         }));
 
     react.setProperty(runtime, "release", makeFunction(
