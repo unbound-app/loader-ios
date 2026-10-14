@@ -1,6 +1,7 @@
 #import "NativePluginBridge.h"
 
 #import <dlfcn.h>
+#import <CommonCrypto/CommonDigest.h>
 #import <mach/mach.h>
 #import <mach-o/loader.h>
 #import <objc/message.h>
@@ -34,6 +35,7 @@
 #import "NativePluginFFI.h"
 #import "NativeNumericValidation.h"
 #import "NativeOperationGate.h"
+#import "NativeReactIdentity.h"
 #import "NativeTypeEncoding.h"
 
 using namespace facebook;
@@ -203,21 +205,23 @@ class FiberHandleHost final : public HostObject
 {
 public:
     FiberHandleHost(id view, NSInteger tag, uint64_t identifier, uint64_t generation)
-        : view_(view), tag_(tag), identifier_(identifier), generation_(generation) {}
+        : view_(view), identifier_(identifier), identity_(tag, generation) {}
 
     UIView *view(void) const { return view_; }
-    NSInteger tag(void) const { return tag_; }
+    NSInteger tag(void) const { return identity_.tag(); }
     uint64_t identifier(void) const { return identifier_; }
-    uint64_t generation(void) const { return generation_; }
-    bool active(void) const { return active_.load(); }
-    void invalidate(void) { active_.store(false); }
+    uint64_t generation(void) const { return identity_.generation(); }
+    bool active(void) const { return identity_.active(); }
+    bool valid(NSInteger tag, uint64_t generation) const
+    {
+        return identity_.valid(tag, generation);
+    }
+    void invalidate(void) { identity_.invalidate(); }
 
 private:
     __strong UIView *view_ = nil;
-    NSInteger tag_ = 0;
     uint64_t identifier_ = 0;
-    uint64_t generation_ = 0;
-    std::atomic_bool active_{true};
+    NativeReactIdentity identity_;
 };
 
 class PointerHost final : public HostObject
@@ -374,6 +378,8 @@ static std::mutex gNativePluginRuntimeMutex;
 static Runtime *gNativePluginRuntime = nullptr;
 static std::thread::id gNativePluginRuntimeThread;
 static std::atomic_uint64_t gNativePluginRuntimeGeneration{0};
+static std::mutex gNativePluginDiscordBundleMutex;
+static NSString *gNativePluginDiscordBundlePath = nil;
 static std::atomic_uint gMainThreadRuntimeWaits{0};
 static std::mutex gFabricSurfaceMutex;
 static std::unordered_map<FabricSurfaceHost *, std::shared_ptr<FabricSurfaceHost>> gFabricSurfaces;
@@ -6179,6 +6185,12 @@ static const char *kReactRemountSource = R"REACT(
     let nextMutation = 1;
     let frameStart = 0;
     let frameUses = 0;
+    const rendererModuleId = 116;
+    const nativeWrapperKeys = [
+        'View', 'Text', 'Image', 'ScrollView', 'TextInput', 'SafeAreaView',
+        'Pressable', 'TouchableOpacity', 'TouchableHighlight', 'TouchableWithoutFeedback',
+    ];
+    let nativeWrapperTypes = null;
 
     function failure(code, message) {
         const error = new Error(message);
@@ -6189,7 +6201,7 @@ static const char *kReactRemountSource = R"REACT(
     function renderer() {
         if (typeof __r !== 'function') return null;
         try {
-            const value = __r(116);
+            const value = __r(rendererModuleId);
             if (!value || typeof value.render !== 'function' ||
                 value.render.length !== 5 ||
                 typeof value.getNodeFromInternalInstanceHandle !== 'function' ||
@@ -6204,6 +6216,21 @@ static const char *kReactRemountSource = R"REACT(
         } catch {
             return null;
         }
+    }
+
+    function nativeWrapper(fiber) {
+        if (!nativeWrapperTypes) {
+            const native = globalThis.ReactNative;
+            if (!native) return false;
+            nativeWrapperTypes = new Set();
+            for (const key of nativeWrapperKeys) {
+                const component = native[key];
+                const animated = native.Animated?.[key];
+                if (component) nativeWrapperTypes.add(component);
+                if (animated) nativeWrapperTypes.add(animated);
+            }
+        }
+        return nativeWrapperTypes.has(fiber.elementType);
     }
 
     function resolve(tag, x, y) {
@@ -6231,8 +6258,9 @@ static const char *kReactRemountSource = R"REACT(
         }
         let target = host.return;
         for (let depth = 0; target && depth < 512; depth++, target = target.return) {
-            if (target.tag === 0 || target.tag === 1 ||
-                target.tag === 14 || target.tag === 15) break;
+            if ((target.tag === 0 || target.tag === 1 ||
+                 target.tag === 11 || target.tag === 14 || target.tag === 15) &&
+                !nativeWrapper(target)) break;
             if (target.tag === 3) return null;
         }
         if (!target || !target.return) return null;
@@ -6262,30 +6290,83 @@ static const char *kReactRemountSource = R"REACT(
     function mark(mutations, node, field, value) {
         if (!node) return;
         const before = node[field];
-        const after = field === 'key' ? value : before | value;
+        const after = before | value;
         if (before === after) return;
         node[field] = after;
         mutations.push({ node, field, before, after });
     }
 
-    function restore(mutations) {
+    function markKey(mutations, node, marker, entry, tag, x, y) {
+        if (!node) return;
+        const descriptor = Object.getOwnPropertyDescriptor(node, 'key');
+        if (!descriptor || !descriptor.configurable || !('value' in descriptor)) {
+            throw failure('NATIVE_REACT_UNSUPPORTED_RENDERER', 'Fiber key cannot be guarded');
+        }
+        const active = { value: true, read: false };
+        const guard = () => {
+            if (!active.value) return descriptor.value;
+            const found = current(entry, tag, x, y);
+            if (!found || node.pendingProps !== entry.props ||
+                node.return?.pendingProps !== node.return?.memoizedProps ||
+                found.target.pendingProps !== entry.props ||
+                found.target.return?.pendingProps !== found.target.return?.memoizedProps) {
+                return descriptor.value;
+            }
+            active.read = true;
+            return marker;
+        };
+        Object.defineProperty(node, 'key', {
+            configurable: true,
+            enumerable: descriptor.enumerable,
+            get: guard,
+        });
+        mutations.push({ node, field: 'key', descriptor, guard, active });
+    }
+
+    function restore(mutations, committed) {
         for (let index = mutations.length - 1; index >= 0; index--) {
             const mutation = mutations[index];
+            if (mutation.field === 'key') {
+                mutation.active.value = false;
+                if (Object.getOwnPropertyDescriptor(mutation.node, 'key')?.get === mutation.guard) {
+                    Object.defineProperty(mutation.node, 'key', mutation.descriptor);
+                }
+                continue;
+            }
+            if (committed) continue;
             if (mutation.node[mutation.field] === mutation.after) {
                 mutation.node[mutation.field] = mutation.before;
             }
         }
     }
 
-    function remounted(target, parent) {
-        const currentParent = parent.alternate ?? parent;
+    function mounted(node, root) {
+        for (let depth = 0; node && depth < 512; depth++, node = node.return) {
+            if (node === root.current) return true;
+        }
+        return false;
+    }
+
+    function remounted(entry, target, parent, tag, x, y, keyRead) {
+        if (target.pendingProps !== entry.props) return 'target-stale';
+        const currentParent = mounted(parent, entry.root) ? parent : parent.alternate;
+        if (!currentParent || !mounted(currentParent, entry.root) ||
+            currentParent.memoizedProps !== parent.memoizedProps) return 'parent-stale';
         let child = currentParent.child;
         for (let count = 0; child && count < 256; count++, child = child.sibling) {
             if (child.index !== target.index) continue;
-            return child !== target && child !== target.alternate &&
-                child.elementType === target.elementType && child.key !== target.key;
+            if (!keyRead || child === target || child === target.alternate ||
+                child.elementType !== target.elementType)
+                return 'target-unchanged';
+            const currentHost = resolve(tag, x, y);
+            if (currentHost &&
+                (currentHost.root !== entry.root || currentHost.target !== child ||
+                 currentHost.props !== entry.props ||
+                 currentHost.host === entry.host ||
+                 currentHost.host === entry.host.alternate)) return 'view-reused';
+            return 'ok';
         }
-        return false;
+        return 'target-missing';
     }
 
     return {
@@ -6339,6 +6420,7 @@ static const char *kReactRemountSource = R"REACT(
             const parent = target.return;
             const mutations = [];
             let settled = false;
+            let cancellation = null;
             let timeout = null;
             let resolvePromise;
             let rejectPromise;
@@ -6346,23 +6428,31 @@ static const char *kReactRemountSource = R"REACT(
                 resolvePromise = resolve;
                 rejectPromise = reject;
             });
-            const finish = (error) => {
+            const finish = (error, committed = false) => {
                 if (settled) return;
                 settled = true;
                 if (timeout !== null) clearTimeout(timeout);
                 pending.delete(identifier);
                 if (error) {
-                    restore(mutations);
+                    restore(mutations, committed);
                     rejectPromise(error);
                     return;
                 }
+                restore(mutations, committed);
                 entries.delete(identifier);
                 resolvePromise();
             };
             const operation = {
                 promise,
                 cancel() {
-                    finish(failure('NATIVE_PLUGIN_SCOPE_DISPOSED', 'Remount was cancelled'));
+                    if (settled) return;
+                    const error = failure('NATIVE_PLUGIN_SCOPE_DISPOSED', 'Remount was cancelled');
+                    if (mutations.some(mutation =>
+                        mutation.field === 'key' && mutation.active.read)) {
+                        cancellation ??= error;
+                        return;
+                    }
+                    finish(error);
                 },
             };
             pending.set(identifier, operation);
@@ -6371,12 +6461,21 @@ static const char *kReactRemountSource = R"REACT(
                 const element = root.current.memoizedState.element;
                 reconciler.render(element, rootTag, () => {
                     if (settled) return;
-                    if (!remounted(target, parent)) {
-                        finish(failure('NATIVE_REACT_UNSUPPORTED_RENDERER',
-                            'React did not remount the requested component'));
+                    const keyRead = mutations.some(mutation =>
+                        mutation.field === 'key' && mutation.active.read);
+                    const outcome = remounted(entry, target, parent, tag, x, y, keyRead);
+                    if (cancellation) {
+                        finish(cancellation, true);
                         return;
                     }
-                    finish(null);
+                    if (outcome !== 'ok') {
+                        const code = outcome === 'target-unchanged'
+                            ? 'NATIVE_REACT_UNSUPPORTED_RENDERER' : 'NATIVE_REACT_STALE_FIBER';
+                        finish(failure(code,
+                            'React did not remount the requested component: ' + outcome), true);
+                        return;
+                    }
+                    finish(null, true);
                 });
                 const lane = root.pendingLanes;
                 if (settled || lane <= 0 || (lane & (lane - 1)) !== 0) {
@@ -6385,8 +6484,8 @@ static const char *kReactRemountSource = R"REACT(
                     return promise;
                 }
                 const marker = '__native_remount_' + identifier + '_' + nextMutation++;
-                mark(mutations, target, 'key', marker);
-                mark(mutations, target.alternate, 'key', marker);
+                markKey(mutations, target, marker, entry, tag, x, y);
+                markKey(mutations, target.alternate, marker, entry, tag, x, y);
                 mark(mutations, parent, 'lanes', lane);
                 mark(mutations, parent.alternate, 'lanes', lane);
                 for (let node = parent.return, depth = 0; node && depth < 512;
@@ -6395,7 +6494,10 @@ static const char *kReactRemountSource = R"REACT(
                     mark(mutations, node.alternate, 'childLanes', lane);
                 }
                 timeout = setTimeout(() => {
-                    finish(failure('NATIVE_REACT_TIMEOUT', 'React remount timed out'));
+                    const keyRead = mutations.some(mutation =>
+                        mutation.field === 'key' && mutation.active.read);
+                    finish(cancellation ??
+                        failure('NATIVE_REACT_TIMEOUT', 'React remount timed out'), keyRead);
                 }, 3000);
             } catch (error) {
                 finish(error);
@@ -6406,11 +6508,27 @@ static const char *kReactRemountSource = R"REACT(
 })()
 )REACT";
 
+static NSString *const kSupportedDiscordBundleFingerprint =
+    @"f9df38043f50a95caa8303562ffc27f9c8a5ad6c0ef0cddad2c82f5a5670ce6b";
+
 static bool supportsReactRemount(void)
 {
     NSDictionary *info = NSBundle.mainBundle.infoDictionary;
-    return [info[@"CFBundleShortVersionString"] isEqualToString:@"348.0"] &&
-           [info[@"CFBundleVersion"] isEqualToString:@"113691"];
+    if (![info[@"CFBundleShortVersionString"] isEqualToString:@"348.0"] ||
+        ![info[@"CFBundleVersion"] isEqualToString:@"113691"]) return false;
+    NSString *path = nil;
+    {
+        std::lock_guard<std::mutex> lock(gNativePluginDiscordBundleMutex);
+        path = gNativePluginDiscordBundlePath;
+    }
+    if (!path) return false;
+    NSData *bundle = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
+    if (!bundle.length || bundle.length > UINT32_MAX) return false;
+    uint8_t digest[CC_SHA256_DIGEST_LENGTH] = {0};
+    CC_SHA256(bundle.bytes, (CC_LONG) bundle.length, digest);
+    NSMutableString *fingerprint = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for (uint8_t byte : digest) [fingerprint appendFormat:@"%02x", byte];
+    return [fingerprint isEqualToString:kSupportedDiscordBundleFingerprint];
 }
 
 static void throwReactFailure(Runtime &runtime, const char *code, const char *message)
@@ -6499,7 +6617,8 @@ static void installReact(Runtime &runtime, Object &react, bool supported)
             }
             UIView *view = fiber->view();
             ReactViewLocation location = reactViewLocation(view);
-            if (!location.valid || location.tag != fiber->tag())
+            if (!location.valid ||
+                !fiber->valid(location.tag, gNativePluginRuntimeGeneration.load()))
             {
                 throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Native view was reused");
             }
@@ -6660,6 +6779,12 @@ static void installDebug(Runtime &runtime, Object &debug)
 }
 
 namespace loader {
+
+void setNativePluginDiscordBundleURL(NSURL *sourceURL)
+{
+    std::lock_guard<std::mutex> lock(gNativePluginDiscordBundleMutex);
+    gNativePluginDiscordBundlePath = sourceURL.isFileURL ? sourceURL.path : nil;
+}
 
 void setNativePluginRuntimeExecutor(id instance)
 {

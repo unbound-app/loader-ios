@@ -113,6 +113,11 @@ jobs:
       - name: test React remount bridge
         run: node --test tests/native_react_remount.test.mjs
 
+      - name: test React handle identity
+        run: |
+          clang++ -std=c++20 -Iheaders tests/native_react_identity.cpp -o "${RUNNER_TEMP}/native_react_identity"
+          "${RUNNER_TEMP}/native_react_identity"
+
       - name: check cache
         run: echo upstream_heads=`git ls-remote https://github.com/theos/theos | head -n 1 | cut -f 1`-`git ls-remote https://github.com/theos/sdks | head -n 1 | cut -f 1` >> $GITHUB_ENV
 
