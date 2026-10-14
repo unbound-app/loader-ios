@@ -4,9 +4,10 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 
 const bridgeSource = readFileSync(new URL('../sources/NativePluginBridge.mm', import.meta.url), 'utf8');
-const source = bridgeSource.match(/kReactRemountSource = R"REACT\(([\s\S]*?)\)REACT";/)?.[1];
+const source = readFileSync(new URL('../resources/native-react-remount.js', import.meta.url), 'utf8');
 
 assert.ok(source);
+assert.match(bridgeSource, /\[Utilities getResource:@"native-react-remount"\]/);
 
 function createFixture(options = {}) {
 	const element = {};
