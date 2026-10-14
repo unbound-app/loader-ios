@@ -401,6 +401,7 @@ static BOOL                    gRCTInstanceHooksInstalled   = NO;
 
 static void loadJSBundle(id self, SEL selector, NSURL *sourceURL)
 {
+    loader::setNativePluginDiscordBundleURL(sourceURL);
     prepareLoading(self);
     if (gOriginalLoadJSBundle)
     {

@@ -11,5 +11,6 @@ constexpr const char *kNativePluginAbiVersion = "1.0.0";
 void registerNativePluginBridge(facebook::jsi::Runtime &runtime);
 void setNativePluginRuntimeExecutor(id instance);
 void setNativePluginFabricHost(id instance);
+void setNativePluginDiscordBundleURL(NSURL *sourceURL);
 
 }
