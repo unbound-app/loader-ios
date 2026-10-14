@@ -284,7 +284,7 @@ jobs:
           xcodebuild -version
 
       - name: download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           merge-multiple: true
 
@@ -348,7 +348,7 @@ jobs:
           go-version-file: go.mod
 
       - name: download ipa artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: ipa
 
@@ -395,7 +395,7 @@ jobs:
           go-version-file: go.mod
 
       - name: download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           merge-multiple: true
 
@@ -463,7 +463,7 @@ jobs:
 
       - name: download deb artifact
         if: inputs.only_app_repo != true && inputs.only_apt_repo != true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: rootless package
           path: apt-repo/repo/debs
@@ -480,7 +480,7 @@ jobs:
 
       - name: download ipa artifact
         if: inputs.only_app_repo != true && inputs.only_apt_repo != true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: ipa
 
