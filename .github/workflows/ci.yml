@@ -99,7 +99,7 @@ jobs:
                   go run ./tools build ipa --ipa discord.ipa --deb "$(find packages -maxdepth 1 -name '*.deb' -print -quit)" --channel appstore --output "discord-${DISCORD_VERSION}.ipa" --non-interactive
 
             - name: Upload package smoke artifact
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: discord-${{ matrix.version }}-package-smoke
                   path: discord-${{ matrix.version }}.ipa

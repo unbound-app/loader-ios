@@ -174,14 +174,14 @@ jobs:
           git rev-parse HEAD > symbols/commit.txt
 
       - name: Upload tweak symbols
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: tweak symbols
           path: symbols/
 
       - name: upload rootless package
         id: upload-deb
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: rootless package
           path: packages/*.deb
@@ -244,7 +244,7 @@ jobs:
           fi
 
       - name: upload source ipa
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: source ipa
           path: discord.ipa
@@ -307,7 +307,7 @@ jobs:
 
       - name: upload ipa as artifact
         id: upload-ipa
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ipa
           path: ${{ env.APP_NAME }}.ipa
@@ -362,7 +362,7 @@ jobs:
 
       - name: upload iOS Simulator artifact
         id: upload-simulator
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ios-simulator
           path: unbound-ios-simulator.zip
