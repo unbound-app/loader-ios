@@ -12,6 +12,7 @@
 #import <substrate.h>
 
 #include <atomic>
+#include <mutex>
 
 using namespace facebook;
 
@@ -144,9 +145,14 @@ static std::atomic_uint64_t gPrefetchToken{0};
 
 static void prefetchBundle(void);
 
+// Runs once per React Native instance: a JS reload creates a new instance, which needs the bundle
+// fetched and scheduled again. Fonts and the hot-reload stream are process-wide and set up once.
 static void prepareLoading(id instance)
 {
-    if (!instance || gLoaderPrepared.exchange(true))
+    static std::mutex mutex;
+    std::lock_guard<std::mutex> lock(mutex);
+
+    if (!instance || instance == gInstance)
     {
         return;
     }
@@ -164,9 +170,14 @@ static void prepareLoading(id instance)
 
     [Plugins init];
     [Themes init];
-    [Fonts init];
+
+    if (!gLoaderPrepared.exchange(true))
+    {
+        [Fonts init];
+        [HotReload observe];
+    }
+
     prefetchBundle();
-    [HotReload observe];
 }
 
 static void prefetchBundle(void)
