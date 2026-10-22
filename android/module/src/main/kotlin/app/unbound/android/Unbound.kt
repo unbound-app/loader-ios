@@ -1,0 +1,69 @@
+package app.unbound.android
+
+import io.github.libxposed.api.XposedInterface.ExceptionMode
+import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import java.io.File
+import java.util.zip.ZipFile
+
+class Unbound : XposedModule() {
+    companion object {
+        const val DISCORD_PACKAGE = "com.discord"
+        private const val NATIVE_LIBRARY = "libunbound.so"
+        private const val REACT_INSTANCE = "com.facebook.react.runtime.ReactInstance"
+        private const val BUNDLE_LOADER = "com.facebook.react.bridge.JSBundleLoader"
+    }
+
+    override fun onPackageReady(param: PackageReadyParam) {
+        if (param.packageName != DISCORD_PACKAGE || !param.isFirstPackage) return
+
+        runCatching { initialize(param) }
+            .onFailure { Logger.error("default", "Failed to initialize Unbound", it) }
+    }
+
+    private fun initialize(param: PackageReadyParam) {
+        val moduleInfo = moduleApplicationInfo
+        System.load(File(moduleInfo.nativeLibraryDir, NATIVE_LIBRARY).absolutePath)
+
+        val appInfo = param.applicationInfo
+        val documents = File(appInfo.dataDir, "files/Unbound").absolutePath
+        val bytecodeVersion = Platform.mainBundleBytecodeVersion(appInfo.sourceDir)
+
+        NativeBridge.nativeInitialize(
+            documents,
+            readModuleAsset(moduleInfo.sourceDir, "assets/js/modules.js"),
+            readModuleAsset(moduleInfo.sourceDir, "assets/js/devtools.js"),
+            NATIVE_LIBRARY,
+            bytecodeVersion,
+            Platform.describe(appInfo, frameworkName).toString(),
+        )
+
+        Logger.info("default", "Hermes bytecode version $bytecodeVersion, documents at $documents")
+        hookBundleLoading(param.classLoader)
+    }
+
+    private fun hookBundleLoading(classLoader: ClassLoader) {
+        val reactInstance = classLoader.loadClass(REACT_INSTANCE)
+        val bundleLoader = classLoader.loadClass(BUNDLE_LOADER)
+        val loadJSBundle = reactInstance.getDeclaredMethod("loadJSBundle", bundleLoader)
+
+        hook(loadJSBundle)
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                ReactRuntime.attach(chain.thisObject)
+                NativeBridge.nativeOnLoadJSBundle()
+                val result = chain.proceed()
+                NativeBridge.nativeOnJSBundleLoaded()
+                result
+            }
+
+        Logger.info("default", "Hooked ReactInstance.loadJSBundle.")
+    }
+
+    private fun readModuleAsset(apkPath: String, entryName: String): String? = runCatching {
+        ZipFile(apkPath).use { zip ->
+            val entry = zip.getEntry(entryName) ?: return null
+            zip.getInputStream(entry).bufferedReader().use { it.readText() }
+        }
+    }.getOrNull()
+}
