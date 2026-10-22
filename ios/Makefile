@@ -26,7 +26,7 @@ LIBFFI_HEADERS := $(LIBFFI_OUTPUT)/include
 $(TWEAK_NAME)_FILES = $(shell find sources -name "*.x*" -o -name "*.m*") $(wildcard ../core/src/*.cpp)
 $(TWEAK_NAME)_CFLAGS = $(COMMON_FLAGS)
 # _CCFLAGS (not _CXXFLAGS) is what Theos applies to C++/Objective-C++ compiles.
-$(TWEAK_NAME)_CCFLAGS = $(COMMON_FLAGS) -I$(LIBFFI_HEADERS) -std=c++20
+$(TWEAK_NAME)_CCFLAGS = $(COMMON_FLAGS) -I$(LIBFFI_HEADERS) -std=c++20 -fno-cxx-modules
 # Resolve JSI/TurboModule symbols from Discord's React dylib at load time.
 $(TWEAK_NAME)_LDFLAGS = -undefined dynamic_lookup $(LIBFFI_ARCHIVE)
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation AuthenticationServices UniformTypeIdentifiers Security SafariServices AVFoundation CoreHaptics

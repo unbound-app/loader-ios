@@ -171,11 +171,11 @@ namespace unbound::android
         payload.settings = settings_.serialize();
         {
             std::lock_guard<std::mutex> lock(addonsMutex_);
-            payload.plugins = plugins_;
-            payload.themes  = themes_;
-            payload.fonts   = fonts_;
+            payload.plugins = loader::toJSON(plugins_);
+            payload.themes  = loader::toJSON(themes_);
+            payload.fonts   = loader::toJSON(fonts_);
         }
-        payload.availableFonts = availableFonts();
+        payload.availableFonts = loader::toJSON(availableFonts());
         payload.origin         = configuration_.origin;
         payload.version        = UNBOUND_VERSION;
         return payload;

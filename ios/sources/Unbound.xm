@@ -467,6 +467,7 @@ static void retryRCTInstanceHooks(NSUInteger attempt)
 
 %ctor
 {
+    [CoreBridge installLogging];
     [FileSystem init];
     [Settings init];
 

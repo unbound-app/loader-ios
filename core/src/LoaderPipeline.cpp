@@ -140,7 +140,7 @@ namespace loader
             }
         }
 
-        evaluateScript(runtime, "globalThis.modules ??= globalThis.__c?.();",
+        evaluateScript(runtime, "globalThis.modules \x3f\x3f= globalThis.__c?.();",
                        "unbound:modules-bootstrap");
 
         log(LogLevel::Info, "default", "Pre-loading settings, plugins, fonts and themes...");

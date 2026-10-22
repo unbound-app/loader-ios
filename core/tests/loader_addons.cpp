@@ -59,7 +59,7 @@ int main()
 
     loader::PreloadPayload payload;
     payload.settings = R"({"unbound":{}})";
-    payload.plugins  = plugins;
+    payload.plugins  = loader::toJSON(plugins);
     payload.origin   = "libunbound.so";
     payload.version  = "3.0.0";
     std::string script = loader::buildPreloadScript(payload);

@@ -36,20 +36,11 @@ static NSMutableArray<NSDictionary<NSString *, NSString *> *> *fonts     = nil;
         overrides = [[NSMutableDictionary alloc] init];
     }
 
-    [LoaderShared scanAddonDirectory:@"Fonts"
-                            category:LOG_CATEGORY_FONTS
-                             handler:^(NSString *file, NSString *font) {
-                                 NSString *name = [Fonts getFontName:font];
-
-                                 [Logger info:LOG_CATEGORY_FONTS
-                                       format:@"Registering font: %@", font];
-
-                                 [fonts addObject:@{
-                                     @"name" : name,
-                                     @"file" : file,
-                                     @"path" : font
-                                 }];
-                             }];
+    [fonts removeAllObjects];
+    [fonts addObjectsFromArray:[CoreBridge scanFontsIn:FileSystem.documents
+                                          nameResolver:^NSString *(NSString *path) {
+                                              return [Fonts getFontName:path];
+                                          }]];
 
     @try
     {

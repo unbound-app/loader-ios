@@ -119,72 +119,7 @@ static BOOL                                        customThemeActive = NO;
 
 + (void)loadThemes
 {
-    [LoaderShared
-        scanAddonDirectory:@"Themes"
-                  category:LOG_CATEGORY_THEMES
-                   handler:^(NSString *folder, NSString *dir) {
-                       if (![FileSystem isDirectory:dir])
-                       {
-                           [Logger info:LOG_CATEGORY_THEMES
-                                 format:@"Skipping %@ as it is not a directory.", folder];
-                           return;
-                       }
-
-                       NSString *data = [NSString pathWithComponents:@[ dir, @"manifest.json" ]];
-                       if (![FileSystem exists:data])
-                       {
-                           [Logger info:LOG_CATEGORY_THEMES
-                                 format:@"Skipping %@ as it is missing a manifest.", folder];
-                           return;
-                       }
-
-                       NSMutableDictionary *manifest =
-                           [LoaderShared parseManifestAt:data
-                                                  folder:folder
-                                                category:LOG_CATEGORY_THEMES];
-                       if (!manifest)
-                       {
-                           return;
-                       }
-
-                       NSString *entry = [NSString pathWithComponents:@[ dir, @"bundle.json" ]];
-                       if (![FileSystem exists:entry])
-                       {
-                           [Logger info:LOG_CATEGORY_THEMES
-                                 format:@"Skipping %@ as it is missing a bundle.", folder];
-                           return;
-                       }
-
-                       __block NSData *bundle = nil;
-
-                       @try
-                       {
-                           id json = [Utilities parseJSON:[FileSystem readFile:entry]];
-
-                           if ([json isKindOfClass:[NSDictionary class]])
-                           {
-                               bundle = [json mutableCopy];
-                           }
-                           else
-                           {
-                               [Logger info:LOG_CATEGORY_THEMES
-                                     format:@"Skipping %@ as its bundle is invalid JSON.", folder];
-                               return;
-                           }
-                       }
-                       @catch (NSException *e)
-                       {
-                           [Logger error:LOG_CATEGORY_THEMES
-                                  format:@"Skipping %@ as its bundle failed to be parsed. (%@)",
-                                         folder, e.reason];
-                           return;
-                       }
-
-                       manifest[@"folder"] = folder;
-                       manifest[@"path"]   = dir;
-
-                       [themes addObject:@{@"manifest" : manifest, @"bundle" : bundle}];
-                   }];
+    [themes addObjectsFromArray:[CoreBridge scanThemesIn:FileSystem.documents]];
 }
 
 + (NSArray *)reloadThemes
