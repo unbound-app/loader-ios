@@ -1,7 +1,6 @@
 #import "NativePluginBridge.h"
 
 #import <dlfcn.h>
-#import <CommonCrypto/CommonDigest.h>
 #import <mach/mach.h>
 #import <mach-o/loader.h>
 #import <objc/message.h>
@@ -35,7 +34,6 @@
 #import "NativePluginFFI.h"
 #import "NativeNumericValidation.h"
 #import "NativeOperationGate.h"
-#import "NativeReactIdentity.h"
 #import "NativeTypeEncoding.h"
 
 using namespace facebook;
@@ -201,32 +199,6 @@ private:
     uint64_t generation_ = 0;
 };
 
-class FiberHandleHost final : public HostObject
-{
-public:
-    FiberHandleHost(id view, NSInteger tag, uint64_t identifier, uint8_t pointIndex,
-                    uint64_t generation)
-        : view_(view), identifier_(identifier), pointIndex_(pointIndex), identity_(tag, generation) {}
-
-    UIView *view(void) const { return view_; }
-    NSInteger tag(void) const { return identity_.tag(); }
-    uint64_t identifier(void) const { return identifier_; }
-    uint8_t pointIndex(void) const { return pointIndex_; }
-    uint64_t generation(void) const { return identity_.generation(); }
-    bool active(void) const { return identity_.active(); }
-    bool valid(NSInteger tag, uint64_t generation) const
-    {
-        return identity_.valid(tag, generation);
-    }
-    void invalidate(void) { identity_.invalidate(); }
-
-private:
-    __strong UIView *view_ = nil;
-    uint64_t identifier_ = 0;
-    uint8_t pointIndex_ = 0;
-    NativeReactIdentity identity_;
-};
-
 class PointerHost final : public HostObject
 {
 public:
@@ -381,8 +353,6 @@ static std::mutex gNativePluginRuntimeMutex;
 static Runtime *gNativePluginRuntime = nullptr;
 static std::thread::id gNativePluginRuntimeThread;
 static std::atomic_uint64_t gNativePluginRuntimeGeneration{0};
-static std::mutex gNativePluginDiscordBundleMutex;
-static NSString *gNativePluginDiscordBundlePath = nil;
 static std::atomic_uint gMainThreadRuntimeWaits{0};
 static std::mutex gFabricSurfaceMutex;
 static std::unordered_map<FabricSurfaceHost *, std::shared_ptr<FabricSurfaceHost>> gFabricSurfaces;
@@ -2306,11 +2276,6 @@ static Value executeMainAsynchronously(Runtime &runtime, std::function<void(void
                                 }
                                 pair.getPropertyAsFunction(completionRuntime, "resolve")
                                     .call(completionRuntime, result(completionRuntime));
-                            }
-                            catch (JSError &exception)
-                            {
-                                pair.getPropertyAsFunction(completionRuntime, "reject")
-                                    .call(completionRuntime, std::move(exception.value()));
                             }
                             catch (const std::exception &exception)
                             {
@@ -6185,189 +6150,6 @@ static void installFabric(Runtime &runtime, Object &fabric)
     fabric.setProperty(runtime, "unmountAsync", makeFunction("unmountAsync", 1, runtime, fabricUnmountAsync));
 }
 
-static NSString *const kSupportedDiscordBundleFingerprint =
-    @"f9df38043f50a95caa8303562ffc27f9c8a5ad6c0ef0cddad2c82f5a5670ce6b";
-
-static bool supportsReactRemount(void)
-{
-    NSDictionary *info = NSBundle.mainBundle.infoDictionary;
-    if (![info[@"CFBundleShortVersionString"] isEqualToString:@"348.0"] ||
-        ![info[@"CFBundleVersion"] isEqualToString:@"113691"]) return false;
-    NSString *path = nil;
-    {
-        std::lock_guard<std::mutex> lock(gNativePluginDiscordBundleMutex);
-        path = gNativePluginDiscordBundlePath;
-    }
-    if (!path) return false;
-    NSData *bundle = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
-    if (!bundle.length || bundle.length > UINT32_MAX) return false;
-    uint8_t digest[CC_SHA256_DIGEST_LENGTH] = {0};
-    CC_SHA256(bundle.bytes, (CC_LONG) bundle.length, digest);
-    NSMutableString *fingerprint = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
-    for (uint8_t byte : digest) [fingerprint appendFormat:@"%02x", byte];
-    return [fingerprint isEqualToString:kSupportedDiscordBundleFingerprint];
-}
-
-static void throwReactFailure(Runtime &runtime, const char *code, const char *message)
-{
-    JSError failure(runtime, message);
-    failure.value().asObject(runtime).setProperty(
-        runtime, "code", String::createFromUtf8(runtime, code));
-    throw failure;
-}
-
-struct ReactViewLocation {
-    NSInteger tag = 0;
-    CGPoint points[3] = {CGPointZero, CGPointZero, CGPointZero};
-    size_t count = 0;
-    bool valid = false;
-};
-
-static ReactViewLocation reactViewLocationOnMain(UIView *view)
-{
-    ReactViewLocation location;
-    if (![NSThread isMainThread]) return location;
-    Class rootClass = NSClassFromString(@"RCTRootComponentView");
-    if (!rootClass || [view isKindOfClass:rootClass]) return location;
-    UIView *root = view.superview;
-    for (NSUInteger depth = 0; root && depth < 128; depth++, root = root.superview)
-    {
-        if (![root isKindOfClass:rootClass]) continue;
-        CGPoint center = CGPointMake(CGRectGetMidX(view.bounds), CGRectGetMidY(view.bounds));
-        location.tag = view.tag;
-        location.points[0] = [view convertPoint:center toView:root];
-        location.points[1] = [view convertPoint:center toView:view.superview];
-        location.points[2] = center;
-        location.count = 3;
-        location.valid = location.tag > 0;
-        return location;
-    }
-    return location;
-}
-
-static bool installReact(Runtime &runtime, Object &react)
-{
-    NSString *source = [Utilities getResource:@"native-react-remount"];
-    if (source.length == 0) return false;
-    Value installed = [JSI evaluateSource:source tag:@"native-react-remount" runtime:runtime];
-    if (!installed.isObject()) return false;
-    auto helper = std::make_shared<Object>(installed.asObject(runtime));
-
-    react.setProperty(runtime, "isSupported", makeFunction(
-        "isSupported", 0, runtime,
-        [helper](Runtime &rt, const Value &, const Value *, size_t) -> Value {
-            return helper->getPropertyAsFunction(rt, "supported")
-                .callWithThis(rt, *helper);
-        }));
-
-    react.setProperty(runtime, "getFiber", makeFunction(
-        "getFiber", 1, runtime,
-        [helper](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
-            id object = count ? objcValue(rt, args[0]) : nil;
-            __strong UIView *view = [object isKindOfClass:[UIView class]] ? (UIView *) object : nil;
-            auto location = std::make_shared<ReactViewLocation>();
-            return executeMainAsynchronously(
-                rt,
-                [view, location]() { *location = reactViewLocationOnMain(view); },
-                [view, location, helper](Runtime &completionRuntime) -> Value {
-                    if (!location->valid) return Value::null();
-                    for (size_t index = 0; index < location->count; index++)
-                    {
-                        CGPoint point = location->points[index];
-                        if (!std::isfinite(point.x) || !std::isfinite(point.y)) continue;
-                        Value identifier = helper->getPropertyAsFunction(completionRuntime, "lookup")
-                                               .callWithThis(completionRuntime, *helper,
-                                                             Value((double) location->tag),
-                                                             Value((double) point.x),
-                                                             Value((double) point.y));
-                        if (!identifier.isNumber()) continue;
-                        auto fiber = std::make_shared<FiberHandleHost>(
-                            view, location->tag, static_cast<uint64_t>(identifier.asNumber()),
-                            static_cast<uint8_t>(index), gNativePluginRuntimeGeneration.load());
-                        return Object::createFromHostObject(completionRuntime, std::move(fiber));
-                    }
-                    return Value::null();
-                });
-        }));
-
-    react.setProperty(runtime, "forceRemount", makeFunction(
-        "forceRemount", 1, runtime,
-        [helper](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
-            if (!count || !args[0].isObject() ||
-                !args[0].asObject(rt).isHostObject<FiberHandleHost>(rt))
-            {
-                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Expected a Fiber handle");
-            }
-            auto fiber = args[0].asObject(rt).getHostObject<FiberHandleHost>(rt);
-            if (!fiber->active() ||
-                fiber->generation() != gNativePluginRuntimeGeneration.load())
-            {
-                throwReactFailure(rt, "NATIVE_REACT_STALE_FIBER", "Fiber handle is no longer active");
-            }
-            Value shared = helper->getPropertyAsFunction(rt, "shared")
-                .callWithThis(rt, *helper, Value((double) fiber->identifier()));
-            if (shared.isObject()) return shared;
-            auto location = std::make_shared<ReactViewLocation>();
-            Value pending = executeMainAsynchronously(
-                rt,
-                [fiber, location]() { *location = reactViewLocationOnMain(fiber->view()); },
-                [fiber, location, helper](Runtime &completionRuntime) -> Value {
-                    if (!location->valid ||
-                        !fiber->valid(location->tag, gNativePluginRuntimeGeneration.load()))
-                    {
-                        throwReactFailure(completionRuntime, "NATIVE_REACT_STALE_FIBER",
-                                          "Native view was reused");
-                    }
-                    size_t pointIndex = fiber->pointIndex();
-                    if (pointIndex >= location->count ||
-                        !std::isfinite(location->points[pointIndex].x) ||
-                        !std::isfinite(location->points[pointIndex].y))
-                    {
-                        throwReactFailure(completionRuntime, "NATIVE_REACT_STALE_FIBER",
-                                          "Native view position is invalid");
-                    }
-                    CGPoint point = location->points[pointIndex];
-                    return helper->getPropertyAsFunction(completionRuntime, "remount")
-                        .callWithThis(completionRuntime, *helper,
-                                      Value((double) fiber->identifier()),
-                                      Value((double) location->tag),
-                                      Value((double) point.x),
-                                      Value((double) point.y));
-                });
-            Object promise = pending.asObject(rt);
-            auto cancelMain = std::make_shared<Function>(promise.getPropertyAsFunction(rt, "cancel"));
-            Function cancelRemount = Function::createFromHostFunction(
-                rt, PropNameID::forUtf8(rt, "cancel"), 0,
-                [fiber, helper, cancelMain](Runtime &cancelRuntime, const Value &,
-                                            const Value *, size_t) -> Value {
-                    cancelMain->call(cancelRuntime);
-                    helper->getPropertyAsFunction(cancelRuntime, "cancel")
-                        .callWithThis(cancelRuntime, *helper,
-                                      Value((double) fiber->identifier()));
-                    return Value::undefined();
-                });
-            promise.setProperty(rt, "cancel", std::move(cancelRemount));
-            return promise;
-        }));
-
-    react.setProperty(runtime, "release", makeFunction(
-        "release", 1, runtime,
-        [helper](Runtime &rt, const Value &, const Value *args, size_t count) -> Value {
-            if (!count || !args[0].isObject() ||
-                !args[0].asObject(rt).isHostObject<FiberHandleHost>(rt))
-            {
-                return Value::undefined();
-            }
-            auto fiber = args[0].asObject(rt).getHostObject<FiberHandleHost>(rt);
-            if (!fiber->active()) return Value::undefined();
-            fiber->invalidate();
-            helper->getPropertyAsFunction(rt, "release")
-                .callWithThis(rt, *helper, Value((double) fiber->identifier()));
-            return Value::undefined();
-        }));
-    return true;
-}
-
 static bool isOptionalString(const Value &value)
 {
     return value.isUndefined() || value.isNull() || value.isString();
@@ -6502,12 +6284,6 @@ static void installDebug(Runtime &runtime, Object &debug)
 
 namespace loader {
 
-void setNativePluginDiscordBundleURL(NSURL *sourceURL)
-{
-    std::lock_guard<std::mutex> lock(gNativePluginDiscordBundleMutex);
-    gNativePluginDiscordBundlePath = sourceURL.isFileURL ? sourceURL.path : nil;
-}
-
 void setNativePluginRuntimeExecutor(id instance)
 {
     gRuntimeExecutorInstance = instance;
@@ -6540,8 +6316,6 @@ void registerNativePluginBridge(Runtime &runtime)
     Object bridge(runtime);
     bridge.setProperty(runtime, "apiVersion", String::createFromUtf8(runtime, kNativePluginApiVersion));
     bridge.setProperty(runtime, "abiVersion", String::createFromUtf8(runtime, kNativePluginAbiVersion));
-    Object react(runtime);
-    bool reactSupported = supportsReactRemount() && installReact(runtime, react);
 
     const char *names[] = {
         "native.objc.classes",
@@ -6559,15 +6333,10 @@ void registerNativePluginBridge(Runtime &runtime)
         "native.debug.evaluations",
         "native.debug.environment",
     };
-    Array capabilities(runtime, std::size(names) + (reactSupported ? 1 : 0));
+    Array capabilities(runtime, std::size(names));
     for (size_t index = 0; index < std::size(names); index++)
     {
         capabilities.setValueAtIndex(runtime, index, String::createFromUtf8(runtime, names[index]));
-    }
-    if (reactSupported)
-    {
-        capabilities.setValueAtIndex(
-            runtime, std::size(names), String::createFromUtf8(runtime, "native.react.remount"));
     }
     bridge.setProperty(runtime, "capabilities", std::move(capabilities));
 
@@ -6582,8 +6351,6 @@ void registerNativePluginBridge(Runtime &runtime)
     Object fabric(runtime);
     installFabric(runtime, fabric);
     bridge.setProperty(runtime, "fabric", std::move(fabric));
-
-    bridge.setProperty(runtime, "react", std::move(react));
 
     Object debug(runtime);
     installDebug(runtime, debug);
