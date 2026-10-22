@@ -58,8 +58,8 @@ jobs:
 
             - name: Install NDK and CMake
               run: |
-                  set -euo pipefail
-                  yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+                  set -eu
+                  yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
                   "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.3.13750724" "cmake;3.22.1" "platforms;android-36" > /dev/null
 
             - name: Build module
