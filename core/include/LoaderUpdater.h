@@ -22,12 +22,21 @@ namespace loader
         const std::string &url, const std::string &destination,
         const std::map<std::string, std::string> &headers)>;
 
+    struct UpdaterSettings
+    {
+        std::function<std::string(const std::string &key, const std::string &fallback)> getString;
+        std::function<bool(const std::string &key, bool fallback)>                      getBoolean;
+        std::function<void(const std::string &key, const std::string &value)>          setString;
+    };
+
+    UpdaterSettings updaterSettings(SettingsStore &store);
+
     constexpr const char *kDefaultBundleBaseURL = "https://builds.unbound.rip/";
 
     class BundleUpdater
     {
     public:
-        BundleUpdater(std::string documents, SettingsStore &settings, TextFetcher fetchText,
+        BundleUpdater(std::string documents, UpdaterSettings settings, TextFetcher fetchText,
                       FileDownloader download);
 
         std::string resolveBundlePath();
@@ -45,7 +54,7 @@ namespace loader
         std::string bundlePath(const std::string &extension) const;
 
         std::string     documents_;
-        SettingsStore  &settings_;
+        UpdaterSettings settings_;
         TextFetcher     fetchText_;
         FileDownloader  download_;
     };

@@ -40,7 +40,7 @@ namespace unbound::android
         settings_.load();
 
         updater_ = std::make_unique<loader::BundleUpdater>(
-            configuration_.documents, settings_,
+            configuration_.documents, loader::updaterSettings(settings_),
             [this](const std::string &url, double timeout) { return fetchText(url, timeout); },
             [this](const std::string &url, const std::string &destination,
                    const std::map<std::string, std::string> &headers) {

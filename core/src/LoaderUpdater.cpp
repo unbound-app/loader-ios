@@ -65,9 +65,25 @@ namespace loader
         return extension == "bundle" || extension == "js";
     }
 
-    BundleUpdater::BundleUpdater(std::string documents, SettingsStore &settings,
+    UpdaterSettings updaterSettings(SettingsStore &store)
+    {
+        UpdaterSettings settings;
+        settings.getString = [&store](const std::string &key, const std::string &fallback) {
+            return store.getString("unbound", key, fallback);
+        };
+        settings.getBoolean = [&store](const std::string &key, bool fallback) {
+            return store.getBoolean("unbound", key, fallback);
+        };
+        settings.setString = [&store](const std::string &key, const std::string &value) {
+            store.set("unbound", key, value);
+            store.save();
+        };
+        return settings;
+    }
+
+    BundleUpdater::BundleUpdater(std::string documents, UpdaterSettings settings,
                                  TextFetcher fetchText, FileDownloader download)
-        : documents_(std::move(documents)), settings_(settings), fetchText_(std::move(fetchText)),
+        : documents_(std::move(documents)), settings_(std::move(settings)), fetchText_(std::move(fetchText)),
           download_(std::move(download))
     {
     }
@@ -102,8 +118,7 @@ namespace loader
                 }
                 rejectBundle(candidate);
                 removeFile(promoting);
-                settings_.set("unbound", "loader.update.etag", "");
-                settings_.save();
+                settings_.setString("loader.update.etag", "");
             }
 
             if (fileExists(candidate + ".attempting"))
@@ -202,7 +217,7 @@ namespace loader
             return preferredPath;
         }
 
-        std::string storedEtag = settings_.getString("unbound", "loader.update.etag", "");
+        std::string storedEtag = settings_.getString("loader.update.etag", "");
         std::string url        = downloadURL(updateURL, bytecodeVersion);
 
         std::string urlExtension     = urlPathExtension(url);
@@ -218,7 +233,7 @@ namespace loader
         std::string candidatePath = targetPath + kCandidateSuffix;
 
         std::map<std::string, std::string> headers;
-        bool forceUpdate = settings_.getBoolean("unbound", "loader.update.force", false);
+        bool forceUpdate = settings_.getBoolean("loader.update.force", false);
         if (fileExists(targetPath) && !forceUpdate && !storedEtag.empty())
         {
             headers["If-None-Match"] = storedEtag;
@@ -285,8 +300,7 @@ namespace loader
         }
 
         std::optional<std::string> etag = readTextFile(path + ".etag");
-        settings_.set("unbound", "loader.update.etag", etag.value_or(""));
-        settings_.save();
+        settings_.setString("loader.update.etag", etag.value_or(""));
         removeFile(path + ".etag");
         removeFile(path + ".attempting");
 

@@ -211,7 +211,7 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	updater, err := os.ReadFile(filepath.Join(root, "ios", "sources", "Updater.m"))
+	updater, err := os.ReadFile(filepath.Join(root, "core", "src", "LoaderUpdater.cpp"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 			t.Fatalf("bundle promotion step %q is missing", required)
 		}
 	}
-	for _, required := range []string{".candidate", "BundleCandidateMissing", "promoteNativeBundle(path.fileSystemRepresentation", "restoreNativeBundle(backup.fileSystemRepresentation", ".attempting", ".promoting"} {
+	for _, required := range []string{".candidate", "Downloaded bundle candidate is unavailable", "promoteNativeBundle(path.c_str()", "restoreNativeBundle(backup.c_str()", ".attempting", ".promoting"} {
 		if !strings.Contains(string(updater), required) {
 			t.Fatalf("transactional bundle step %q is missing", required)
 		}
