@@ -1,8 +1,12 @@
 package app.unbound.android
 
 import android.app.Application
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.Process
 import org.json.JSONObject
 import java.io.File
 import java.util.zip.ZipFile
@@ -21,6 +25,18 @@ object Platform {
                 .getDeclaredMethod("currentApplication")
                 .invoke(null) as? Application
         }.getOrNull()?.also { cachedApplication = it }
+    }
+
+    private const val RESTART_DELAY_MS = 800L
+
+    fun restartApp() {
+        val context = application() ?: return
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        Handler(Looper.getMainLooper()).postDelayed({
+            context.startActivity(launch)
+            Process.killProcess(Process.myPid())
+        }, RESTART_DELAY_MS)
     }
 
     private val SU_PATHS = listOf(

@@ -58,7 +58,7 @@ Both artifacts are produced by the [Build Android](https://github.com/unbound-ap
 | Safe Mode toggle from the home screen      | ✅  | ✅ (launcher shortcut) |
 | Sentry blocking                            | ✅  | ✅      |
 | Dev server auto-detection (vphone / emulator) | ✅ | ✅    |
-| Live reload (HMR)                          | ✅  | Not yet |
+| Live reload (HMR)                          | ✅  | ✅ (restarts the app) |
 | `NativePlugin` addon bridge                | ✅ (`objc`, `ffi`, `fabric`) | Not yet (`java` namespace) |
 | Debug toolbox, dev overlay, chat UI tweaks | ✅  | Not yet |
 
@@ -129,7 +129,7 @@ java -jar lspatch.jar base.apk config.*.apk -m module-release.apk -l 2 -o patche
 
 1. Run the client's dev server (`bun run serve` in `packages/client`). It serves the bundle and a Server-Sent Events stream at `/__hot`.
 2. Set `loader.update.url` to the dev server, e.g. `http://<your-LAN-ip>:3000/`, and `loader.update.hmr` to `true`.
-3. Launch Discord. Every rebuild re-fetches the bundle and reloads the app. This is iOS-only for now; on Android, relaunch Discord to pick up a new build.
+3. Launch Discord. Every rebuild re-fetches the bundle and reloads the app. On Android the reload restarts the app process.
 
 On the iOS vphone and the Android emulator, the loader finds a dev server on the host automatically when `loader.update.url` is unset. On the emulator, that host is reached at `10.0.2.2:3000`.
 

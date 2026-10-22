@@ -153,6 +153,7 @@ object NativeBridge {
     fun onBundleExecuted() {
         Recovery.bundleExecuted = true
         Logger.info("default", "Bundle executed.")
+        HotReload.observe()
     }
 
     private fun isEmulator(): Boolean =

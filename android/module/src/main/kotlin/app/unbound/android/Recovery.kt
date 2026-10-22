@@ -5,9 +5,6 @@ import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.Process
 import android.widget.Toast
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.ExceptionMode
@@ -15,7 +12,6 @@ import io.github.libxposed.api.XposedInterface.ExceptionMode
 object Recovery {
     private const val ACTION_TOGGLE = "app.unbound.recovery.toggle"
     private const val SHORTCUT_ID = "unbound-recovery"
-    private const val RESTART_DELAY_MS = 800L
 
     @Volatile
     var bundleExecuted = false
@@ -78,16 +74,7 @@ object Recovery {
 
         val message = if (enabled) "Safe Mode enabled" else "Safe Mode disabled"
         Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
-        if (bundleExecuted) restart(activity)
-    }
-
-    private fun restart(activity: Activity) {
-        val launch = activity.packageManager.getLaunchIntentForPackage(activity.packageName) ?: return
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        Handler(Looper.getMainLooper()).postDelayed({
-            activity.startActivity(launch)
-            Process.killProcess(Process.myPid())
-        }, RESTART_DELAY_MS)
+        if (bundleExecuted) Platform.restartApp()
     }
 
     private fun publishShortcut(activity: Activity) {
