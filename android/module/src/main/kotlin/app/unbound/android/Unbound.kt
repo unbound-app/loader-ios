@@ -1,5 +1,7 @@
 package app.unbound.android
 
+import android.content.pm.ApplicationInfo
+import android.os.Build
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
@@ -23,9 +25,9 @@ class Unbound : XposedModule() {
 
     private fun initialize(param: PackageReadyParam) {
         val moduleInfo = moduleApplicationInfo
-        System.load(File(moduleInfo.nativeLibraryDir, NATIVE_LIBRARY).absolutePath)
-
         val appInfo = param.applicationInfo
+        System.load(nativeLibraryPath(moduleInfo, appInfo))
+
         val documents = File(appInfo.dataDir, "files/Unbound").absolutePath
         val bytecodeVersion = Platform.mainBundleBytecodeVersion(appInfo.sourceDir)
 
@@ -58,6 +60,25 @@ class Unbound : XposedModule() {
             }
 
         Logger.info("default", "Hooked ReactInstance.loadJSBundle.")
+    }
+
+    private fun nativeLibraryPath(moduleInfo: ApplicationInfo, appInfo: ApplicationInfo): String {
+        val installed = moduleInfo.nativeLibraryDir?.let { File(it, NATIVE_LIBRARY) }
+        if (installed?.isFile == true) return installed.absolutePath
+
+        val apk = File(moduleInfo.sourceDir)
+        val abi = Build.SUPPORTED_ABIS.first()
+        val target = File(appInfo.dataDir, "code_cache/unbound/${apk.lastModified()}-${apk.length()}/$NATIVE_LIBRARY")
+        if (target.isFile) return target.absolutePath
+
+        target.parentFile?.parentFile?.deleteRecursively()
+        target.parentFile?.mkdirs()
+        ZipFile(apk).use { zip ->
+            val entry = zip.getEntry("lib/$abi/$NATIVE_LIBRARY")
+                ?: error("Module APK has no $NATIVE_LIBRARY for $abi")
+            zip.getInputStream(entry).use { input -> target.outputStream().use { input.copyTo(it) } }
+        }
+        return target.absolutePath
     }
 
     private fun readModuleAsset(apkPath: String, entryName: String): String? = runCatching {
