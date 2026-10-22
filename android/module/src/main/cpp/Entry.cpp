@@ -1,6 +1,7 @@
 #include "AndroidLoader.h"
 #include "JniEnvironment.h"
 #include "LoaderLog.h"
+#include "LoaderPreload.h"
 
 #include <android/log.h>
 #include <jni.h>
@@ -105,6 +106,24 @@ static void nativeSetBoolean(JNIEnv *env, jclass, jstring store, jstring key, jb
     loader->settings().save();
 }
 
+static jstring nativeSettingJSON(JNIEnv *env, jclass, jstring store, jstring key)
+{
+    auto loader = currentLoader();
+    if (!loader)
+    {
+        return nullptr;
+    }
+    std::optional<nlohmann::json> value =
+        loader->settings().get(toStdString(env, store), toStdString(env, key));
+    return value ? toJavaString(env, loader::toJSON(*value)) : nullptr;
+}
+
+static jstring nativeFontsJSON(JNIEnv *env, jclass)
+{
+    auto loader = currentLoader();
+    return toJavaString(env, loader ? loader->fontsJSON() : "[]");
+}
+
 static bool cacheCallbacks(JNIEnv *env, jclass bridge)
 {
     gCallbacks.bridgeClass     = static_cast<jclass>(env->NewGlobalRef(bridge));
@@ -155,6 +174,9 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *)
          reinterpret_cast<void *>(nativeGetBoolean)},
         {"nativeSetBoolean", "(Ljava/lang/String;Ljava/lang/String;Z)V",
          reinterpret_cast<void *>(nativeSetBoolean)},
+        {"nativeSettingJSON", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+         reinterpret_cast<void *>(nativeSettingJSON)},
+        {"nativeFontsJSON", "()Ljava/lang/String;", reinterpret_cast<void *>(nativeFontsJSON)},
     };
 
     if (env->RegisterNatives(bridge.get(), methods, sizeof(methods) / sizeof(methods[0])) != JNI_OK ||

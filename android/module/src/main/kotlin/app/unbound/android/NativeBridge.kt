@@ -41,6 +41,12 @@ object NativeBridge {
     external fun nativeSetBoolean(store: String, key: String, value: Boolean)
 
     @JvmStatic
+    external fun nativeSettingJSON(store: String, key: String): String?
+
+    @JvmStatic
+    external fun nativeFontsJSON(): String
+
+    @JvmStatic
     fun scheduleRuntimeWork() {
         ReactRuntime.post { runtimePointer -> nativeDrainRuntimeWork(runtimePointer) }
     }

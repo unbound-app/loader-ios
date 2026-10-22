@@ -51,6 +51,7 @@ namespace unbound::android
         void drainRuntimeWork(facebook::jsi::Runtime &runtime);
 
         loader::SettingsStore &settings();
+        std::string fontsJSON();
 
         void runOnRuntime(std::function<void(facebook::jsi::Runtime &)> work) override;
         void runAfter(double seconds, std::function<void()> work) override;

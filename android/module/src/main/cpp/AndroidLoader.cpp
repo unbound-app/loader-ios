@@ -54,6 +54,12 @@ namespace unbound::android
         return settings_;
     }
 
+    std::string AndroidLoader::fontsJSON()
+    {
+        std::lock_guard<std::mutex> lock(addonsMutex_);
+        return loader::toJSON(fonts_);
+    }
+
     void AndroidLoader::onLoadJSBundle()
     {
         settings_.load();

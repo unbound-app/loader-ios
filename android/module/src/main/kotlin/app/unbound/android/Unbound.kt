@@ -43,6 +43,8 @@ class Unbound : XposedModule() {
         Logger.info("default", "Hermes bytecode version $bytecodeVersion, documents at $documents")
         hookBundleLoading(param.classLoader)
         Analytics.block(this, param.classLoader)
+        runCatching { Fonts.install(this, param.classLoader) }
+            .onFailure { Logger.error("fonts", "Failed to hook React Native fonts", it) }
         runCatching { Recovery.install(this) }
             .onFailure { Logger.error("default", "Failed to install the Safe Mode shortcut", it) }
     }
