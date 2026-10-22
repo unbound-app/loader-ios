@@ -42,6 +42,7 @@ class Unbound : XposedModule() {
 
         Logger.info("default", "Hermes bytecode version $bytecodeVersion, documents at $documents")
         hookBundleLoading(param.classLoader)
+        Analytics.block(this, param.classLoader)
     }
 
     private fun hookBundleLoading(classLoader: ClassLoader) {
