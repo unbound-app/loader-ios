@@ -2,6 +2,7 @@
 
 #include "JniEnvironment.h"
 #include "LoaderAddons.h"
+#include "LoaderColor.h"
 #include "LoaderFiles.h"
 #include "LoaderLog.h"
 #include "NativePlatformBridge.h"
@@ -58,6 +59,53 @@ namespace unbound::android
     {
         std::lock_guard<std::mutex> lock(addonsMutex_);
         return loader::toJSON(fonts_);
+    }
+
+    std::string AndroidLoader::themeColorsJSON(const std::string &themeId)
+    {
+        nlohmann::json colors = nlohmann::json::object();
+        std::lock_guard<std::mutex> lock(addonsMutex_);
+        for (const nlohmann::json &theme : themes_)
+        {
+            if (theme["manifest"].value("id", std::string()) != themeId)
+            {
+                continue;
+            }
+
+            const nlohmann::json semantic = theme["bundle"].value("semantic", nlohmann::json::object());
+            const nlohmann::json raw      = theme["bundle"].value("raw", nlohmann::json::object());
+            for (auto entry = semantic.begin(); entry != semantic.end(); ++entry)
+            {
+                if (!entry->is_object())
+                {
+                    continue;
+                }
+
+                std::string type  = entry->value("type", std::string());
+                std::string value = entry->value("value", std::string());
+                if (type == "raw")
+                {
+                    value = raw.value(value, std::string());
+                }
+                else if (type != "color")
+                {
+                    continue;
+                }
+
+                std::optional<loader::RGBAColor> color = loader::parseColor(value);
+                if (!color)
+                {
+                    continue;
+                }
+
+                if (entry->contains("opacity") && (*entry)["opacity"].is_number())
+                {
+                    color->alpha = (*entry)["opacity"].get<double>();
+                }
+                colors[entry.key()] = loader::toARGB(*color);
+            }
+        }
+        return loader::toJSON(colors);
     }
 
     void AndroidLoader::onLoadJSBundle()

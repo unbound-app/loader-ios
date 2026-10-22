@@ -52,6 +52,7 @@ namespace unbound::android
 
         loader::SettingsStore &settings();
         std::string fontsJSON();
+        std::string themeColorsJSON(const std::string &themeId);
 
         void runOnRuntime(std::function<void(facebook::jsi::Runtime &)> work) override;
         void runAfter(double seconds, std::function<void()> work) override;

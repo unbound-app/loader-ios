@@ -45,6 +45,8 @@ class Unbound : XposedModule() {
         Analytics.block(this, param.classLoader)
         runCatching { Fonts.install(this, param.classLoader) }
             .onFailure { Logger.error("fonts", "Failed to hook React Native fonts", it) }
+        runCatching { Themes.install(this, param.classLoader) }
+            .onFailure { Logger.error("themes", "Failed to apply the theme", it) }
         runCatching { Recovery.install(this) }
             .onFailure { Logger.error("default", "Failed to install the Safe Mode shortcut", it) }
     }

@@ -47,6 +47,12 @@ object NativeBridge {
     external fun nativeFontsJSON(): String
 
     @JvmStatic
+    external fun nativeThemeColorsJSON(themeId: String): String
+
+    @JvmStatic
+    external fun nativePrepareAddons()
+
+    @JvmStatic
     fun scheduleRuntimeWork() {
         ReactRuntime.post { runtimePointer -> nativeDrainRuntimeWork(runtimePointer) }
     }

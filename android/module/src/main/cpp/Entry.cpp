@@ -124,6 +124,20 @@ static jstring nativeFontsJSON(JNIEnv *env, jclass)
     return toJavaString(env, loader ? loader->fontsJSON() : "[]");
 }
 
+static jstring nativeThemeColorsJSON(JNIEnv *env, jclass, jstring themeId)
+{
+    auto loader = currentLoader();
+    return toJavaString(env, loader ? loader->themeColorsJSON(toStdString(env, themeId)) : "{}");
+}
+
+static void nativePrepareAddons(JNIEnv *, jclass)
+{
+    if (auto loader = currentLoader())
+    {
+        loader->onAddonsPrepared();
+    }
+}
+
 static bool cacheCallbacks(JNIEnv *env, jclass bridge)
 {
     gCallbacks.bridgeClass     = static_cast<jclass>(env->NewGlobalRef(bridge));
@@ -177,6 +191,9 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *)
         {"nativeSettingJSON", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
          reinterpret_cast<void *>(nativeSettingJSON)},
         {"nativeFontsJSON", "()Ljava/lang/String;", reinterpret_cast<void *>(nativeFontsJSON)},
+        {"nativeThemeColorsJSON", "(Ljava/lang/String;)Ljava/lang/String;",
+         reinterpret_cast<void *>(nativeThemeColorsJSON)},
+        {"nativePrepareAddons", "()V", reinterpret_cast<void *>(nativePrepareAddons)},
     };
 
     if (env->RegisterNatives(bridge.get(), methods, sizeof(methods) / sizeof(methods[0])) != JNI_OK ||
