@@ -1,0 +1,82 @@
+name: Build Android
+
+on:
+    push:
+        branches: [main, feat/monorepo]
+    pull_request:
+        types: [opened, synchronize, reopened, ready_for_review]
+    workflow_dispatch:
+    workflow_call:
+        outputs:
+            module_filename:
+                description: "Filename of the LSPosed module APK"
+                value: ${{ jobs.build-module.outputs.module_filename }}
+
+permissions:
+    contents: read
+
+concurrency:
+    group: android-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    core-tests:
+        name: Shared core tests
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+              with:
+                  fetch-depth: 1
+
+            - name: Configure core
+              run: cmake -S core -B build/core -DUNBOUND_CORE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined"
+
+            - name: Build core
+              run: cmake --build build/core -j"$(nproc)"
+
+            - name: Run core tests
+              run: ctest --test-dir build/core --output-on-failure
+
+    build-module:
+        name: Build LSPosed module
+        runs-on: ubuntu-latest
+        outputs:
+            module_filename: ${{ steps.collect.outputs.module_filename }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+              with:
+                  submodules: recursive
+                  fetch-depth: 1
+
+            - name: Setup Java
+              uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+              with:
+                  distribution: temurin
+                  java-version: "17"
+
+            - name: Install NDK and CMake
+              run: |
+                  set -euo pipefail
+                  yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+                  "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.3.13750724" "cmake;3.22.1" "platforms;android-36" > /dev/null
+
+            - name: Build module
+              working-directory: android
+              run: ./gradlew :module:assembleRelease --no-daemon --console=plain
+
+            - name: Collect module
+              id: collect
+              run: |
+                  set -euo pipefail
+                  version=$(grep '^Version:' ios/control | cut -d ' ' -f 2)
+                  name="Unbound-Android-${version}.apk"
+                  cp android/module/build/outputs/apk/release/module-release.apk "$name"
+                  echo "module_filename=$name" >> "$GITHUB_OUTPUT"
+
+            - name: Upload module
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+              with:
+                  name: android module
+                  path: ${{ steps.collect.outputs.module_filename }}
