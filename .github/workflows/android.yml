@@ -124,10 +124,7 @@ jobs:
                   apksigner=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner
                   for apk in discord/*.apk; do
                       certificates=$("$apksigner" verify --print-certs "$apk")
-                      if ! grep -q "Signer #1 certificate SHA-256 digest: $DISCORD_CERT_SHA256" <<< "$certificates"; then
-                          ls -l "$apk"
-                          head -c 200 "$apk" | od -c | head -5
-                          echo "$certificates" | head -5
+                      if ! grep -v "Source Stamp" <<< "$certificates" | grep -q "certificate SHA-256 digest: $DISCORD_CERT_SHA256"; then
                           echo "::error::$apk is not signed by Discord"
                           exit 1
                       fi
