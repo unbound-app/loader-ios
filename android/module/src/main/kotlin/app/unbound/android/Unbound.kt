@@ -43,6 +43,8 @@ class Unbound : XposedModule() {
         Logger.info("default", "Hermes bytecode version $bytecodeVersion, documents at $documents")
         hookBundleLoading(param.classLoader)
         Analytics.block(this, param.classLoader)
+        runCatching { Recovery.install(this) }
+            .onFailure { Logger.error("default", "Failed to install the Safe Mode shortcut", it) }
     }
 
     private fun hookBundleLoading(classLoader: ClassLoader) {

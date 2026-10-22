@@ -38,6 +38,9 @@ object NativeBridge {
     external fun nativeGetBoolean(store: String, key: String, fallback: Boolean): Boolean
 
     @JvmStatic
+    external fun nativeSetBoolean(store: String, key: String, value: Boolean)
+
+    @JvmStatic
     fun scheduleRuntimeWork() {
         ReactRuntime.post { runtimePointer -> nativeDrainRuntimeWork(runtimePointer) }
     }
@@ -136,6 +139,7 @@ object NativeBridge {
 
     @JvmStatic
     fun onBundleExecuted() {
+        Recovery.bundleExecuted = true
         Logger.info("default", "Bundle executed.")
     }
 

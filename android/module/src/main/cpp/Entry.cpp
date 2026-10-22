@@ -94,6 +94,17 @@ static jboolean nativeGetBoolean(JNIEnv *env, jclass, jstring store, jstring key
     return loader->settings().getBoolean(toStdString(env, store), toStdString(env, key), fallback);
 }
 
+static void nativeSetBoolean(JNIEnv *env, jclass, jstring store, jstring key, jboolean value)
+{
+    auto loader = currentLoader();
+    if (!loader)
+    {
+        return;
+    }
+    loader->settings().set(toStdString(env, store), toStdString(env, key), static_cast<bool>(value));
+    loader->settings().save();
+}
+
 static bool cacheCallbacks(JNIEnv *env, jclass bridge)
 {
     gCallbacks.bridgeClass     = static_cast<jclass>(env->NewGlobalRef(bridge));
@@ -142,6 +153,8 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *)
         {"nativeDrainRuntimeWork", "(J)V", reinterpret_cast<void *>(nativeDrainRuntimeWork)},
         {"nativeGetBoolean", "(Ljava/lang/String;Ljava/lang/String;Z)Z",
          reinterpret_cast<void *>(nativeGetBoolean)},
+        {"nativeSetBoolean", "(Ljava/lang/String;Ljava/lang/String;Z)V",
+         reinterpret_cast<void *>(nativeSetBoolean)},
     };
 
     if (env->RegisterNatives(bridge.get(), methods, sizeof(methods) / sizeof(methods[0])) != JNI_OK ||
