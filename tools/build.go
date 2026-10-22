@@ -114,7 +114,7 @@ func buildAll(options buildOptions, runner commandRunner) error {
 		return err
 	}
 	if options.deb == "" {
-		options.deb, _ = firstMatch(filepath.Join(options.root, "packages"), ".deb")
+		options.deb, _ = firstMatch(filepath.Join(iosRoot(options.root), "packages"), ".deb")
 	}
 	if options.deb == "" {
 		return errors.New("no .deb package was produced")
@@ -173,7 +173,7 @@ func buildTweak(options buildOptions, runner commandRunner) error {
 	}
 	env := append(os.Environ(), "TOOLS_COMMAND="+toolsCommand())
 	fmt.Printf("building tweak (%s)\n", options.configuration)
-	return runner(options.root, makeName, args, env, os.Stdout, os.Stderr)
+	return runner(iosRoot(options.root), makeName, args, env, os.Stdout, os.Stderr)
 }
 
 func buildIPA(options buildOptions, runner commandRunner) error {
@@ -185,7 +185,7 @@ func buildIPA(options buildOptions, runner commandRunner) error {
 		options.ipa = resolved
 	}
 	if options.deb == "" {
-		options.deb, _ = firstMatch(filepath.Join(options.root, "packages"), ".deb")
+		options.deb, _ = firstMatch(filepath.Join(iosRoot(options.root), "packages"), ".deb")
 	}
 	if options.deb == "" {
 		return errors.New("tweak package path is required")
@@ -384,12 +384,16 @@ func resolveIPA(options buildOptions) (string, error) {
 	return line, nil
 }
 
+func iosRoot(root string) string {
+	return filepath.Join(root, "ios")
+}
+
 func ensureSubmodules(root string, runner commandRunner) error {
 	return runner(root, "git", []string{"submodule", "update", "--init", "--recursive"}, os.Environ(), os.Stdout, os.Stderr)
 }
 
 func packageName(root string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(root, "control"))
+	data, err := os.ReadFile(filepath.Join(iosRoot(root), "control"))
 	if err != nil {
 		return "", err
 	}
@@ -405,7 +409,7 @@ func packageName(root string) (string, error) {
 }
 
 func packageVersion(root string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(root, "control"))
+	data, err := os.ReadFile(filepath.Join(iosRoot(root), "control"))
 	if err != nil {
 		return "", err
 	}
@@ -537,7 +541,7 @@ func buildExtensions(options buildOptions, work string, runner commandRunner) ([
 		{"OpenInDiscord", "OpenInDiscord Extension", "OpenInDiscord", "OpenInDiscordExt"},
 		{"ShareToDiscord", "Share", "Share", "Share"},
 	} {
-		source := filepath.Join(options.root, "extensions", extension.name)
+		source := filepath.Join(iosRoot(options.root), "extensions", extension.name)
 		destination := filepath.Join(work, "extensions", extension.name)
 		if err := copyTree(source, destination); err != nil {
 			return nil, err

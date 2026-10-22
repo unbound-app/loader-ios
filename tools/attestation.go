@@ -248,11 +248,26 @@ func privateKeyBytes() ([]byte, error) {
 	if value := os.Getenv("ATTESTATION_PK"); value != "" {
 		return []byte(strings.ReplaceAll(value, "\r", "")), nil
 	}
-	return os.ReadFile("attestation_private.pem")
+	return os.ReadFile(filepath.Join(repositoryRoot(), "attestation_private.pem"))
+}
+
+func repositoryRoot() string {
+	directory, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	for candidate := directory; ; candidate = filepath.Dir(candidate) {
+		if _, err := os.Stat(filepath.Join(candidate, "go.mod")); err == nil {
+			return candidate
+		}
+		if filepath.Dir(candidate) == candidate {
+			return directory
+		}
+	}
 }
 
 func pinnedPublicKey() (*ecdsa.PublicKey, error) {
-	raw, err := os.ReadFile(filepath.Join("tools", "attestation_public_key.b64"))
+	raw, err := os.ReadFile(filepath.Join(repositoryRoot(), "tools", "attestation_public_key.b64"))
 	if err != nil {
 		if raw, err = os.ReadFile("attestation_public_key.b64"); err != nil {
 			return nil, err

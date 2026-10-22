@@ -151,7 +151,7 @@ jobs:
           set -euo pipefail
           mkdir -p symbols
           for architecture in arm64 arm64e; do
-            binary=".theos/obj/${architecture}/Unbound.dylib"
+            binary="ios/.theos/obj/${architecture}/Unbound.dylib"
             bundle="${binary}.dSYM"
             test -f "$binary"
             test -d "$bundle"
@@ -176,17 +176,17 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: rootless package
-          path: packages/*.deb
+          path: ios/packages/*.deb
 
       - name: attest rootless package
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
-          subject-path: packages/*.deb
+          subject-path: ios/packages/*.deb
 
       - name: set deb filename
         id: set-deb-filename
         run: |
-          DEB_FILE=$(ls packages/*.deb)
+          DEB_FILE=$(ls ios/packages/*.deb)
           DEB_FILENAME=$(basename "$DEB_FILE")
           echo "filename=$DEB_FILENAME" >> $GITHUB_OUTPUT
 
@@ -288,7 +288,7 @@ jobs:
 
       - name: extract app name
         run: |
-          NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
+          NAME=$(grep '^Name:' ios/control | cut -d ' ' -f 2)
           echo "APP_NAME=$NAME" >> $GITHUB_ENV
 
       - name: build IPA
@@ -346,7 +346,7 @@ jobs:
 
       - name: extract app name
         run: |
-          NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
+          NAME=$(grep '^Name:' ios/control | cut -d ' ' -f 2)
           echo "APP_NAME=$NAME" >> $GITHUB_ENV
 
       - name: build simulator
@@ -506,7 +506,7 @@ jobs:
 
       - name: restore live site state
         run: |
-          PACKAGE_ID=$(grep '^Package:' control | cut -d ' ' -f 2)
+          PACKAGE_ID=$(grep '^Package:' ios/control | cut -d ' ' -f 2)
           mkdir -p "apt-repo/repo/depictions/web/$PACKAGE_ID" apt-repo/repo/debs
           cp app-repo.json apt-repo/repo/app-repo.json
 
@@ -567,7 +567,7 @@ jobs:
             APP_INDEX=0
           fi
 
-          NAME=$(grep '^Name:' control | cut -d ' ' -f 2)
+          NAME=$(grep '^Name:' ios/control | cut -d ' ' -f 2)
           DATE=$(date -u +"%Y-%m-%d")
           IPA_SIZE=$(stat -c%s "$APP_FILE")
           DOWNLOAD_URL=https://github.com/${{ github.repository }}/releases/download/v$VERSION/$NAME.ipa

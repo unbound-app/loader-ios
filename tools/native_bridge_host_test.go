@@ -21,7 +21,7 @@ func TestNativeTypeEncodingsOnHost(t *testing.T) {
 	for index, flags := range variants {
 		binary := filepath.Join(t.TempDir(), "native-type-encoding-test")
 		arguments := append([]string{"-std=c++20", "-x", "c++"}, flags...)
-		arguments = append(arguments, "-I"+filepath.Join(root, "headers"), filepath.Join(root, "sources", "NativeTypeEncoding.mm"), filepath.Join(root, "tests", "native_type_encoding.cpp"), "-o", binary)
+		arguments = append(arguments, "-I"+filepath.Join(root, "core", "include"), filepath.Join(root, "core", "src", "NativeTypeEncoding.cpp"), filepath.Join(root, "core", "tests", "native_type_encoding.cpp"), "-o", binary)
 		compile := exec.Command("c++", arguments...)
 		if output, err := compile.CombinedOutput(); err != nil {
 			t.Fatalf("native type test compilation failed for variant %d: %v\n%s", index, err, output)
@@ -47,7 +47,7 @@ func TestNativeNumericValidationOnHost(t *testing.T) {
 	for index, flags := range variants {
 		binary := filepath.Join(t.TempDir(), "native-numeric-validation-test")
 		arguments := append([]string{"-std=c++20", "-x", "c++"}, flags...)
-		arguments = append(arguments, "-I"+filepath.Join(root, "headers"), filepath.Join(root, "sources", "NativeNumericValidation.mm"), filepath.Join(root, "tests", "native_numeric_validation.cpp"), "-o", binary)
+		arguments = append(arguments, "-I"+filepath.Join(root, "core", "include"), filepath.Join(root, "core", "src", "NativeNumericValidation.cpp"), filepath.Join(root, "core", "tests", "native_numeric_validation.cpp"), "-o", binary)
 		compile := exec.Command("c++", arguments...)
 		if output, err := compile.CombinedOutput(); err != nil {
 			t.Fatalf("native numeric test compilation failed for variant %d: %v\n%s", index, err, output)
@@ -73,7 +73,7 @@ func TestNativeAddressValidationOnHost(t *testing.T) {
 	for index, flags := range variants {
 		binary := filepath.Join(t.TempDir(), "native-address-validation-test")
 		arguments := append([]string{"-std=c++20", "-x", "c++"}, flags...)
-		arguments = append(arguments, "-I"+filepath.Join(root, "headers"), filepath.Join(root, "sources", "NativeAddressValidation.mm"), filepath.Join(root, "tests", "native_address_validation.cpp"), "-o", binary)
+		arguments = append(arguments, "-I"+filepath.Join(root, "core", "include"), filepath.Join(root, "core", "src", "NativeAddressValidation.cpp"), filepath.Join(root, "core", "tests", "native_address_validation.cpp"), "-o", binary)
 		compile := exec.Command("c++", arguments...)
 		if output, err := compile.CombinedOutput(); err != nil {
 			t.Fatalf("native address test compilation failed for variant %d: %v\n%s", index, err, output)
@@ -99,7 +99,7 @@ func TestNativeBundleTransactionOnHost(t *testing.T) {
 	for index, flags := range variants {
 		binary := filepath.Join(t.TempDir(), "native-bundle-transaction-test")
 		arguments := append([]string{"-std=c++20", "-x", "c++"}, flags...)
-		arguments = append(arguments, "-I"+filepath.Join(root, "headers"), filepath.Join(root, "sources", "NativeBundleTransaction.mm"), filepath.Join(root, "tests", "native_bundle_transaction.cpp"), "-o", binary)
+		arguments = append(arguments, "-I"+filepath.Join(root, "core", "include"), filepath.Join(root, "core", "src", "NativeBundleTransaction.cpp"), filepath.Join(root, "core", "tests", "native_bundle_transaction.cpp"), "-o", binary)
 		compile := exec.Command("c++", arguments...)
 		if output, err := compile.CombinedOutput(); err != nil {
 			t.Fatalf("native bundle transaction compilation failed for variant %d: %v\n%s", index, err, output)
@@ -125,7 +125,7 @@ func TestNativeConversionBudgetOnHost(t *testing.T) {
 	for index, flags := range variants {
 		binary := filepath.Join(t.TempDir(), "native-conversion-budget-test")
 		arguments := append([]string{"-std=c++20", "-x", "c++"}, flags...)
-		arguments = append(arguments, "-I"+filepath.Join(root, "headers"), filepath.Join(root, "sources", "NativeConversionBudget.mm"), filepath.Join(root, "tests", "native_conversion_budget.cpp"), "-o", binary)
+		arguments = append(arguments, "-I"+filepath.Join(root, "core", "include"), filepath.Join(root, "core", "src", "NativeConversionBudget.cpp"), filepath.Join(root, "core", "tests", "native_conversion_budget.cpp"), "-o", binary)
 		compile := exec.Command("c++", arguments...)
 		if output, err := compile.CombinedOutput(); err != nil {
 			t.Fatalf("native conversion budget compilation failed for variant %d: %v\n%s", index, err, output)
@@ -151,7 +151,7 @@ func TestNativeOperationGateOnHost(t *testing.T) {
 	for index, flags := range variants {
 		binary := filepath.Join(t.TempDir(), "native-operation-gate-test")
 		arguments := append([]string{"-std=c++20", "-x", "c++"}, flags...)
-		arguments = append(arguments, "-I"+filepath.Join(root, "headers"), filepath.Join(root, "sources", "NativeOperationGate.mm"), filepath.Join(root, "tests", "native_operation_gate.cpp"), "-o", binary)
+		arguments = append(arguments, "-I"+filepath.Join(root, "core", "include"), filepath.Join(root, "core", "src", "NativeOperationGate.cpp"), filepath.Join(root, "core", "tests", "native_operation_gate.cpp"), "-o", binary)
 		compile := exec.Command("c++", arguments...)
 		if output, err := compile.CombinedOutput(); err != nil {
 			t.Fatalf("native operation gate compilation failed for variant %d: %v\n%s", index, err, output)

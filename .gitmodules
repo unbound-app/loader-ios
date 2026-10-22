@@ -2,10 +2,10 @@
 	path = resources
 	url = https://github.com/unbound-app/bootstrap
 [submodule "extensions/OpenInDiscord"]
-	path = extensions/OpenInDiscord
+	path = ios/extensions/OpenInDiscord
 	url = https://github.com/castdrian/OpenInDiscord
 [submodule "extensions/ShareToDiscord"]
-	path = extensions/ShareToDiscord
+	path = ios/extensions/ShareToDiscord
 	url = https://github.com/castdrian/ShareToDiscord
 [submodule "vendor/libffi"]
 	path = vendor/libffi
