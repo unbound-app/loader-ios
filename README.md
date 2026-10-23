@@ -136,6 +136,28 @@ java -jar lspatch.jar base.apk config.*.apk -m module-release.apk -l 2 -o patche
 
 ## Development
 
+### Development targets
+
+The development-target command discovers local tooling and reports the configured Android AVD, booted iOS simulators, vphone VMs, and jb-p1lot devices:
+
+```bash
+go run ./tools dev status
+```
+
+The rooted Android profile is tracked at `packages/android/dev-environment/avd.json`. It uses the Google APIs Android 15 arm64 image, a Pixel 7 profile, host GPU rendering, four CPU cores, and 4 GiB RAM. On macOS with Android SDK command-line tools, emulator, and hardware acceleration installed:
+
+```bash
+go run ./tools dev android-avd status
+go run ./tools dev android-avd setup
+go run ./tools dev android-avd start
+```
+
+`setup` creates the named AVD only when it is absent and applies the tracked performance settings without wiping its userdata. If the system image is missing, install its Android SDK license interactively with `sdkmanager --licenses`, then rerun setup. `start` reuses an already-running matching emulator, enables `adb root` only on that emulator, waits for Android to finish booting, and verifies the root shell. Use `--name` to target another AVD by name. Use `adb -s <serial> install -r <apk>` to install a debug build on the active emulator; `go run ./tools dev status` reports its serial and root state.
+
+For iOS, `go run ./tools build all --simulator --ipa <Discord.ipa>` produces the Simulator app archive. Boot a compatible runtime with Xcode, install the extracted `Payload/Discord.app` with `xcrun simctl install booted <path>`, and launch it with `xcrun simctl launch booted com.hammerandchisel.discord`. The simulator target is useful for packaging and UI smoke tests; private Discord runtime behavior still requires an actual device.
+
+For physical jailbroken-device testing, install jb-p1lot and check pairing and bridge status with `jb-p1lot device_list` and `jb-p1lot device_status --device <UDID>`. The Go environment report uses these read-only status calls and never performs device actions. The vphone path remains available through `vphone-cli vm list`, `vphone-cli vm launch`, and `vphone-cli vm stop`; its VM bundles and firmware are kept outside this repository.
+
 ### Live reload (HMR)
 
 1. Run the client's dev server (`bun run serve` in `packages/client`). It serves the bundle and a Server-Sent Events stream at `/__hot`.

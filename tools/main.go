@@ -43,6 +43,8 @@ func run(args []string) error {
 		return runLibFFIBuild(args[1:])
 	case "doctor":
 		return runDoctor(args[1:])
+	case "dev":
+		return runDev(args[1:])
 	case "version":
 		fmt.Println("tools dev")
 		return nil
@@ -55,7 +57,7 @@ func run(args []string) error {
 }
 
 func printUsage() {
-	fmt.Println("usage: go run ./tools <build|platform|validate|deps|packages|libffi-build|fetch|ipa-info|attest|doctor>")
+	fmt.Println("usage: go run ./tools <build|platform|validate|deps|packages|libffi-build|fetch|ipa-info|attest|doctor|dev>")
 	fmt.Println("       go run ./tools build <tweak|ipa|simulator|all> [flags]")
 	fmt.Println("       go run ./tools platform <build|test> <ios|android> [flags]")
 	fmt.Println("       go run ./tools validate [--root <path>]")
@@ -64,6 +66,8 @@ func printUsage() {
 	fmt.Println("       go run ./tools libffi-build --archive <path> --include <path>")
 	fmt.Println("       go run ./tools ipa-info --ipa <path>")
 	fmt.Println("       go run ./tools attest <enabled|stage|sign|verify> [flags]")
+	fmt.Println("       go run ./tools dev status [--root <path>]")
+	fmt.Println("       go run ./tools dev android-avd <status|setup|start> [--name <name>] [--root <path>]")
 }
 
 func requireArgs(args []string, count int, usage string) error {
