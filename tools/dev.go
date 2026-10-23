@@ -316,19 +316,23 @@ func reportSimulatorStatus() {
 		fmt.Println("iOS Simulator: xcrun unavailable")
 		return
 	}
-	output, err := devCommandOutput("xcrun", "simctl", "list", "devices", "booted")
+	output, err := devCommandOutput("xcrun", "simctl", "list", "devices", "available")
 	if err != nil {
 		fmt.Printf("iOS Simulator: %v\n", err)
 		return
 	}
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	booted := []string{}
+	available := 0
 	for _, line := range lines {
+		if strings.Contains(line, "(Booted)") || strings.Contains(line, "(Shutdown)") {
+			available++
+		}
 		if strings.Contains(line, "(Booted)") {
 			booted = append(booted, strings.TrimSpace(line))
 		}
 	}
-	fmt.Printf("iOS Simulator: %d booted; build with `go run ./tools build simulator`\n", len(booted))
+	fmt.Printf("iOS Simulator: %d available, %d booted; list with `xcrun simctl list devices available`\n", available, len(booted))
 	for _, line := range booted {
 		fmt.Println(" ", line)
 	}
