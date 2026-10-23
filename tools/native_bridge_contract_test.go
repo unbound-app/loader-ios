@@ -193,6 +193,47 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	}
 }
 
+func TestAndroidNativeBridgeContractIsSynchronized(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	source, err := os.ReadFile(filepath.Join(root, "packages", "android", "module", "src", "main", "cpp", "NativePluginBridge.cpp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceText := string(source)
+	for _, contract := range []string{
+		"loader::kNativePluginApiVersion",
+		"loader::kNativePluginAbiVersion",
+		"native.ui.lookup",
+		"native.ui.layout",
+		"native.ui.mount",
+		`runtime, "lookup",`,
+		`runtime, "snapshot",`,
+		`runtime, "measure",`,
+		`runtime, "setFrame",`,
+		`runtime, "mount",`,
+		`runtime, "update",`,
+		`runtime, "unmount",`,
+		"executeMainAsynchronously(",
+		`runtime.global().setProperty(runtime, "NativePlugin"`,
+	} {
+		if !strings.Contains(sourceText, contract) {
+			t.Fatalf("Android native bridge contract %q is missing", contract)
+		}
+	}
+	for _, unsupported := range []string{
+		"native.objc.",
+		"native.ffi.",
+	} {
+		if strings.Contains(sourceText, unsupported) {
+			t.Fatalf("Android native bridge must not advertise platform-specific capability %q", unsupported)
+		}
+	}
+}
+
 func TestNativeBridgeSafetyGuards(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
