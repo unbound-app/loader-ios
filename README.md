@@ -59,7 +59,9 @@ GitHub Actions polls the App Store, Android stable package source, and dkrypt's 
 
 The platform workflows can also be run independently for development builds. The shared release coordinator is the only workflow that publishes the combined iOS and Android release.
 
-## Building and validation
+<details>
+<summary>Building and validation</summary>
+
 
 The root Go tool coordinates common validation and platform-specific builds:
 
@@ -134,7 +136,10 @@ java -jar lspatch.jar base.apk config.*.apk -m module-release.apk -l 2 -o patche
 
 </details>
 
-## Development
+</details>
+
+<details>
+<summary>Development</summary>
 
 ### Development targets
 
@@ -178,6 +183,8 @@ On the iOS vphone and the Android emulator, the loader finds a dev server on the
 ### Debugger
 
 Point `debugger.address` at a running `ub-debugger` bridge to evaluate JavaScript on a device. The emulator reaches the host at `10.0.2.2`.
+
+</details>
 
 ## Contributors
 
