@@ -351,9 +351,13 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 	contents := string(workflow)
 	for _, required := range []string{
 		"name: publish loader update records",
-		"UNBOUND_LOADER_API_KEY: ${{ secrets.UNBOUND_LOADER_API_KEY }}",
+		"UNBOUND_API_KEY: ${{ secrets.UNBOUND_API_KEY }}",
+		"UNBOUND_API_URL: ${{ vars.UNBOUND_API_URL || 'https://unbound.rip/api/v1/loader/releases' }}",
 		"https://unbound.rip/api/v1/loader/releases",
 		"dpkg-deb -f \"$deb_path\" Version",
+		"gh api \"repos/$GITHUB_REPOSITORY/releases/tags/v$RELEASE_VERSION\"",
+		"Discord client updated to version %s",
+		"--changelog-file release-assets/loader-changelog.md",
 		"go run ./tools publish-loader-release",
 		"--platform ios",
 		"--platform android",
@@ -361,6 +365,22 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 	} {
 		if !strings.Contains(contents, required) {
 			t.Fatalf("stable release workflow is missing loader update publishing detail %q", required)
+		}
+	}
+	releaseConfig, err := os.ReadFile(filepath.Join(root, ".github", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"title: Features",
+		"title: Fixes",
+		"title: Performance",
+		"title: Maintenance",
+		"title: Dependencies",
+		"title: Other changes",
+	} {
+		if !strings.Contains(string(releaseConfig), required) {
+			t.Fatalf("semantic release categories are missing %q", required)
 		}
 	}
 }

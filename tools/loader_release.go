@@ -42,18 +42,26 @@ type loaderReleasePublishResponse struct {
 
 func runPublishLoaderRelease(args []string) error {
 	set := flag.NewFlagSet("publish-loader-release", flag.ContinueOnError)
-	endpoint := set.String("api-url", defaultLoaderReleaseEndpoint, "loader release publication endpoint")
+	endpoint := set.String("api-url", envOr("UNBOUND_API_URL", defaultLoaderReleaseEndpoint), "loader release publication endpoint")
 	platform := set.String("platform", "", "ios or android")
 	version := set.String("version", "", "semantic loader version")
 	releaseURL := set.String("url", "", "public release asset URL")
 	changelog := set.String("changelog", "", "optional release changelog")
+	changelogFile := set.String("changelog-file", "", "path to release changelog")
 	if err := set.Parse(args); err != nil {
 		return err
+	}
+	if *changelogFile != "" {
+		contents, err := os.ReadFile(*changelogFile)
+		if err != nil {
+			return fmt.Errorf("read loader release changelog: %w", err)
+		}
+		*changelog = strings.TrimSpace(string(contents))
 	}
 
 	config := loaderReleasePublishConfig{
 		endpoint:  *endpoint,
-		apiKey:    os.Getenv("UNBOUND_LOADER_API_KEY"),
+		apiKey:    os.Getenv("UNBOUND_API_KEY"),
 		platform:  *platform,
 		version:   *version,
 		url:       *releaseURL,
@@ -70,7 +78,7 @@ func runPublishLoaderRelease(args []string) error {
 
 func publishLoaderRelease(ctx context.Context, config loaderReleasePublishConfig) error {
 	if config.apiKey == "" {
-		return errors.New("UNBOUND_LOADER_API_KEY is required")
+		return errors.New("UNBOUND_API_KEY is required")
 	}
 	if config.platform != "ios" && config.platform != "android" {
 		return errors.New("loader release platform must be ios or android")

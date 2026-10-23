@@ -73,7 +73,7 @@ func printUsage() {
 	fmt.Println("       go run ./tools ipa-info --ipa <path>")
 	fmt.Println("       go run ./tools discord-version --version <version> | --android-code <code>")
 	fmt.Println("       go run ./tools release-candidate --channel <stable|testflight>")
-	fmt.Println("       go run ./tools publish-loader-release --platform <ios|android> --version <semver> --url <release-url>")
+	fmt.Println("       go run ./tools publish-loader-release --platform <ios|android> --version <semver> --url <release-url> [--changelog-file <path>]")
 	fmt.Println("       go run ./tools attest <enabled|stage|sign|verify> [flags]")
 	fmt.Println("       go run ./tools dev status [--root <path>]")
 	fmt.Println("       go run ./tools dev android-avd <status|setup|start> [--name <name>] [--root <path>]")
