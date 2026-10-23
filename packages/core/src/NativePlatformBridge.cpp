@@ -153,27 +153,31 @@ namespace loader
                            stringGetter(runtime, "getDeviceModel", provider->deviceModel));
         device.setProperty(runtime, "getOSVersionString",
                            stringGetter(runtime, "getOSVersionString", provider->osVersion));
-        device.setProperty(runtime, "getiOSVersionString",
-                           stringGetter(runtime, "getiOSVersionString", provider->osVersion));
-        device.setProperty(runtime, "isJailbroken",
-                           booleanGetter(runtime, "isJailbroken", provider->isJailbroken));
+        device.setProperty(runtime, "isRooted",
+                           booleanGetter(runtime, "isRooted", provider->isRooted));
         device.setProperty(runtime, "isSystemApp",
                            booleanGetter(runtime, "isSystemApp", provider->isSystemApp));
-        device.setProperty(runtime, "isVerifiedBuild",
-                           booleanGetter(runtime, "isVerifiedBuild", provider->isVerifiedBuild));
-        device.setProperty(
-            runtime, "getEntitlements",
-            makeHostFunction(runtime, "getEntitlements", 0,
-                             [provider](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *,
-                                        size_t) -> jsi::Value {
-                                 return toJSIValue(rt, provider->entitlements
-                                                           ? provider->entitlements()
-                                                           : nlohmann::json::object());
-                             }));
-        device.setProperty(runtime, "getEntitlementsAsPlist",
-                           stringGetter(runtime, "getEntitlementsAsPlist",
-                                        provider->entitlementsAsPlist));
         platform.setProperty(runtime, "device", std::move(device));
+
+        if (provider->platform == "ios")
+        {
+            jsi::Object ios(runtime);
+            ios.setProperty(runtime, "isVerifiedBuild",
+                            booleanGetter(runtime, "isVerifiedBuild", provider->isVerifiedBuild));
+            ios.setProperty(
+                runtime, "getEntitlements",
+                makeHostFunction(runtime, "getEntitlements", 0,
+                                 [provider](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *,
+                                            size_t) -> jsi::Value {
+                                     return toJSIValue(rt, provider->entitlements
+                                                               ? provider->entitlements()
+                                                               : nlohmann::json::object());
+                                 }));
+            ios.setProperty(runtime, "getEntitlementsAsPlist",
+                            stringGetter(runtime, "getEntitlementsAsPlist",
+                                         provider->entitlementsAsPlist));
+            platform.setProperty(runtime, "ios", std::move(ios));
+        }
 
         jsi::Object app(runtime);
         app.setProperty(runtime, "getAppSource",

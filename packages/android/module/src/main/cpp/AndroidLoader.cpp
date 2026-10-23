@@ -301,11 +301,8 @@ namespace unbound::android
         provider->platform            = "android";
         provider->deviceModel         = text("deviceModel");
         provider->osVersion           = text("osVersion");
-        provider->isJailbroken        = flag("isRooted");
+        provider->isRooted            = flag("isRooted");
         provider->isSystemApp         = flag("isSystemApp");
-        provider->isVerifiedBuild     = flag("isVerifiedBuild");
-        provider->entitlements        = []() { return nlohmann::json::object(); };
-        provider->entitlementsAsPlist = []() { return std::string(); };
         provider->appSource           = text("appSource");
         loader::installNativePlatform(runtime, provider);
         registerNativePluginBridge(runtime, callbacks_);

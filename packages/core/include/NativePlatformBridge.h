@@ -15,7 +15,7 @@ namespace loader
         std::string                     platform;
         std::function<std::string()>    deviceModel;
         std::function<std::string()>    osVersion;
-        std::function<bool()>           isJailbroken;
+        std::function<bool()>           isRooted;
         std::function<bool()>           isSystemApp;
         std::function<bool()>           isVerifiedBuild;
         std::function<nlohmann::json()> entitlements;

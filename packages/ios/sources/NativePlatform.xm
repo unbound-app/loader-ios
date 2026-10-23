@@ -40,7 +40,7 @@ void registerNativePlatform(facebook::jsi::Runtime &runtime)
     provider->platform     = "ios";
     provider->deviceModel  = []() { return toStdString([Utilities getDeviceModel]); };
     provider->osVersion    = []() { return toStdString([Utilities getiOSVersionString]); };
-    provider->isJailbroken = []() { return static_cast<bool>([Utilities isJailbroken]); };
+    provider->isRooted = []() { return static_cast<bool>([Utilities isJailbroken]); };
     provider->isSystemApp  = []() { return static_cast<bool>([Utilities isSystemApp]); };
     provider->isVerifiedBuild = []() { return static_cast<bool>([Utilities isVerifiedBuild]); };
     provider->entitlements    = []() { return entitlementsJSON(); };

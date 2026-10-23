@@ -54,7 +54,6 @@ object Platform {
         .put("osVersion", Build.VERSION.RELEASE)
         .put("isRooted", SU_PATHS.any { File(it).exists() })
         .put("isSystemApp", appInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0)
-        .put("isVerifiedBuild", false)
         .put("appSource", frameworkName)
 
     fun mainBundleBytecodeVersion(apkPath: String): Int = runCatching {
