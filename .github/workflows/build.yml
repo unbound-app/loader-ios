@@ -319,17 +319,11 @@ jobs:
               printf '\nNo categorized loader changes are listed in the generated release notes.\n'
             fi
           } > release-assets/loader-changelog.md
-          go run ./tools publish-loader-release \
+          go run ./tools publish-loader-releases \
             --api-url "$api_url" \
-            --platform ios \
             --version "$loader_version" \
-            --url "$release_url/$IOS_DEB_FILENAME" \
-            --changelog-file release-assets/loader-changelog.md
-          go run ./tools publish-loader-release \
-            --api-url "$api_url" \
-            --platform android \
-            --version "$loader_version" \
-            --url "$release_url/$ANDROID_MODULE_FILENAME" \
+            --ios-url "$release_url/$IOS_DEB_FILENAME" \
+            --android-url "$release_url/$ANDROID_MODULE_FILENAME" \
             --changelog-file release-assets/loader-changelog.md
 
   publish-app-repo:

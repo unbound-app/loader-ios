@@ -361,9 +361,9 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 		"gh api \"repos/$GITHUB_REPOSITORY/releases/tags/v$RELEASE_VERSION\"",
 		"Loader version %s",
 		"--changelog-file release-assets/loader-changelog.md",
-		"go run ./tools publish-loader-release",
-		"--platform ios",
-		"--platform android",
+		"go run ./tools publish-loader-releases",
+		"--ios-url \"$release_url/$IOS_DEB_FILENAME\"",
+		"--android-url \"$release_url/$ANDROID_MODULE_FILENAME\"",
 		"needs.resolve-source.outputs.is_testflight != 'true'",
 	} {
 		if !strings.Contains(contents, required) {

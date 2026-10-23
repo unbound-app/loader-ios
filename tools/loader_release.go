@@ -27,6 +27,22 @@ type loaderReleasePublishConfig struct {
 	client    *http.Client
 }
 
+type loaderReleaseBatchConfig struct {
+	endpoint   string
+	apiKey     string
+	version    string
+	iosURL     string
+	androidURL string
+	changelog  string
+	client     *http.Client
+}
+
+type loaderReleaseBatchResult struct {
+	published       []string
+	skippedPlatform string
+	latestVersion   string
+}
+
 type loaderReleasePublishRequest struct {
 	Platform  string  `json:"platform"`
 	Version   string  `json:"version"`
@@ -88,6 +104,51 @@ func runPublishLoaderRelease(args []string) error {
 	return nil
 }
 
+func runPublishLoaderReleases(args []string) error {
+	set := flag.NewFlagSet("publish-loader-releases", flag.ContinueOnError)
+	endpoint := set.String("api-url", envOr("UNBOUND_API_URL", defaultLoaderReleaseEndpoint), "loader release publication endpoint")
+	version := set.String("version", "", "semantic loader version")
+	iosURL := set.String("ios-url", "", "public iOS release asset URL")
+	androidURL := set.String("android-url", "", "public Android release asset URL")
+	changelog := set.String("changelog", "", "optional release changelog")
+	changelogFile := set.String("changelog-file", "", "path to release changelog")
+	if err := set.Parse(args); err != nil {
+		return err
+	}
+	if *changelogFile != "" {
+		contents, err := os.ReadFile(*changelogFile)
+		if err != nil {
+			return fmt.Errorf("read loader release changelog: %w", err)
+		}
+		*changelog = strings.TrimSpace(string(contents))
+	}
+
+	result, err := publishLoaderReleases(context.Background(), loaderReleaseBatchConfig{
+		endpoint:   *endpoint,
+		apiKey:     os.Getenv("UNBOUND_API_KEY"),
+		version:    *version,
+		iosURL:     *iosURL,
+		androidURL: *androidURL,
+		changelog:  *changelog,
+		client:     &http.Client{Timeout: 30 * time.Second},
+	})
+	if err != nil {
+		return err
+	}
+	if result.skippedPlatform != "" {
+		fmt.Printf("Skipped loader release %s because it is older than %s loader %s\n", *version, result.skippedPlatform, result.latestVersion)
+		return nil
+	}
+	if len(result.published) == 0 {
+		fmt.Printf("Skipped loader release %s because that semver is already published\n", *version)
+		return nil
+	}
+	for _, platform := range result.published {
+		fmt.Printf("Published %s loader release %s\n", platform, *version)
+	}
+	return nil
+}
+
 func publishLoaderRelease(ctx context.Context, config loaderReleasePublishConfig) (bool, error) {
 	if config.apiKey == "" {
 		return false, errors.New("UNBOUND_API_KEY is required")
@@ -129,6 +190,83 @@ func publishLoaderRelease(ctx context.Context, config loaderReleasePublishConfig
 		}
 	}
 
+	return postLoaderRelease(ctx, config, client)
+}
+
+func publishLoaderReleases(ctx context.Context, config loaderReleaseBatchConfig) (loaderReleaseBatchResult, error) {
+	if config.apiKey == "" {
+		return loaderReleaseBatchResult{}, errors.New("UNBOUND_API_KEY is required")
+	}
+	if config.version == "" {
+		return loaderReleaseBatchResult{}, errors.New("loader release version is required")
+	}
+	if _, err := parseSemanticVersion(config.version); err != nil {
+		return loaderReleaseBatchResult{}, fmt.Errorf("invalid loader release version: %w", err)
+	}
+	if err := validateHTTPURL(config.endpoint); err != nil {
+		return loaderReleaseBatchResult{}, fmt.Errorf("invalid loader release API URL: %w", err)
+	}
+	if err := validateHTTPURL(config.iosURL); err != nil {
+		return loaderReleaseBatchResult{}, fmt.Errorf("invalid iOS loader release asset URL: %w", err)
+	}
+	if err := validateHTTPURL(config.androidURL); err != nil {
+		return loaderReleaseBatchResult{}, fmt.Errorf("invalid Android loader release asset URL: %w", err)
+	}
+
+	client := config.client
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	platforms := []struct {
+		name string
+		url  string
+	}{
+		{name: "ios", url: config.iosURL},
+		{name: "android", url: config.androidURL},
+	}
+	pending := make([]loaderReleasePublishConfig, 0, len(platforms))
+	for _, platform := range platforms {
+		latest, exists, err := latestLoaderReleaseVersion(ctx, config.endpoint, platform.name, client)
+		if err != nil {
+			return loaderReleaseBatchResult{}, err
+		}
+		if exists {
+			comparison, err := compareSemanticVersions(config.version, latest)
+			if err != nil {
+				return loaderReleaseBatchResult{}, fmt.Errorf("invalid published loader version %q: %w", latest, err)
+			}
+			if comparison < 0 {
+				return loaderReleaseBatchResult{
+					skippedPlatform: platform.name,
+					latestVersion:   latest,
+				}, nil
+			}
+			if comparison == 0 {
+				continue
+			}
+		}
+		pending = append(pending, loaderReleasePublishConfig{
+			endpoint:  config.endpoint,
+			apiKey:    config.apiKey,
+			platform:  platform.name,
+			version:   config.version,
+			url:       platform.url,
+			changelog: config.changelog,
+			client:    client,
+		})
+	}
+
+	result := loaderReleaseBatchResult{published: make([]string, 0, len(pending))}
+	for _, platform := range pending {
+		if _, err := postLoaderRelease(ctx, platform, client); err != nil {
+			return loaderReleaseBatchResult{}, err
+		}
+		result.published = append(result.published, platform.platform)
+	}
+	return result, nil
+}
+
+func postLoaderRelease(ctx context.Context, config loaderReleasePublishConfig, client *http.Client) (bool, error) {
 	requestBody := loaderReleasePublishRequest{
 		Platform: config.platform,
 		Version:  config.version,

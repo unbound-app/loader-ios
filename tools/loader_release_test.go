@@ -36,7 +36,7 @@ func TestPublishLoaderReleaseSendsScopedRequest(t *testing.T) {
 		if body.Platform != "ios" || body.Version != "1.0.1" || body.URL != "https://github.com/unbound-app/loader/releases/download/v352.0/Unbound.deb" {
 			t.Fatalf("unexpected loader release body: %#v", body)
 		}
-		if body.Changelog == nil || *body.Changelog != "Discord 352.0 includes loader fixes." {
+		if body.Changelog == nil || *body.Changelog != "Added native bridge validation." {
 			t.Fatalf("unexpected changelog: %#v", body.Changelog)
 		}
 		fmt.Fprint(writer, `{"platform":"ios","version":"1.0.1","url":"https://github.com/unbound-app/loader/releases/download/v352.0/Unbound.deb"}`)
@@ -49,7 +49,7 @@ func TestPublishLoaderReleaseSendsScopedRequest(t *testing.T) {
 		platform:  "ios",
 		version:   "1.0.1",
 		url:       "https://github.com/unbound-app/loader/releases/download/v352.0/Unbound.deb",
-		changelog: "Discord 352.0 includes loader fixes.",
+		changelog: "Added native bridge validation.",
 	})
 	if err != nil || !published {
 		t.Fatalf("publish result = %t, error = %v", published, err)
@@ -124,7 +124,7 @@ func TestPublishLoaderReleaseRejectsMissingKeyAndInvalidPlatform(t *testing.T) {
 func TestPublishLoaderReleaseReadsChangelogFile(t *testing.T) {
 	temporary := t.TempDir()
 	changelogPath := temporary + "/changelog.md"
-	if err := os.WriteFile(changelogPath, []byte("  Discord 352.0 updated the client.\n"), 0o600); err != nil {
+	if err := os.WriteFile(changelogPath, []byte("  Improved native plugin reliability.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,7 +137,7 @@ func TestPublishLoaderReleaseReadsChangelogFile(t *testing.T) {
 		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if body.Changelog == nil || *body.Changelog != "Discord 352.0 updated the client." {
+		if body.Changelog == nil || *body.Changelog != "Improved native plugin reliability." {
 			t.Fatalf("unexpected changelog: %#v", body.Changelog)
 		}
 		fmt.Fprint(writer, `{"platform":"ios","version":"1.0.1","url":"https://github.com/unbound-app/loader/releases/download/v352.0/Unbound.deb"}`)
@@ -153,6 +153,96 @@ func TestPublishLoaderReleaseReadsChangelogFile(t *testing.T) {
 		"--changelog-file", changelogPath,
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPublishLoaderReleasesPreflightsBothPlatforms(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		version       string
+		latest        map[string]string
+		wantPublished []string
+		wantSkipped   string
+	}{
+		{
+			name:    "stale candidate skips both platforms",
+			version: "1.0.2",
+			latest: map[string]string{
+				"ios":     "1.0.3",
+				"android": "1.0.1",
+			},
+			wantSkipped: "ios",
+		},
+		{
+			name:    "equal platform is skipped while older platform catches up",
+			version: "1.0.2",
+			latest: map[string]string{
+				"ios":     "1.0.2",
+				"android": "1.0.1",
+			},
+			wantPublished: []string{"android"},
+		},
+		{
+			name:    "new version is published to both platforms",
+			version: "1.0.2",
+			latest: map[string]string{
+				"ios":     "1.0.1",
+				"android": "1.0.1",
+			},
+			wantPublished: []string{"ios", "android"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			postCounts := map[string]int{}
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.Method == http.MethodGet {
+					platform := request.URL.Query().Get("platform")
+					latest, exists := test.latest[platform]
+					if !exists {
+						fmt.Fprint(writer, `{"update":null}`)
+						return
+					}
+					fmt.Fprintf(writer, `{"update":{"version":%q}}`, latest)
+					return
+				}
+				var body loaderReleasePublishRequest
+				if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+					t.Fatal(err)
+				}
+				postCounts[body.Platform]++
+				fmt.Fprintf(writer, `{"platform":%q,"version":%q,"url":%q}`, body.Platform, test.version, body.URL)
+			}))
+			defer server.Close()
+
+			result, err := publishLoaderReleases(context.Background(), loaderReleaseBatchConfig{
+				endpoint:   server.URL + "/api/v1/loader/releases",
+				apiKey:     "ci-key",
+				version:    test.version,
+				iosURL:     "https://example.com/Unbound.ipa",
+				androidURL: "https://example.com/Unbound.apk",
+				changelog:  "Improved native plugin reliability.",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.skippedPlatform != test.wantSkipped {
+				t.Fatalf("skipped platform = %q, want %q", result.skippedPlatform, test.wantSkipped)
+			}
+			if strings.Join(result.published, ",") != strings.Join(test.wantPublished, ",") {
+				t.Fatalf("published = %v, want %v", result.published, test.wantPublished)
+			}
+			for _, platform := range []string{"ios", "android"} {
+				want := 0
+				for _, published := range test.wantPublished {
+					if published == platform {
+						want = 1
+					}
+				}
+				if postCounts[platform] != want {
+					t.Fatalf("%s POST count = %d, want %d", platform, postCounts[platform], want)
+				}
+			}
+		})
 	}
 }
 
