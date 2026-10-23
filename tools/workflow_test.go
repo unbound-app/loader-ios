@@ -130,7 +130,9 @@ func TestBuildWorkflowCoordinatesBothPlatforms(t *testing.T) {
 		"value: ${{ jobs.android.outputs.module_filename }}",
 		"value: ${{ jobs.android.outputs.patched_filename }}",
 		"name: ios-simulator",
-		"name: publish unified release",
+		"name: publish stable release",
+		"name: publish TestFlight prerelease",
+		"if: inputs.is_testflight != true",
 	} {
 		if !strings.Contains(contents, required) {
 			t.Fatalf("build workflow is missing platform orchestration detail %q", required)
@@ -178,17 +180,24 @@ func TestBuildWorkflowCoordinatesBothPlatforms(t *testing.T) {
 			t.Fatalf("Android workflow is missing matching version or artifact detail %q", required)
 		}
 	}
-	remoteDeploy, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "remote-deploy.yml"))
+	pollWorkflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "release-poll.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, required := range []string{
-		"release: true",
-		"ipa_url: ${{ github.event.client_payload.is_testflight == true && github.event.client_payload.ipa_url || '' }}",
+		"schedule:",
+		"cron: '17 */3 * * *'",
+		"go run ./tools release-candidate --channel stable",
+		"go run ./tools release-candidate --channel testflight",
+		"uses: ./.github/workflows/build.yml",
+		"is_testflight: true",
 	} {
-		if !strings.Contains(string(remoteDeploy), required) {
-			t.Fatalf("dkrypt-scheduled builds are missing matched source behavior %q", required)
+		if !strings.Contains(string(pollWorkflow), required) {
+			t.Fatalf("scheduled release polling is missing %q", required)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".github", "workflows", "remote-deploy.yml")); !os.IsNotExist(err) {
+		t.Fatal("the dkrypt repository-dispatch workflow must be removed")
 	}
 }
 
@@ -326,5 +335,63 @@ func TestDependabotAutomergeWaitsForSuccessfulBuild(t *testing.T) {
 	}
 	if strings.Contains(contents, "actions/checkout") {
 		t.Fatal("Dependabot auto-merge workflow must not check out pull request code")
+	}
+}
+
+func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "build.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(workflow)
+	for _, required := range []string{
+		"name: publish loader update records",
+		"UNBOUND_LOADER_API_KEY: ${{ secrets.UNBOUND_LOADER_API_KEY }}",
+		"https://unbound.rip/api/v1/loader/releases",
+		"dpkg-deb -f \"$deb_path\" Version",
+		"go run ./tools publish-loader-release",
+		"--platform ios",
+		"--platform android",
+		"needs.resolve-source.outputs.is_testflight != 'true'",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Fatalf("stable release workflow is missing loader update publishing detail %q", required)
+		}
+	}
+}
+
+func TestModulesBootstrapUsesRuntimeRegistryWithoutLegacyPatch(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	if _, err := os.Stat(filepath.Join(root, "packages", "bootstrap", "modules.js")); !os.IsNotExist(err) {
+		t.Fatal("legacy modules bootstrap shim must not be packaged")
+	}
+	for _, path := range []string{
+		filepath.Join(root, "packages", "core", "src", "LoaderPipeline.cpp"),
+		filepath.Join(root, "packages", "ios", "sources", "Unbound.xm"),
+		filepath.Join(root, "packages", "android", "module", "src", "main", "cpp", "AndroidLoader.cpp"),
+	} {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(contents), "injectModulesPatch") || strings.Contains(string(contents), "modulesScript") {
+			t.Fatalf("legacy modules bootstrap plumbing remains in %s", path)
+		}
+	}
+	contents, err := os.ReadFile(filepath.Join(root, "packages", "core", "src", "LoaderPipeline.cpp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), "globalThis.modules \\x3f\\x3f= globalThis.__c?.();") {
+		t.Fatal("shared loader no longer initializes the Metro registry before plugin preload")
 	}
 }

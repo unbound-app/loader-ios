@@ -29,6 +29,10 @@ func run(args []string) error {
 		return runIPAInfo(args[1:])
 	case "discord-version":
 		return runDiscordVersion(args[1:])
+	case "release-candidate":
+		return runReleaseCandidate(args[1:])
+	case "publish-loader-release":
+		return runPublishLoaderRelease(args[1:])
 	case "attest":
 		return runAttest(args[1:])
 	case "build":
@@ -59,7 +63,7 @@ func run(args []string) error {
 }
 
 func printUsage() {
-	fmt.Println("usage: go run ./tools <build|platform|validate|deps|packages|libffi-build|fetch|ipa-info|discord-version|attest|doctor|dev>")
+	fmt.Println("usage: go run ./tools <build|platform|validate|deps|packages|libffi-build|fetch|ipa-info|discord-version|release-candidate|publish-loader-release|attest|doctor|dev>")
 	fmt.Println("       go run ./tools build <tweak|ipa|simulator|all> [flags]")
 	fmt.Println("       go run ./tools platform <build|test> <ios|android> [flags]")
 	fmt.Println("       go run ./tools validate [--root <path>]")
@@ -68,6 +72,8 @@ func printUsage() {
 	fmt.Println("       go run ./tools libffi-build --archive <path> --include <path>")
 	fmt.Println("       go run ./tools ipa-info --ipa <path>")
 	fmt.Println("       go run ./tools discord-version --version <version> | --android-code <code>")
+	fmt.Println("       go run ./tools release-candidate --channel <stable|testflight>")
+	fmt.Println("       go run ./tools publish-loader-release --platform <ios|android> --version <semver> --url <release-url>")
 	fmt.Println("       go run ./tools attest <enabled|stage|sign|verify> [flags]")
 	fmt.Println("       go run ./tools dev status [--root <path>]")
 	fmt.Println("       go run ./tools dev android-avd <status|setup|start> [--name <name>] [--root <path>]")

@@ -181,7 +181,7 @@ jobs:
 
   android:
     needs: resolve-source
-    if: inputs.only_app_repo != true && inputs.only_apt_repo != true && needs.resolve-source.result == 'success'
+    if: inputs.only_app_repo != true && inputs.only_apt_repo != true && inputs.is_testflight != true && needs.resolve-source.result == 'success'
     permissions:
       contents: read
     uses: ./.github/workflows/android.yml
@@ -214,12 +214,23 @@ jobs:
     secrets: inherit
 
   release:
-    if: inputs.release == true && inputs.only_app_repo != true && inputs.only_apt_repo != true
+    if: always() && inputs.release == true && inputs.only_app_repo != true && inputs.only_apt_repo != true && needs.resolve-source.result == 'success' && needs.ios.result == 'success' && (inputs.is_testflight == true || needs.android.result == 'success')
     needs: [resolve-source, ios, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: checkout loader sources
+        if: needs.resolve-source.outputs.is_testflight != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: setup Go for loader update publishing
+        if: needs.resolve-source.outputs.is_testflight != 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          cache: false
+          go-version-file: go.mod
+
       - name: download iOS tweak
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
@@ -239,18 +250,21 @@ jobs:
           path: release-assets
 
       - name: download Android LSPosed module
+        if: inputs.is_testflight != true
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: android module
           path: release-assets
 
       - name: download patched Android Discord package
+        if: inputs.is_testflight != true
         uses: actions/download-artifact@9000827ccba6bd643e8b6fd33ac0654aef8333
         with:
           name: patched discord
           path: release-assets
 
-      - name: publish unified release
+      - name: publish stable release
+        if: needs.resolve-source.outputs.is_testflight != 'true'
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
           tag_name: v${{ needs.resolve-source.outputs.release_version }}
@@ -261,12 +275,53 @@ jobs:
             release-assets/${{ needs.android.outputs.module_filename }}
             release-assets/${{ needs.android.outputs.patched_filename }}
           generate_release_notes: true
-          prerelease: ${{ needs.resolve-source.outputs.is_testflight == 'true' }}
           fail_on_unmatched_files: true
           token: ${{ github.token }}
 
+      - name: publish TestFlight prerelease
+        if: needs.resolve-source.outputs.is_testflight == 'true'
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        with:
+          tag_name: v${{ needs.resolve-source.outputs.release_version }}
+          files: |
+            release-assets/${{ needs.ios.outputs.deb_filename }}
+            release-assets/${{ needs.ios.outputs.ipa_filename }}
+            release-assets/${{ needs.ios.outputs.simulator_filename }}
+          generate_release_notes: true
+          prerelease: true
+          fail_on_unmatched_files: true
+          token: ${{ github.token }}
+
+      - name: publish loader update records
+        if: needs.resolve-source.outputs.is_testflight != 'true'
+        env:
+          UNBOUND_LOADER_API_KEY: ${{ secrets.UNBOUND_LOADER_API_KEY }}
+          UNBOUND_LOADER_API_URL: ${{ vars.UNBOUND_LOADER_API_URL || 'https://unbound.rip/api/v1/loader/releases' }}
+          RELEASE_VERSION: ${{ needs.resolve-source.outputs.release_version }}
+          IOS_DEB_FILENAME: ${{ needs.ios.outputs.deb_filename }}
+          ANDROID_MODULE_FILENAME: ${{ needs.android.outputs.module_filename }}
+        run: |
+          set -euo pipefail
+          if [ -z "$UNBOUND_LOADER_API_KEY" ]; then
+            echo "::warning title=loader update publishing::UNBOUND_LOADER_API_KEY is not configured; release records were skipped"
+            exit 0
+          fi
+          deb_path="release-assets/$IOS_DEB_FILENAME"
+          loader_version=$(dpkg-deb -f "$deb_path" Version)
+          release_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION"
+          go run ./tools publish-loader-release \
+            --api-url "$UNBOUND_LOADER_API_URL" \
+            --platform ios \
+            --version "$loader_version" \
+            --url "$release_url/$IOS_DEB_FILENAME"
+          go run ./tools publish-loader-release \
+            --api-url "$UNBOUND_LOADER_API_URL" \
+            --platform android \
+            --version "$loader_version" \
+            --url "$release_url/$ANDROID_MODULE_FILENAME"
+
   publish-app-repo:
-    if: inputs.release == true && inputs.only_app_repo != true && inputs.only_apt_repo != true
+    if: always() && inputs.release == true && inputs.only_app_repo != true && inputs.only_apt_repo != true && needs.resolve-source.result == 'success' && needs.ios.result == 'success' && needs.release.result == 'success' && (inputs.is_testflight == true || needs.android.result == 'success')
     needs: [resolve-source, ios, android, release]
     permissions:
       contents: write
