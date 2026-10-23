@@ -59,37 +59,6 @@ The dkrypt scheduler dispatches an iOS build through `remote-deploy.yml`. The [B
 
 The platform workflows can also be run independently for development builds. The shared release coordinator is the only workflow that publishes the combined iOS and Android release.
 
-## Feature parity
-
-| Feature                                   | iOS | Android |
-| ----------------------------------------- | :-: | :-----: |
-| Bundle injection, updater, rollback       | ✅  | ✅      |
-| Plugins, themes and fonts preloaded        | ✅  | ✅      |
-| `NativePlatform` bridge                    | ✅  | ✅      |
-| Font overrides                             | ✅  | ✅      |
-| Theme colors on native views               | ✅  | ✅      |
-| Safe Mode toggle from the home screen      | ✅  | ✅ (launcher shortcut) |
-| Sentry blocking                            | ✅  | ✅      |
-| Dev server auto-detection (vphone / emulator) | ✅ | ✅    |
-| Live reload (HMR)                          | ✅  | ✅ (restarts the app) |
-| `NativePlugin` addon bridge                | ✅ (`objc`, `ffi`, `fabric`) | Partial (`ui.lookup`, `ui.layout`) |
-| Debug toolbox, dev overlay, chat UI tweaks | ✅  | Not yet |
-
-The native-plugin parity work targets the existing plugin behavior on both platforms. Android remains unverified for each plugin until it passes device testing; iOS support remains unchanged.
-
-| Native plugin feature | iOS | Android |
-| --------------------- | :-: | :-----: |
-| Mention Avatars | ✅ | In progress |
-| Reaction Avatars | ✅ | In progress |
-| Message Link Embeds | ✅ | In progress |
-| Message Latency | ✅ | In progress |
-| More User Tags | ✅ | In progress |
-| Shiki Codeblocks | ✅ | In progress |
-| Custom Commands | ✅ | In progress |
-| Role Color Everywhere | ✅ | In progress |
-
-Android entries become supported only after the plugin works with the Android bridge and passes the emulator and device acceptance checks. Building the loader alone does not establish plugin parity.
-
 ## Building and validation
 
 The root Go tool coordinates common validation and platform-specific builds:
