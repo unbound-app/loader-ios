@@ -50,10 +50,16 @@ func runBuild(args []string) error {
 		if err != nil {
 			return err
 		}
+		if err := validateWorkspace(options.root); err != nil {
+			return err
+		}
 		return buildTweak(options, defaultRunner)
 	case "ipa":
 		options, err := parseBuildOptions(args[1:], false)
 		if err != nil {
+			return err
+		}
+		if err := validateWorkspace(options.root); err != nil {
 			return err
 		}
 		return buildIPA(options, defaultRunner)
@@ -62,10 +68,16 @@ func runBuild(args []string) error {
 		if err != nil {
 			return err
 		}
+		if err := validateWorkspace(options.root); err != nil {
+			return err
+		}
 		return buildSimulator(options, defaultRunner)
 	case "all":
 		options, err := parseBuildOptions(args[1:], true)
 		if err != nil {
+			return err
+		}
+		if err := validateWorkspace(options.root); err != nil {
 			return err
 		}
 		return buildAll(options, defaultRunner)
@@ -385,7 +397,7 @@ func resolveIPA(options buildOptions) (string, error) {
 }
 
 func iosRoot(root string) string {
-	return filepath.Join(root, "ios")
+	return filepath.Join(root, "packages", "ios")
 }
 
 func ensureSubmodules(root string, runner commandRunner) error {

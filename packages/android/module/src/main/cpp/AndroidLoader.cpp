@@ -122,6 +122,7 @@ namespace unbound::android
 
     void AndroidLoader::drainRuntimeWork(jsi::Runtime &runtime)
     {
+        loader::native::registerRuntime(runtime);
         std::deque<std::function<void(jsi::Runtime &)>> work;
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
@@ -146,6 +147,32 @@ namespace unbound::android
         }
     }
 
+    void AndroidLoader::drainMainWork()
+    {
+        std::deque<std::function<void()>> work;
+        {
+            std::lock_guard<std::mutex> lock(mainQueueMutex_);
+            work.swap(mainQueue_);
+        }
+
+        for (auto &item : work)
+        {
+            try
+            {
+                item();
+            }
+            catch (const std::exception &error)
+            {
+                loader::log(loader::LogLevel::Error, "plugins",
+                            std::string("Main-thread native work failed: ") + error.what());
+            }
+            catch (...)
+            {
+                loader::log(loader::LogLevel::Error, "plugins", "Main-thread native work failed.");
+            }
+        }
+    }
+
     void AndroidLoader::runOnRuntime(std::function<void(jsi::Runtime &)> work)
     {
         {
@@ -159,6 +186,34 @@ namespace unbound::android
             return;
         }
         env->CallStaticVoidMethod(callbacks_.bridgeClass, callbacks_.scheduleRuntime);
+        clearPendingException(env);
+    }
+
+    bool AndroidLoader::isMainThread()
+    {
+        JNIEnv *env = currentEnvironment();
+        if (!env)
+        {
+            return false;
+        }
+
+        jboolean result = env->CallStaticBooleanMethod(callbacks_.bridgeClass, callbacks_.isMainThread);
+        return !clearPendingException(env) && result;
+    }
+
+    void AndroidLoader::runOnMain(std::function<void()> work)
+    {
+        {
+            std::lock_guard<std::mutex> lock(mainQueueMutex_);
+            mainQueue_.push_back(std::move(work));
+        }
+
+        JNIEnv *env = currentEnvironment();
+        if (!env)
+        {
+            return;
+        }
+        env->CallStaticVoidMethod(callbacks_.bridgeClass, callbacks_.scheduleMain);
         clearPendingException(env);
     }
 
@@ -237,6 +292,9 @@ namespace unbound::android
 
     void AndroidLoader::installNativeModules(jsi::Runtime &runtime)
     {
+        loader::native::setExecutor(std::static_pointer_cast<loader::native::NativePluginExecutor>(
+            shared_from_this()));
+        loader::native::registerRuntime(runtime);
         const nlohmann::json info = configuration_.platformInfo;
         auto                 text = [info](const char *key) {
             return [info, key]() { return info.value(key, std::string()); };

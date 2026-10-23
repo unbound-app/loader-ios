@@ -903,7 +903,7 @@ static UIWindowScene *activeWindowScene(void)
         [body stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet
                                                                      .URLQueryAllowedCharacterSet];
     NSString *urlString = [NSString
-        stringWithFormat:@"https://github.com/unbound-app/loader-ios/issues/new?title=%@&body=%@",
+        stringWithFormat:@"https://github.com/unbound-app/loader/issues/new?title=%@&body=%@",
                          encodedTitle, encodedBody];
     NSURL    *url       = [NSURL URLWithString:urlString];
 

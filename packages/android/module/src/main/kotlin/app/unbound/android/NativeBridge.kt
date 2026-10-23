@@ -35,6 +35,9 @@ object NativeBridge {
     external fun nativeDrainRuntimeWork(runtimePointer: Long)
 
     @JvmStatic
+    external fun nativeDrainMainWork()
+
+    @JvmStatic
     external fun nativeGetBoolean(store: String, key: String, fallback: Boolean): Boolean
 
     @JvmStatic
@@ -56,6 +59,14 @@ object NativeBridge {
     fun scheduleRuntimeWork() {
         ReactRuntime.post { runtimePointer -> nativeDrainRuntimeWork(runtimePointer) }
     }
+
+    @JvmStatic
+    fun scheduleMainWork() {
+        Handler(Looper.getMainLooper()).post { nativeDrainMainWork() }
+    }
+
+    @JvmStatic
+    fun isMainThread(): Boolean = Looper.myLooper() == Looper.getMainLooper()
 
     @JvmStatic
     fun fetchText(url: String, timeoutMs: Int): String? = runCatching {

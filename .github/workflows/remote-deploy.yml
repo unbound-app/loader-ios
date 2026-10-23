@@ -18,5 +18,6 @@ jobs:
       ipa_url: ${{ github.event.client_payload.ipa_url }}
       is_testflight: ${{ github.event.client_payload.is_testflight }}
       authenticated_source: true
+      release: true
       dkrypt_base_url: ${{ vars.DKRYPT_BASE_URL || 'https://ipa.dylib.dev' }}
     secrets: inherit

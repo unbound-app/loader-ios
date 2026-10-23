@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -14,7 +16,7 @@ func TestBuildWorkflowInstallsAutotoolsBeforeTweakBuild(t *testing.T) {
 		t.Fatal("could not locate test source")
 	}
 	root := filepath.Dir(filepath.Dir(filename))
-	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "build.yml"))
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ios.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +57,7 @@ func TestBuildWorkflowArchivesMatchingTweakSymbols(t *testing.T) {
 		t.Fatal("could not locate test source")
 	}
 	root := filepath.Dir(filepath.Dir(filename))
-	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "build.yml"))
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ios.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,6 +101,121 @@ func TestBuildWorkflowAllowsManualIPAInput(t *testing.T) {
 	}
 	if strings.Contains(contents, "--extensions") {
 		t.Fatal("build workflow must not choose whether to include extensions")
+	}
+}
+
+func TestBuildWorkflowCoordinatesBothPlatforms(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "build.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(workflow)
+	for _, required := range []string{
+		"uses: ./.github/workflows/android.yml",
+		"uses: ./.github/workflows/ios.yml",
+		"needs: resolve-source",
+		"needs: [resolve-source, ios, android]",
+		"ios_version: ${{ needs.resolve-source.outputs.version }}",
+		"secrets: inherit",
+		"value: ${{ jobs.android.outputs.module_filename }}",
+		"value: ${{ jobs.android.outputs.patched_filename }}",
+		"name: ios-simulator",
+		"name: publish unified release",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Fatalf("build workflow is missing platform orchestration detail %q", required)
+		}
+	}
+	androidStart := strings.Index(contents, "  android:\n")
+	iosStart := strings.Index(contents, "  ios:\n")
+	if androidStart < 0 || iosStart < 0 {
+		t.Fatal("platform workflow calls could not be located")
+	}
+	androidJob := contents[androidStart:iosStart]
+	if strings.Contains(androidJob, "needs: [resolve-source, ios]") || strings.Contains(androidJob, "needs: ios") {
+		t.Fatal("Android and iOS builds must run in parallel after source resolution")
+	}
+	android, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "android.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(android), "    push:") {
+		t.Fatal("Android should be built through the cross-platform coordinator on push")
+	}
+	for _, required := range []string{
+		"name=\"app.unbound.android.lsposed.apk\"",
+		`if [[ "$IOS_VERSION" =~ ^([0-9]+)\.([0-9]+)(\.|_|$) ]]; then`,
+		"candidate=\"${BASH_REMATCH[1]}$(printf '%03d' \"${BASH_REMATCH[2]}\")\"",
+		"version=\"${version:-$latest_version}\"",
+		"Unbound-Discord-${{ steps.discord.outputs.version }}.apks",
+	} {
+		if !strings.Contains(string(android), required) {
+			t.Fatalf("Android workflow is missing matching version or artifact detail %q", required)
+		}
+	}
+	remoteDeploy, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "remote-deploy.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(remoteDeploy), "release: true") {
+		t.Fatal("dkrypt-scheduled builds must publish the combined iOS and Android release")
+	}
+}
+
+func TestObtainiumConfigTracksTheRootedAndroidModule(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	configBytes, err := os.ReadFile(filepath.Join(root, "obtainium.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		ID                 string `json:"id"`
+		URL                string `json:"url"`
+		AdditionalSettings string `json:"additionalSettings"`
+	}
+	if err := json.Unmarshal(configBytes, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config.ID != "app.unbound.android" || config.URL != "https://github.com/unbound-app/loader" {
+		t.Fatalf("Obtainium config targets an unexpected app: %#v", config)
+	}
+	var settings struct {
+		APKFilterRegEx string `json:"apkFilterRegEx"`
+	}
+	if err := json.Unmarshal([]byte(config.AdditionalSettings), &settings); err != nil {
+		t.Fatal(err)
+	}
+	matches, err := regexp.MatchString(settings.APKFilterRegEx, "app.unbound.android.lsposed.apk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !matches {
+		t.Fatalf("Obtainium APK filter does not select the release module: %q", settings.APKFilterRegEx)
+	}
+	androidWorkflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "android.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"name=\"app.unbound.android.lsposed.apk\"",
+		"ANDROID_SIGNING_KEYSTORE_BASE64",
+		"ANDROID_SIGNING_STORE_PASSWORD",
+		"ANDROID_SIGNING_KEY_ALIAS",
+		"ANDROID_SIGNING_KEY_PASSWORD",
+		"Android release signing secrets are required for Obtainium-compatible updates",
+	} {
+		if !strings.Contains(string(androidWorkflow), required) {
+			t.Fatalf("Android release workflow is missing Obtainium update support %q", required)
+		}
 	}
 }
 

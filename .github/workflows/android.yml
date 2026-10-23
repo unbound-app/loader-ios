@@ -1,10 +1,28 @@
 name: Build Android
 
 on:
-    push:
-        branches: [main, feat/monorepo]
     workflow_dispatch:
+        inputs:
+            ios_version:
+                description: "iOS Discord version to match when available"
+                required: false
+                type: string
+            release:
+                description: "Require persistent Android release signing"
+                required: false
+                default: false
+                type: boolean
     workflow_call:
+        inputs:
+            ios_version:
+                description: "iOS Discord version to match when available"
+                required: false
+                type: string
+            release:
+                description: "Require persistent Android release signing"
+                required: false
+                default: false
+                type: boolean
         outputs:
             module_filename:
                 description: "Filename of the LSPosed module APK"
@@ -31,7 +49,7 @@ jobs:
                   fetch-depth: 1
 
             - name: Configure core
-              run: cmake -S core -B build/core -DUNBOUND_CORE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined"
+              run: cmake -S packages/core -B build/core -DUNBOUND_CORE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined"
 
             - name: Build core
               run: cmake --build build/core -j"$(nproc)"
@@ -42,6 +60,11 @@ jobs:
     build-module:
         name: Build LSPosed module
         runs-on: ubuntu-latest
+        env:
+            ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+            ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+            ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+            ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         outputs:
             module_filename: ${{ steps.collect.outputs.module_filename }}
         steps:
@@ -63,17 +86,32 @@ jobs:
                   yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
                   "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.3.13750724" "cmake;3.22.1" "platforms;android-36" > /dev/null
 
+            - name: Configure persistent release signing
+              env:
+                  REQUIRE_RELEASE_SIGNING: ${{ inputs.release }}
+              run: |
+                  set -euo pipefail
+                  if [ -z "$ANDROID_SIGNING_KEYSTORE_BASE64" ]; then
+                      if [ "$REQUIRE_RELEASE_SIGNING" = true ]; then
+                          echo "::error::Android release signing secrets are required for Obtainium-compatible updates"
+                          exit 1
+                      fi
+                      exit 0
+                  fi
+                  keystore="$RUNNER_TEMP/unbound-android-release.keystore"
+                  printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+                  echo "ANDROID_SIGNING_STORE_FILE=$keystore" >> "$GITHUB_ENV"
+
             - name: Build module
-              working-directory: android
-              run: ./gradlew :module:assembleRelease --no-daemon --console=plain
+              working-directory: packages/android
+              run: ./gradlew :module:assembleRelease --no-daemon --console=plain -PunboundBuildNumber="${GITHUB_RUN_NUMBER}"
 
             - name: Collect module
               id: collect
               run: |
                   set -euo pipefail
-                  version=$(grep '^Version:' ios/control | cut -d ' ' -f 2)
-                  name="Unbound-Android-${version}.apk"
-                  cp android/module/build/outputs/apk/release/module-release.apk "$name"
+                  name="app.unbound.android.lsposed.apk"
+                  cp packages/android/module/build/outputs/apk/release/module-release.apk "$name"
                   echo "module_filename=$name" >> "$GITHUB_OUTPUT"
 
             - name: Upload module
@@ -94,6 +132,7 @@ jobs:
             LSPATCH_SHA256: d238fdc414d121b7fa454d8b4ccf420df3a8c97d563761861ff92bd9c5da2165
             DISCORD_CERT_SHA256: 3c39d23cf9367849a5c699395647fe0e5bfea5a1f1f40d8c717ddc70f8bfa113
             DISCORD_TRACKER: https://tracker.vendetta.rocks/tracker
+            IOS_VERSION: ${{ inputs.ios_version }}
         steps:
             - name: Setup Java
               uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
@@ -119,12 +158,21 @@ jobs:
               id: discord
               run: |
                   set -euo pipefail
-                  version=$(curl -fsSL "$DISCORD_TRACKER/index" | jq -r '.latest.stable')
+                  latest_version=$(curl -fsSL "$DISCORD_TRACKER/index" | jq -r '.latest.stable')
+                  version=""
+                  if [[ "$IOS_VERSION" =~ ^([0-9]+)\.([0-9]+)(\.|_|$) ]]; then
+                      candidate="${BASH_REMATCH[1]}$(printf '%03d' "${BASH_REMATCH[2]}")"
+                      if curl -fsSL --range 0-0 --max-time 15 -o /dev/null "$DISCORD_TRACKER/download/$candidate/base"; then
+                          version="$candidate"
+                      fi
+                  fi
+                  version="${version:-$latest_version}"
                   mkdir discord
                   for split in base config.arm64_v8a config.armeabi_v7a config.xxhdpi config.en; do
                       curl -fsSL -o "discord/$split.apk" "$DISCORD_TRACKER/download/$version/$split"
                   done
-                  apksigner=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner
+                  build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+                  apksigner="$build_tools/apksigner"
                   for apk in discord/*.apk; do
                       certificates=$("$apksigner" verify --print-certs "$apk")
                       if ! grep -Eq "^(V[0-9.]+ )?Signer( #1)?:? certificate SHA-256 digest: $DISCORD_CERT_SHA256" <<< "$certificates"; then
@@ -141,7 +189,7 @@ jobs:
                   mkdir patched
                   java -jar "$LSPATCH_JAR" discord/*.apk -m module/*.apk -l 2 -o patched -f
                   name="Unbound-Discord-${{ steps.discord.outputs.version }}.apks"
-                  (cd patched && zip -q "../$name" *.apk)
+                  (cd patched && zip -q "../$name" ./*.apk)
                   echo "patched_filename=$name" >> "$GITHUB_OUTPUT"
 
             - name: Upload patched Discord

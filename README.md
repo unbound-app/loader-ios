@@ -1,29 +1,34 @@
-# @unbound-app/loader
+# Unbound Loader
 
-[![Build Unbound](https://github.com/unbound-app/loader-ios/actions/workflows/build.yml/badge.svg)](https://github.com/unbound-app/loader-ios/actions/workflows/build.yml)
-[![Build Android](https://github.com/unbound-app/loader-ios/actions/workflows/android.yml/badge.svg)](https://github.com/unbound-app/loader-ios/actions/workflows/android.yml)
+[![Build](https://github.com/unbound-app/loader/actions/workflows/build.yml/badge.svg)](https://github.com/unbound-app/loader/actions/workflows/build.yml)
+[![iOS](https://github.com/unbound-app/loader/actions/workflows/ios.yml/badge.svg)](https://github.com/unbound-app/loader/actions/workflows/ios.yml)
+[![Android](https://github.com/unbound-app/loader/actions/workflows/android.yml/badge.svg)](https://github.com/unbound-app/loader/actions/workflows/android.yml)
 
-Native loaders that inject [Unbound](https://github.com/unbound-app/client) into Discord on iOS and Android. They also give addons the native APIs they need. Both platforms share one C++ core, so the bundle updater, addon loading, settings and JS bridge behave identically on each.
+Unbound Loader injects [Unbound](https://github.com/unbound-app/client) into Discord on iOS and Android. A shared C++ core handles bundle loading, settings, addon lifecycle and runtime scheduling; platform adapters connect those shared services to Theos/ElleKit on iOS and LSPosed/LibXposed or LSPatch on Android.
 
 ## Layout
 
-| Path        | What it is                                                                                           |
-| ----------- | ---------------------------------------------------------------------------------------------------- |
-| `core/`     | Shared C++20 core: settings store, addon scanning, preload script, bundle updater, load pipeline, `NativePlatform` JSI bridge, native plugin async runtime |
-| `ios/`      | The Theos tweak (ElleKit, rootless) plus the iOS app extensions                                       |
-| `android/`  | The LSPosed module (modern libxposed API) and its NDK library, built with Gradle                     |
-| `resources/`| The shared bootstrap scripts (`modules.js`, `devtools.js`) used by both platforms                     |
-| `tools/`    | Go build tooling for the iOS packages, IPAs and attestation                                          |
+| Path                    | What it is                                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `packages/core/`        | Shared C++20 core: settings store, addon scanning, preload script, bundle updater, load pipeline, `NativePlatform` JSI bridge, native plugin async runtime |
+| `packages/ios/`         | The Theos tweak (ElleKit, rootless) and its iOS app-extension submodules                             |
+| `packages/android/`     | The LSPosed module (modern libxposed API) and its NDK library, built with Gradle                     |
+| `packages/resources/`   | The shared bootstrap scripts (`modules.js`, `devtools.js`) used by both platforms                    |
+| `packages/libffi/`      | Pinned libffi source used to build the iOS static archive                                             |
+| `packages/apt-repo/`    | Debian package and SideStore-compatible iOS distribution feeds                                       |
+| `tools/`                | Go build, test, validation and packaging commands for the monorepo                                   |
+
+`packages/manifest.json` is the workspace catalog for the package roots and their dependencies. The Go manager validates the catalog against the checkout and lists packages without requiring a second runtime or package manager.
 
 ## Installation
 
 ### iOS
 
-Builds are in the [Releases](https://github.com/unbound-app/loader-ios/releases/latest) tab.
+Builds are in the [Releases](https://github.com/unbound-app/loader/releases/latest) tab.
 
 **Jailbroken:** add the apt repo <https://repo.unbound.rip> to your package manager, or install the `.deb` directly.
 
-**Jailed:** add <https://repo.unbound.rip/app-repo.json> to your sideloading tool, or install [Unbound.ipa](https://github.com/unbound-app/loader-ios/releases/latest/download/Unbound.ipa).
+**Jailed:** add <https://repo.unbound.rip/app-repo.json> to your sideloading tool, or install [Unbound.ipa](https://github.com/unbound-app/loader/releases/latest/download/Unbound.ipa).
 
 <div>
     <a href="https://intradeus.github.io/http-protocol-redirector?r=sidestore://source?url=https://repo.unbound.rip/app-repo.json"><img src="./.github/resources/sidestore-badge.png" alt="Add to SideStore" height="60"></a>
@@ -32,7 +37,7 @@ Builds are in the [Releases](https://github.com/unbound-app/loader-ios/releases/
     &nbsp;
     <a href="https://intradeus.github.io/http-protocol-redirector?r=altstore://source?url=https://repo.unbound.rip/app-repo.json"><img src="./.github/resources/altstore-badge.png" alt="Add to AltStore" height="60"></a>
     &nbsp;
-    <a href="https://github.com/unbound-app/loader-ios/releases/latest/download/Unbound.ipa"><img src="./.github/resources/github-badge.png" alt="Download from GitHub" height="60"></a>
+    <a href="https://github.com/unbound-app/loader/releases/latest/download/Unbound.ipa"><img src="./.github/resources/github-badge.png" alt="Download from GitHub" height="60"></a>
 </div>
 
 > [!WARNING]
@@ -40,11 +45,19 @@ Builds are in the [Releases](https://github.com/unbound-app/loader-ios/releases/
 
 ### Android
 
-**Rooted (LSPosed/Vector):** install `Unbound-Android-<version>.apk`, enable the module, and scope it to `com.discord`.
+**Rooted (LSPosed/Vector):** install `app.unbound.android.lsposed.apk`, enable the module, and scope it to `com.discord`.
+
+[Add the Unbound LSPosed module to Obtainium](obtainium://app/%7B%22id%22%3A%22app.unbound.android%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Funbound-app%2Floader%22%2C%22author%22%3A%22unbound-app%22%2C%22name%22%3A%22Unbound%20Loader%20(LSPosed)%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eapp%5C%5C%5C%5C.unbound%5C%5C%5C%5C.android%5C%5C%5C%5C.lsposed%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D) to receive updates from GitHub Releases. This tracks the standalone module APK; it does not update the patched Discord split package. The release workflow requires a persistent Android signing key so installed copies can be updated safely.
 
 **Not rooted:** install the pre-patched `Unbound-Discord-<version>.apks`, which is Discord with the module embedded through LSPatch. Use a split-APK installer such as SAI. It replaces an existing Play Store Discord because the signature differs.
 
-Both are attached to the same [GitHub release](https://github.com/unbound-app/loader-ios/releases/latest) as the iOS `.deb`, IPA and simulator build. The [Build Unbound](https://github.com/unbound-app/loader-ios/actions/workflows/build.yml) workflow builds every platform in one run.
+Both Android packages are attached to the same [GitHub release](https://github.com/unbound-app/loader/releases/latest) as the iOS Debian package, `Unbound.ipa` and iOS simulator archive. The release includes `app.unbound.android.lsposed.apk` for rooted installs and `Unbound-Discord-<version>.apks` for non-rooted installs.
+
+## Release pipeline
+
+The dkrypt scheduler dispatches an iOS build through `remote-deploy.yml`. The [Build](https://github.com/unbound-app/loader/actions/workflows/build.yml) workflow resolves the source Discord version, then runs the iOS and Android workflows in parallel. Android selects the matching Discord version when it is available and otherwise uses the latest stable Android release. A final job collects both platform outputs into one GitHub release; Android release builds require a persistent signing key so Obtainium updates retain the same signer.
+
+The platform workflows can also be run independently for development builds. The shared release coordinator is the only workflow that publishes the combined iOS and Android release.
 
 ## Feature parity
 
@@ -59,18 +72,32 @@ Both are attached to the same [GitHub release](https://github.com/unbound-app/lo
 | Sentry blocking                            | ✅  | ✅      |
 | Dev server auto-detection (vphone / emulator) | ✅ | ✅    |
 | Live reload (HMR)                          | ✅  | ✅ (restarts the app) |
-| `NativePlugin` addon bridge                | ✅ (`objc`, `ffi`, `fabric`) | Not yet (`java` namespace) |
+| `NativePlugin` addon bridge                | ✅ (`objc`, `ffi`, `fabric`) | In progress |
 | Debug toolbox, dev overlay, chat UI tweaks | ✅  | Not yet |
 
-## Building
+## Building and validation
+
+The root Go tool coordinates common validation and platform-specific builds:
+
+```bash
+go run ./tools deps
+go run ./tools packages list
+go run ./tools packages validate
+go run ./tools validate
+go run ./tools platform test android
+go run ./tools platform build android
+go run ./tools platform build ios --configuration debug
+```
+
+`validate` runs Go and shared-core tests, Android tests and release build, and the iOS tweak build on macOS. Platform build commands use Gradle for Android and Theos for iOS.
 
 <details>
 <summary>Shared core</summary>
 
 ```bash
-cmake -S core -B build/core -DUNBOUND_CORE_TESTS=ON
-cmake --build build/core
-ctest --test-dir build/core --output-on-failure
+cmake -S packages/core -B build/shared-core -DUNBOUND_CORE_TESTS=ON
+cmake --build build/shared-core
+ctest --test-dir build/shared-core --output-on-failure
 ```
 
 </details>
@@ -99,7 +126,7 @@ go run ./tools build tweak --configuration debug
 go run ./tools build all
 ```
 
-`go run ./tools doctor` checks host dependencies. Pass `--ipa /path/to/Discord.ipa` when building IPAs, and `--simulator` for the simulator archive. The tweak can also be built with `make package` inside `ios/`. Packages are written to `ios/packages/`.
+`go run ./tools doctor` checks host dependencies. Pass `--ipa /path/to/Discord.ipa` when building IPAs, and `--simulator` for the simulator archive. The tweak can also be built with `make package` inside `packages/ios/`. Packages are written to `packages/ios/packages/`.
 
 Repository-dispatched builds use the `DKRYPT_API_KEY` Actions secret to fetch decrypted IPAs. The remote-deploy workflow defaults to `https://ipa.dylib.dev`; set `DKRYPT_BASE_URL` to use another dkrypt deployment.
 
@@ -111,11 +138,11 @@ Repository-dispatched builds use the `DKRYPT_API_KEY` Actions secret to fetch de
 Requires JDK 17+, the Android SDK with platform 36, NDK `27.3.13750724` and CMake `3.22.1`.
 
 ```bash
-cd android
+cd packages/android
 ./gradlew :module:assembleRelease
 ```
 
-The module APK is written to `android/module/build/outputs/apk/release/`. To produce a non-root build, embed it into Discord's split APKs with [LSPatch](https://github.com/JingMatrix/LSPatch):
+The module APK is written to `packages/android/module/build/outputs/apk/release/`. To produce a non-root build, embed it into Discord's split APKs with [LSPatch](https://github.com/JingMatrix/LSPatch):
 
 ```bash
 java -jar lspatch.jar base.apk config.*.apk -m module-release.apk -l 2 -o patched
@@ -139,4 +166,4 @@ Point `debugger.address` at a running `ub-debugger` bridge to evaluate JavaScrip
 
 ## Contributors
 
-[![Contributors](https://contrib.rocks/image?repo=unbound-app/loader-ios)](https://github.com/unbound-app/loader-ios/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=unbound-app/loader)](https://github.com/unbound-app/loader/graphs/contributors)

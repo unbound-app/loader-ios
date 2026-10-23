@@ -85,6 +85,14 @@ static void nativeDrainRuntimeWork(JNIEnv *, jclass, jlong runtimePointer)
     loader->drainRuntimeWork(*runtime);
 }
 
+static void nativeDrainMainWork(JNIEnv *, jclass)
+{
+    if (auto loader = currentLoader())
+    {
+        loader->drainMainWork();
+    }
+}
+
 static jboolean nativeGetBoolean(JNIEnv *env, jclass, jstring store, jstring key, jboolean fallback)
 {
     auto loader = currentLoader();
@@ -142,6 +150,8 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
 {
     gCallbacks.bridgeClass     = static_cast<jclass>(env->NewGlobalRef(bridge));
     gCallbacks.scheduleRuntime = env->GetStaticMethodID(bridge, "scheduleRuntimeWork", "()V");
+    gCallbacks.scheduleMain    = env->GetStaticMethodID(bridge, "scheduleMainWork", "()V");
+    gCallbacks.isMainThread    = env->GetStaticMethodID(bridge, "isMainThread", "()Z");
     gCallbacks.fetchText =
         env->GetStaticMethodID(bridge, "fetchText", "(Ljava/lang/String;I)Ljava/lang/String;");
     gCallbacks.download = env->GetStaticMethodID(
@@ -154,7 +164,8 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
     gCallbacks.alert = env->GetStaticMethodID(bridge, "alert", "(Ljava/lang/String;)V");
     gCallbacks.onBundleExecuted = env->GetStaticMethodID(bridge, "onBundleExecuted", "()V");
 
-    return !clearPendingException(env) && gCallbacks.scheduleRuntime && gCallbacks.fetchText &&
+    return !clearPendingException(env) && gCallbacks.scheduleRuntime && gCallbacks.scheduleMain &&
+           gCallbacks.isMainThread && gCallbacks.fetchText &&
            gCallbacks.download && gCallbacks.devServerURL && gCallbacks.availableFonts &&
            gCallbacks.alert && gCallbacks.onBundleExecuted;
 }
@@ -184,6 +195,7 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *)
         {"nativeOnLoadJSBundle", "()V", reinterpret_cast<void *>(nativeOnLoadJSBundle)},
         {"nativeOnJSBundleLoaded", "()V", reinterpret_cast<void *>(nativeOnJSBundleLoaded)},
         {"nativeDrainRuntimeWork", "(J)V", reinterpret_cast<void *>(nativeDrainRuntimeWork)},
+        {"nativeDrainMainWork", "()V", reinterpret_cast<void *>(nativeDrainMainWork)},
         {"nativeGetBoolean", "(Ljava/lang/String;Ljava/lang/String;Z)Z",
          reinterpret_cast<void *>(nativeGetBoolean)},
         {"nativeSetBoolean", "(Ljava/lang/String;Ljava/lang/String;Z)V",

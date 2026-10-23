@@ -16,7 +16,7 @@ import (
 )
 
 func runLibFFIBuild(args []string) error {
-	releaseBuildLock, err := acquireLibFFIBuildLock("/tmp/loader-ios-libffi-build.lock")
+	releaseBuildLock, err := acquireLibFFIBuildLock("/tmp/unbound-loader-libffi-build.lock")
 	if err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func runLibFFIBuild(args []string) error {
 	if err != nil {
 		return err
 	}
-	sourcePath := filepath.Join(rootPath, "vendor", "libffi")
+	sourcePath := filepath.Join(rootPath, "packages", "libffi")
 	if _, err := os.Stat(filepath.Join(sourcePath, ".git")); err != nil {
 		return fmt.Errorf("libffi submodule is unavailable: %w", err)
 	}

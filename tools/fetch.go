@@ -21,7 +21,7 @@ const (
 	defaultDkryptURL    = "https://ipa.dylib.dev"
 	defaultBundleID     = "com.hammerandchisel.discord"
 	defaultFetchTimeout = 45 * time.Minute
-	fetchUserAgent      = "loader-ios-dkrypt/1.0 (+https://github.com/unbound-app/loader-ios)"
+	fetchUserAgent      = "unbound-loader-dkrypt/1.0 (+https://github.com/unbound-app/loader)"
 )
 
 var retryableStatuses = map[int]bool{408: true, 425: true, 429: true, 500: true, 502: true, 503: true, 504: true}

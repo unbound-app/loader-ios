@@ -28,12 +28,12 @@
                 {
                     "class": "DepictionTableButtonView",
                     "title": "View Source Code",
-                    "action": "https://github.com/unbound-app/loader-ios"
+                    "action": "https://github.com/unbound-app/loader"
                 },
                 {
                     "class": "DepictionTableButtonView",
                     "title": "Report an Issue",
-                    "action": "https://github.com/unbound-app/loader-ios/issues/new"
+                    "action": "https://github.com/unbound-app/loader/issues/new"
                 }
             ],
             "class": "DepictionStackView"
@@ -42,7 +42,7 @@
             "tabname": "Changelog",
             "views": [
                 {
-                    "markdown": "See [Releases](https://github.com/unbound-app/loader-ios/releases) for the full changelog.",
+                    "markdown": "See [Releases](https://github.com/unbound-app/loader/releases) for the full changelog.",
                     "useSpacing": true,
                     "class": "DepictionMarkdownView"
                 }

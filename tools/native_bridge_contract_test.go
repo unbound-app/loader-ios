@@ -14,15 +14,15 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		t.Fatal("could not locate test source")
 	}
 	root := filepath.Dir(filepath.Dir(filename))
-	header, err := os.ReadFile(filepath.Join(root, "ios", "headers", "NativePluginBridge.h"))
+	header, err := os.ReadFile(filepath.Join(root, "packages", "ios", "headers", "NativePluginBridge.h"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := os.ReadFile(filepath.Join(root, "ios", "sources", "NativePluginBridge.mm"))
+	source, err := os.ReadFile(filepath.Join(root, "packages", "ios", "sources", "NativePluginBridge.mm"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	types, err := os.ReadFile(filepath.Join(root, "core", "src", "NativeTypeEncoding.cpp"))
+	types, err := os.ReadFile(filepath.Join(root, "packages", "core", "src", "NativeTypeEncoding.cpp"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,19 +199,19 @@ func TestNativeBridgeSafetyGuards(t *testing.T) {
 		t.Fatal("could not locate test source")
 	}
 	root := filepath.Dir(filepath.Dir(filename))
-	bridge, err := os.ReadFile(filepath.Join(root, "ios", "sources", "NativePluginBridge.mm"))
+	bridge, err := os.ReadFile(filepath.Join(root, "packages", "ios", "sources", "NativePluginBridge.mm"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	loader, err := os.ReadFile(filepath.Join(root, "ios", "sources", "Unbound.xm"))
+	loader, err := os.ReadFile(filepath.Join(root, "packages", "ios", "sources", "Unbound.xm"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	filesystem, err := os.ReadFile(filepath.Join(root, "ios", "sources", "FileSystem.m"))
+	filesystem, err := os.ReadFile(filepath.Join(root, "packages", "ios", "sources", "FileSystem.m"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	updater, err := os.ReadFile(filepath.Join(root, "core", "src", "LoaderUpdater.cpp"))
+	updater, err := os.ReadFile(filepath.Join(root, "packages", "core", "src", "LoaderUpdater.cpp"))
 	if err != nil {
 		t.Fatal(err)
 	}

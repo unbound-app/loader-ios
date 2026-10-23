@@ -14,6 +14,7 @@
 #include "LoaderPipeline.h"
 #include "LoaderSettings.h"
 #include "LoaderUpdater.h"
+#include "NativePluginRuntime.h"
 
 namespace unbound::android
 {
@@ -21,6 +22,8 @@ namespace unbound::android
     {
         jclass    bridgeClass        = nullptr;
         jmethodID scheduleRuntime    = nullptr;
+        jmethodID scheduleMain       = nullptr;
+        jmethodID isMainThread       = nullptr;
         jmethodID fetchText          = nullptr;
         jmethodID download           = nullptr;
         jmethodID devServerURL       = nullptr;
@@ -40,6 +43,7 @@ namespace unbound::android
     };
 
     class AndroidLoader : public loader::LoaderHost,
+                          public loader::native::NativePluginExecutor,
                           public std::enable_shared_from_this<AndroidLoader>
     {
     public:
@@ -48,6 +52,7 @@ namespace unbound::android
         void start();
         void onLoadJSBundle();
         void onJSBundleLoaded();
+        void drainMainWork();
         void drainRuntimeWork(facebook::jsi::Runtime &runtime);
 
         loader::SettingsStore &settings();
@@ -55,6 +60,8 @@ namespace unbound::android
         std::string themeColorsJSON(const std::string &themeId);
 
         void runOnRuntime(std::function<void(facebook::jsi::Runtime &)> work) override;
+        bool isMainThread() override;
+        void runOnMain(std::function<void()> work) override;
         void runAfter(double seconds, std::function<void()> work) override;
         void runInBackground(std::function<void()> work) override;
         std::optional<std::string> resource(const std::string &name) override;
@@ -80,6 +87,8 @@ namespace unbound::android
         std::unique_ptr<loader::LoaderPipeline>  pipeline_;
         std::mutex                               queueMutex_;
         std::deque<std::function<void(facebook::jsi::Runtime &)>> queue_;
+        std::mutex                               mainQueueMutex_;
+        std::deque<std::function<void()>>        mainQueue_;
         std::mutex                               addonsMutex_;
         nlohmann::json                           plugins_ = nlohmann::json::array();
         nlohmann::json                           themes_  = nlohmann::json::array();

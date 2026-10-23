@@ -1,12 +1,12 @@
 [submodule "resources"]
-	path = resources
+	path = packages/resources
 	url = https://github.com/unbound-app/bootstrap
 [submodule "extensions/OpenInDiscord"]
-	path = ios/extensions/OpenInDiscord
+	path = packages/ios/extensions/OpenInDiscord
 	url = https://github.com/castdrian/OpenInDiscord
 [submodule "extensions/ShareToDiscord"]
-	path = ios/extensions/ShareToDiscord
+	path = packages/ios/extensions/ShareToDiscord
 	url = https://github.com/castdrian/ShareToDiscord
 [submodule "vendor/libffi"]
-	path = vendor/libffi
+	path = packages/libffi
 	url = https://github.com/libffi/libffi.git

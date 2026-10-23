@@ -31,6 +31,14 @@ func run(args []string) error {
 		return runAttest(args[1:])
 	case "build":
 		return runBuild(args[1:])
+	case "platform":
+		return runPlatform(args[1:])
+	case "validate":
+		return runValidate(args[1:])
+	case "deps":
+		return runDependencies(args[1:])
+	case "packages":
+		return runPackages(args[1:])
 	case "libffi-build":
 		return runLibFFIBuild(args[1:])
 	case "doctor":
@@ -47,8 +55,12 @@ func run(args []string) error {
 }
 
 func printUsage() {
-	fmt.Println("usage: go run ./tools <build|libffi-build|fetch|ipa-info|attest|doctor>")
+	fmt.Println("usage: go run ./tools <build|platform|validate|deps|packages|libffi-build|fetch|ipa-info|attest|doctor>")
 	fmt.Println("       go run ./tools build <tweak|ipa|simulator|all> [flags]")
+	fmt.Println("       go run ./tools platform <build|test> <ios|android> [flags]")
+	fmt.Println("       go run ./tools validate [--root <path>]")
+	fmt.Println("       go run ./tools deps [--root <path>]")
+	fmt.Println("       go run ./tools packages <list|validate> [--root <path>]")
 	fmt.Println("       go run ./tools libffi-build --archive <path> --include <path>")
 	fmt.Println("       go run ./tools ipa-info --ipa <path>")
 	fmt.Println("       go run ./tools attest <enabled|stage|sign|verify> [flags]")

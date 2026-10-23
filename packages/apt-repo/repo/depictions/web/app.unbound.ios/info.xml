@@ -20,7 +20,7 @@
 	<links>
 		<link>
 			<name>Source Code</name>
-			<url>https://github.com/unbound-app/loader-ios</url>
+		<url>https://github.com/unbound-app/loader</url>
 			<iconclass>fa-brands fa-github</iconclass>
 		</link>
 	</links>
