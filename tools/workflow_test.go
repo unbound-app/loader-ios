@@ -352,8 +352,9 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 	for _, required := range []string{
 		"name: publish loader update records",
 		"UNBOUND_API_KEY: ${{ secrets.UNBOUND_API_KEY }}",
-		"UNBOUND_API_URL: ${{ vars.UNBOUND_API_URL || 'https://unbound.rip' }}",
+		"UNBOUND_API_URL: ${{ vars.UNBOUND_API_URL }}",
 		"UNBOUND_API_KEY is required for stable release publication",
+		"UNBOUND_API_URL is required for stable release publication",
 		"api_url=\"${UNBOUND_API_URL%/}/api/v1/loader/releases\"",
 		"--api-url \"$api_url\"",
 		"dpkg-deb -f \"$deb_path\" Version",
