@@ -23,6 +23,8 @@ After a stable combined release is created, CI publishes one iOS and one Android
 
 TestFlight Discord builds are not published as loader updates because they currently share the stable loader package version. Publishing them would replace the stable URL for that same platform/version. Publish loader prereleases only after the packaged loader version itself is given a SemVer prerelease identifier.
 
+Loader changelogs are generated from conventional commits since the previous change to the Debian Version field. They do not use Discord-generated release notes or include the Discord app version. The Discord-tagged release URL is used only to locate the matching combined release assets.
+
 ## Polling behavior
 
 The scheduled workflow should run the following checks independently so an unavailable TestFlight bridge does not block a stable release:

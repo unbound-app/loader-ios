@@ -103,7 +103,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ inputs.release == true && 'loader-release' || format('build-{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: false
 
 jobs:
@@ -223,6 +223,8 @@ jobs:
       - name: checkout loader sources
         if: needs.resolve-source.outputs.is_testflight != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
 
       - name: setup Go for loader update publishing
         if: needs.resolve-source.outputs.is_testflight != 'true'
@@ -297,7 +299,6 @@ jobs:
         env:
           UNBOUND_API_KEY: ${{ secrets.UNBOUND_API_KEY }}
           UNBOUND_API_URL: ${{ vars.UNBOUND_API_URL }}
-          GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.resolve-source.outputs.release_version }}
           IOS_DEB_FILENAME: ${{ needs.ios.outputs.deb_filename }}
           ANDROID_MODULE_FILENAME: ${{ needs.android.outputs.module_filename }}
@@ -309,16 +310,9 @@ jobs:
           deb_path="release-assets/$IOS_DEB_FILENAME"
           loader_version=$(dpkg-deb -f "$deb_path" Version)
           release_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$RELEASE_VERSION" --jq '.body // ""' > release-assets/generated-release-notes.md
-          {
-            printf 'Loader version %s.\n' "$loader_version"
-            if [ -s release-assets/generated-release-notes.md ]; then
-              printf '\nSemantic loader changes:\n\n'
-              cat release-assets/generated-release-notes.md
-            else
-              printf '\nNo categorized loader changes are listed in the generated release notes.\n'
-            fi
-          } > release-assets/loader-changelog.md
+          go run ./tools generate-loader-changelog \
+            --version "$loader_version" \
+            --output release-assets/loader-changelog.md
           go run ./tools publish-loader-releases \
             --api-url "$api_url" \
             --version "$loader_version" \

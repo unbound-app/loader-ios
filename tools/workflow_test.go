@@ -358,10 +358,13 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 		"api_url=\"${UNBOUND_API_URL%/}/api/v1/loader/releases\"",
 		"--api-url \"$api_url\"",
 		"dpkg-deb -f \"$deb_path\" Version",
-		"gh api \"repos/$GITHUB_REPOSITORY/releases/tags/v$RELEASE_VERSION\"",
-		"Loader version %s",
+		"fetch-depth: 0",
+		"go run ./tools generate-loader-changelog",
+		"--output release-assets/loader-changelog.md",
 		"--changelog-file release-assets/loader-changelog.md",
 		"go run ./tools publish-loader-releases",
+		"loader-release",
+		"loader-release",
 		"--ios-url \"$release_url/$IOS_DEB_FILENAME\"",
 		"--android-url \"$release_url/$ANDROID_MODULE_FILENAME\"",
 		"needs.resolve-source.outputs.is_testflight != 'true'",
@@ -376,6 +379,8 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 		"LOADER_VERSION:",
 		"resolve.outputs.loader_version",
 		"targets Discord",
+		"generated-release-notes.md",
+		"publish-loader-release --platform",
 	} {
 		if strings.Contains(contents, forbidden) {
 			t.Fatalf("loader release version or changelog must not be tied to the Discord build: %q", forbidden)
@@ -399,7 +404,7 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 		"query.Set(\"platform\", platform)",
 		"query.Set(\"version\", \"0.0.0\")",
 		"comparison == 0",
-		"older than published",
+		"comparison < 0",
 	} {
 		if !strings.Contains(string(publisher), required) {
 			t.Fatalf("loader release semver gate is missing %q", required)
@@ -458,5 +463,20 @@ func TestMetroRegistryIsCapturedBeforeBundleWithoutLegacyPatch(t *testing.T) {
 	}
 	if !strings.Contains(string(capture), "installMetroModuleCapture") || !strings.Contains(string(capture), "Object.defineProperty(globalThis,'__d'") {
 		t.Fatal("shared loader no longer captures the Metro registry before module definitions")
+	}
+}
+
+func TestLoaderReleasePublisherCannotBypassBatchSemverGate(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	mainSource, err := os.ReadFile(filepath.Join(root, "tools", "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(mainSource), "case \"publish-loader-release\":") || strings.Contains(string(mainSource), "publish-loader-release --platform") {
+		t.Fatal("loader release publishing must use the all-platform SemVer gate")
 	}
 }

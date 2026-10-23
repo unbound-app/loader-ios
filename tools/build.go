@@ -425,7 +425,11 @@ func packageVersion(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	return packageVersionFromControl(string(data))
+}
+
+func packageVersionFromControl(contents string) (string, error) {
+	for _, line := range strings.Split(contents, "\n") {
 		if strings.HasPrefix(line, "Version:") {
 			value := strings.TrimSpace(strings.TrimPrefix(line, "Version:"))
 			if value != "" {
