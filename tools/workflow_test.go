@@ -385,7 +385,7 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 	}
 }
 
-func TestModulesBootstrapUsesRuntimeRegistryWithoutLegacyPatch(t *testing.T) {
+func TestMetroRegistryIsCapturedBeforeBundleWithoutLegacyPatch(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("could not locate test source")
@@ -411,7 +411,14 @@ func TestModulesBootstrapUsesRuntimeRegistryWithoutLegacyPatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(contents), "globalThis.modules \\x3f\\x3f= globalThis.__c?.();") {
-		t.Fatal("shared loader no longer initializes the Metro registry before plugin preload")
+	if strings.Contains(string(contents), "globalThis.__c?.()") {
+		t.Fatal("bundle readiness must not invoke Metro's destructive registry collector")
+	}
+	capture, err := os.ReadFile(filepath.Join(root, "packages", "core", "src", "LoaderJSI.cpp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(capture), "installMetroModuleCapture") || !strings.Contains(string(capture), "Object.defineProperty(globalThis,'__d'") {
+		t.Fatal("shared loader no longer captures the Metro registry before module definitions")
 	}
 }
