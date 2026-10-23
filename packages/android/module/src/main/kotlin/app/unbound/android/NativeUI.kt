@@ -7,6 +7,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.Button
 import android.widget.CompoundButton
 import android.widget.EditText
@@ -117,6 +118,7 @@ object NativeUI {
     fun unmountView(handleJSON: String) {
         requireMainThread()
         val view = resolve(parseHandle(handleJSON))
+        if (view is ImageView) NativeImageLoader.clear(view)
         (view.parent as? ViewGroup)?.removeView(view)
         viewsByObject.remove(view)
         viewsByHandle.remove(parseHandle(handleJSON))
@@ -291,6 +293,7 @@ object NativeUI {
         "View" -> FrameLayout(activity)
         "Text" -> TextView(activity)
         "Button" -> Button(activity)
+        "Image" -> ImageView(activity)
         "LinearLayout" -> LinearLayout(activity)
         else -> throw IllegalArgumentException("Unsupported Android native UI module: $moduleName")
     }
@@ -329,6 +332,34 @@ object NativeUI {
                     require(view is TextView) { "The Android native UI view does not support textSize" }
                     val value = boundedNumber(properties, key, 1.0, 128.0)
                     view.textSize = value.toFloat()
+                }
+                "sourceUri" -> {
+                    require(view is ImageView) { "The Android native UI view does not support sourceUri" }
+                    NativeImageLoader.load(view, properties.getString(key))
+                }
+                "scaleType" -> {
+                    require(view is ImageView) { "The Android native UI view does not support scaleType" }
+                    view.scaleType = when (properties.getString(key)) {
+                        "centerCrop" -> ImageView.ScaleType.CENTER_CROP
+                        "centerInside" -> ImageView.ScaleType.CENTER_INSIDE
+                        "fitCenter" -> ImageView.ScaleType.FIT_CENTER
+                        "fitXY" -> ImageView.ScaleType.FIT_XY
+                        else -> throw IllegalArgumentException("The Android native image scale type is invalid")
+                    }
+                }
+                "borderRadius" -> {
+                    val radius = boundedNumber(properties, key, 0.0, 512.0)
+                    if (radius == 0.0) {
+                        view.clipToOutline = false
+                    } else {
+                        val pixels = radius * view.resources.displayMetrics.density
+                        view.outlineProvider = object : ViewOutlineProvider() {
+                            override fun getOutline(view: View, outline: android.graphics.Outline) {
+                                outline.setRoundRect(0, 0, view.width, view.height, pixels.toFloat())
+                            }
+                        }
+                        view.clipToOutline = true
+                    }
                 }
                 "backgroundColor" -> view.setBackgroundColor(parseColor(properties, key))
                 "contentDescription" -> {

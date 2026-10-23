@@ -1,7 +1,10 @@
 package app.unbound.android
 
 import android.app.Activity
+import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONArray
@@ -156,6 +159,65 @@ class NativeUITest {
         assertThrows(IllegalArgumentException::class.java) {
             NativeUI.mountView("", "Text", """{"unknown":true}""")
         }
+    }
+
+    @Test
+    fun imageMountSupportsUriScalingAndRoundedClipping() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        activity.setContentView(FrameLayout(activity))
+        ActivityTracker.onActivityResumed(activity)
+
+        val handle = JSONObject(
+            NativeUI.mountView(
+                "",
+                "Image",
+                """{"sourceUri":"","scaleType":"centerCrop","borderRadius":18,"contentDescription":"native-image-test"}""",
+            ),
+        )
+        val image = findImageView(activity.window.decorView)
+        val mounted = JSONArray(
+            NativeUI.lookup(
+                """{"role":"image","attributes":{"contentDescription":"native-image-test"}}""",
+            ),
+        )
+
+        assertEquals(1, mounted.length())
+        assertEquals(ImageView.ScaleType.CENTER_CROP, image?.scaleType)
+        assertEquals(true, image?.clipToOutline)
+        assertEquals(true, NativeImageLoader.isSupportedSource("https://cdn.discordapp.com/avatar.png"))
+        assertEquals(false, NativeImageLoader.isSupportedSource("http://cdn.discordapp.com/avatar.png"))
+        NativeUI.unmountView(handle.toString())
+        assertEquals(null, image?.parent)
+        assertEquals(
+            0,
+            JSONArray(
+                NativeUI.lookup(
+                    """{"role":"image","attributes":{"contentDescription":"native-image-test"}}""",
+                ),
+            ).length(),
+        )
+    }
+
+    @Test
+    fun imageSourceRejectsUntrustedAndUnsupportedSchemes() {
+        assertEquals(false, NativeImageLoader.isSupportedSource("https://example.com/image.png"))
+        assertEquals(false, NativeImageLoader.isSupportedSource("https://cdn.discordapp.com:444/image.png"))
+        assertEquals(false, NativeImageLoader.isSupportedSource("https://cdn.discordapp.com.evil.test/image.png"))
+        assertEquals(false, NativeImageLoader.isSupportedSource("content://"))
+        assertEquals(false, NativeImageLoader.isSupportedSource("data:image/png;base64,abc"))
+        assertEquals(true, NativeImageLoader.isSupportedSource("file:///tmp/image.png"))
+        assertEquals(true, NativeImageLoader.isSupportedSource("content://media/asset/1"))
+    }
+
+    private fun findImageView(view: View): ImageView? {
+        if (view is ImageView) return view
+        if (view !is ViewGroup) return null
+
+        for (index in 0 until view.childCount) {
+            findImageView(view.getChildAt(index))?.let { return it }
+        }
+
+        return null
     }
 
     @Test
