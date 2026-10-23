@@ -75,6 +75,13 @@ object NativeBridge {
     fun snapshotViews(queryJSON: String): String = NativeUI.snapshot(queryJSON)
 
     @JvmStatic
+    fun measureView(handleJSON: String): String = NativeUI.measureView(handleJSON)
+
+    @JvmStatic
+    fun setViewFrame(handleJSON: String, frameJSON: String) =
+        NativeUI.setViewFrame(handleJSON, frameJSON)
+
+    @JvmStatic
     fun fetchText(url: String, timeoutMs: Int): String? = runCatching {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = timeoutMs

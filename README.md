@@ -72,7 +72,7 @@ The platform workflows can also be run independently for development builds. The
 | Sentry blocking                            | ✅  | ✅      |
 | Dev server auto-detection (vphone / emulator) | ✅ | ✅    |
 | Live reload (HMR)                          | ✅  | ✅ (restarts the app) |
-| `NativePlugin` addon bridge                | ✅ (`objc`, `ffi`, `fabric`) | In progress |
+| `NativePlugin` addon bridge                | ✅ (`objc`, `ffi`, `fabric`) | Partial (`ui.lookup`, `ui.layout`) |
 | Debug toolbox, dev overlay, chat UI tweaks | ✅  | Not yet |
 
 The native-plugin parity work targets the existing plugin behavior on both platforms. Android remains unverified for each plugin until it passes device testing; iOS support remains unchanged.

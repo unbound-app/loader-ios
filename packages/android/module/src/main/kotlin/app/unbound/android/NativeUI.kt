@@ -15,6 +15,7 @@ import org.json.JSONObject
 import java.lang.ref.WeakReference
 import java.util.ArrayDeque
 import java.util.WeakHashMap
+import kotlin.math.ceil
 
 object NativeUI {
     private data class Query(
@@ -73,6 +74,33 @@ object NativeUI {
             .toString()
     }
 
+    fun measureView(handleJSON: String): String {
+        requireMainThread()
+        val handle = parseHandle(handleJSON)
+        val measured = frame(resolve(handle))
+            ?: throw IllegalStateException("The Android native UI view has not been laid out")
+        return measured.toString()
+    }
+
+    fun setViewFrame(handleJSON: String, frameJSON: String) {
+        requireMainThread()
+        val view = resolve(parseHandle(handleJSON))
+        val frame = JSONObject(frameJSON)
+        val x = boundedCoordinate(frame, "x")
+        val y = boundedCoordinate(frame, "y")
+        val width = boundedDimension(frame, "width")
+        val height = boundedDimension(frame, "height")
+        val parameters = view.layoutParams
+            ?: throw IllegalStateException("The Android native UI view has no layout parameters")
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        parameters.width = ceil(width).toInt()
+        parameters.height = ceil(height).toInt()
+        view.layoutParams = parameters
+        view.translationX += (x - location[0]).toFloat()
+        view.translationY += (y - location[1]).toFloat()
+    }
+
     private fun parseQuery(queryJSON: String): Query {
         val input = JSONObject(queryJSON)
         val role = input.optString("role").trim()
@@ -87,6 +115,24 @@ object NativeUI {
             maxNodes = input.optInt("maxNodes", 512).coerceIn(1, 2000),
             maxResults = input.optInt("maxResults", 128).coerceIn(1, 500),
         )
+    }
+
+    private fun parseHandle(handleJSON: String): String {
+        val id = JSONObject(handleJSON).optString("id").trim()
+        require(id.isNotEmpty() && id.length <= 128)
+        return id
+    }
+
+    private fun boundedCoordinate(frame: JSONObject, name: String): Double {
+        val value = frame.optDouble(name, Double.NaN)
+        require(value.isFinite() && value in -100_000.0..100_000.0)
+        return value
+    }
+
+    private fun boundedDimension(frame: JSONObject, name: String): Double {
+        val value = frame.optDouble(name, Double.NaN)
+        require(value.isFinite() && value > 0 && value <= 32_768.0)
+        return value
     }
 
     private fun traverse(query: Query): List<Visit> {

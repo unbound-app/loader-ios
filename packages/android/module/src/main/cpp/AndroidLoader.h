@@ -26,6 +26,8 @@ namespace unbound::android
         jmethodID isMainThread       = nullptr;
         jmethodID lookupViews        = nullptr;
         jmethodID snapshotViews      = nullptr;
+        jmethodID measureView        = nullptr;
+        jmethodID setViewFrame       = nullptr;
         jmethodID fetchText          = nullptr;
         jmethodID download           = nullptr;
         jmethodID devServerURL       = nullptr;

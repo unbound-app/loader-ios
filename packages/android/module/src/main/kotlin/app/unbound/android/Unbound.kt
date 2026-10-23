@@ -1,5 +1,6 @@
 package app.unbound.android
 
+import android.app.Activity
 import android.content.pm.ApplicationInfo
 import android.os.Build
 import io.github.libxposed.api.XposedInterface.ExceptionMode
@@ -42,6 +43,7 @@ class Unbound : XposedModule() {
         )
 
         Logger.info("default", "Hermes bytecode version $bytecodeVersion, documents at $documents")
+        hookActivityLifecycle()
         hookBundleLoading(param.classLoader)
         Analytics.block(this, param.classLoader)
         runCatching { Fonts.install(this, param.classLoader) }
@@ -50,6 +52,26 @@ class Unbound : XposedModule() {
             .onFailure { Logger.error("themes", "Failed to apply the theme", it) }
         runCatching { Recovery.install(this) }
             .onFailure { Logger.error("default", "Failed to install the Safe Mode shortcut", it) }
+    }
+
+    private fun hookActivityLifecycle() {
+        val onResume = Activity::class.java.getDeclaredMethod("onResume")
+        hook(onResume)
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed()
+                ActivityTracker.onActivityResumed(chain.thisObject as Activity)
+                result
+            }
+
+        val onPause = Activity::class.java.getDeclaredMethod("onPause")
+        hook(onPause)
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed()
+                ActivityTracker.onActivityPaused(chain.thisObject as Activity)
+                result
+            }
     }
 
     private fun hookBundleLoading(classLoader: ClassLoader) {

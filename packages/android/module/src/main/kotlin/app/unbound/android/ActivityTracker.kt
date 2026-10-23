@@ -38,7 +38,9 @@ object ActivityTracker : Application.ActivityLifecycleCallbacks {
         current = WeakReference(activity)
     }
 
-    override fun onActivityPaused(activity: Activity) = Unit
+    override fun onActivityPaused(activity: Activity) {
+        if (current?.get() === activity) current = null
+    }
 
     override fun onActivityStopped(activity: Activity) = Unit
 

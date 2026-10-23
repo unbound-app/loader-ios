@@ -156,6 +156,10 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
         bridge, "lookupViews", "(Ljava/lang/String;)Ljava/lang/String;");
     gCallbacks.snapshotViews = env->GetStaticMethodID(
         bridge, "snapshotViews", "(Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.measureView = env->GetStaticMethodID(
+        bridge, "measureView", "(Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.setViewFrame = env->GetStaticMethodID(
+        bridge, "setViewFrame", "(Ljava/lang/String;Ljava/lang/String;)V");
     gCallbacks.fetchText =
         env->GetStaticMethodID(bridge, "fetchText", "(Ljava/lang/String;I)Ljava/lang/String;");
     gCallbacks.download = env->GetStaticMethodID(
@@ -170,7 +174,7 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
 
     return !clearPendingException(env) && gCallbacks.scheduleRuntime && gCallbacks.scheduleMain &&
            gCallbacks.isMainThread && gCallbacks.lookupViews && gCallbacks.snapshotViews &&
-           gCallbacks.fetchText &&
+           gCallbacks.measureView && gCallbacks.setViewFrame && gCallbacks.fetchText &&
            gCallbacks.download && gCallbacks.devServerURL && gCallbacks.availableFonts &&
            gCallbacks.alert && gCallbacks.onBundleExecuted;
 }
