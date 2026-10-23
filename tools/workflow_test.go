@@ -353,6 +353,7 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 		"name: publish loader update records",
 		"UNBOUND_API_KEY: ${{ secrets.UNBOUND_API_KEY }}",
 		"UNBOUND_API_URL: ${{ vars.UNBOUND_API_URL || 'https://unbound.rip/api/v1/loader/releases' }}",
+		"UNBOUND_API_KEY is required for stable release publication",
 		"https://unbound.rip/api/v1/loader/releases",
 		"dpkg-deb -f \"$deb_path\" Version",
 		"gh api \"repos/$GITHUB_REPOSITORY/releases/tags/v$RELEASE_VERSION\"",
