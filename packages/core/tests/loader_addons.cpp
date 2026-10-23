@@ -61,7 +61,7 @@ int main()
     payload.settings = R"({"unbound":{}})";
     payload.plugins  = loader::toJSON(plugins);
     payload.origin   = "libunbound.so";
-    payload.version  = "3.0.0";
+    payload.version  = "1.0.0";
     std::string script = loader::buildPreloadScript(payload);
     assert(script.find("this.UNBOUND_SETTINGS = {\"unbound\":{}};") == 0);
     assert(script.find("this.UNBOUND_THEMES = [];") != std::string::npos);
