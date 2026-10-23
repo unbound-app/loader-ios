@@ -104,6 +104,35 @@ object NativeBridge {
     fun unmountView(handleJSON: String) = NativeUI.unmountView(handleJSON)
 
     @JvmStatic
+    fun javaGetClass(name: String): String = NativeJava.getClass(name)
+
+    @JvmStatic
+    fun javaClassName(handleJSON: String): String = NativeJava.className(handleJSON)
+
+    @JvmStatic
+    fun javaConstruct(name: String, argumentsJSON: String): String =
+        NativeJava.construct(name, argumentsJSON)
+
+    @JvmStatic
+    fun javaRespondsTo(handleJSON: String, name: String, argumentsJSON: String): String =
+        NativeJava.respondsTo(handleJSON, name, argumentsJSON)
+
+    @JvmStatic
+    fun javaInvoke(handleJSON: String, name: String, argumentsJSON: String): String =
+        NativeJava.invoke(handleJSON, name, argumentsJSON)
+
+    @JvmStatic
+    fun javaGetField(handleJSON: String, name: String): String =
+        NativeJava.getField(handleJSON, name)
+
+    @JvmStatic
+    fun javaSetField(handleJSON: String, name: String, valueJSON: String) =
+        NativeJava.setField(handleJSON, name, valueJSON)
+
+    @JvmStatic
+    fun javaRelease(handleJSON: String) = NativeJava.release(handleJSON)
+
+    @JvmStatic
     fun fetchText(url: String, timeoutMs: Int): String? = runCatching {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = timeoutMs

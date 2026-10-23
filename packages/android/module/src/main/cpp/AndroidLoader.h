@@ -31,6 +31,14 @@ namespace unbound::android
         jmethodID mountView          = nullptr;
         jmethodID updateView         = nullptr;
         jmethodID unmountView        = nullptr;
+        jmethodID javaGetClass       = nullptr;
+        jmethodID javaClassName      = nullptr;
+        jmethodID javaConstruct      = nullptr;
+        jmethodID javaRespondsTo     = nullptr;
+        jmethodID javaInvoke         = nullptr;
+        jmethodID javaGetField       = nullptr;
+        jmethodID javaSetField       = nullptr;
+        jmethodID javaRelease        = nullptr;
         jmethodID fetchText          = nullptr;
         jmethodID download           = nullptr;
         jmethodID devServerURL       = nullptr;

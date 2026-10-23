@@ -182,6 +182,24 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
         bridge, "updateView", "(Ljava/lang/String;Ljava/lang/String;)V");
     gCallbacks.unmountView = env->GetStaticMethodID(
         bridge, "unmountView", "(Ljava/lang/String;)V");
+    gCallbacks.javaGetClass = env->GetStaticMethodID(
+        bridge, "javaGetClass", "(Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.javaClassName = env->GetStaticMethodID(
+        bridge, "javaClassName", "(Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.javaConstruct = env->GetStaticMethodID(
+        bridge, "javaConstruct", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.javaRespondsTo = env->GetStaticMethodID(
+        bridge, "javaRespondsTo",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.javaInvoke = env->GetStaticMethodID(
+        bridge, "javaInvoke",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.javaGetField = env->GetStaticMethodID(
+        bridge, "javaGetField", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.javaSetField = env->GetStaticMethodID(
+        bridge, "javaSetField", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    gCallbacks.javaRelease =
+        env->GetStaticMethodID(bridge, "javaRelease", "(Ljava/lang/String;)V");
     gCallbacks.fetchText =
         env->GetStaticMethodID(bridge, "fetchText", "(Ljava/lang/String;I)Ljava/lang/String;");
     gCallbacks.download = env->GetStaticMethodID(
@@ -197,7 +215,10 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
     return !clearPendingException(env) && gCallbacks.scheduleRuntime && gCallbacks.scheduleMain &&
            gCallbacks.isMainThread && gCallbacks.lookupViews && gCallbacks.snapshotViews &&
            gCallbacks.measureView && gCallbacks.setViewFrame && gCallbacks.mountView &&
-           gCallbacks.updateView && gCallbacks.unmountView && gCallbacks.fetchText &&
+           gCallbacks.updateView && gCallbacks.unmountView && gCallbacks.javaGetClass &&
+           gCallbacks.javaClassName && gCallbacks.javaConstruct && gCallbacks.javaRespondsTo &&
+           gCallbacks.javaInvoke && gCallbacks.javaGetField && gCallbacks.javaSetField &&
+           gCallbacks.javaRelease && gCallbacks.fetchText &&
            gCallbacks.download && gCallbacks.devServerURL && gCallbacks.availableFonts &&
            gCallbacks.alert && gCallbacks.onBundleExecuted;
 }
