@@ -4,6 +4,8 @@ import android.content.ContentResolver
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.widget.ImageView
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -12,6 +14,8 @@ import java.net.URL
 import java.util.LinkedHashMap
 import java.util.WeakHashMap
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.FutureTask
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -23,20 +27,35 @@ internal object NativeImageLoader {
     private const val MAX_SOURCE_DIMENSION = 65_536
     private const val MAX_IMAGE_DIMENSION = 2048
     private const val MAX_CACHE_BYTES = 24 * 1024 * 1024
+    private const val MAX_PENDING_REQUESTS = 512
+    private const val REQUEST_RETRY_DELAY_MILLISECONDS = 50L
+    private val trustedDiscordDomains = listOf("discord.com", "discordapp.com", "discordapp.net")
+
+    private data class Request(
+        val identifier: Long,
+        val source: String,
+        val resolver: ContentResolver,
+        val imageReference: WeakReference<ImageView>,
+        var task: FutureTask<Unit>? = null,
+        var submitted: Boolean = false,
+    )
 
     private val lock = Any()
     private val requests = WeakHashMap<ImageView, Long>()
+    private val pending = WeakHashMap<ImageView, Request>()
     private val cache = LinkedHashMap<String, Bitmap>(16, 0.75f, true)
+    private val retryHandler = Handler(Looper.getMainLooper())
     private var nextRequest = 0L
     private var cachedBytes = 0
+    private var retryScheduled = false
     private val executor = ThreadPoolExecutor(
         2,
         2,
         30,
         TimeUnit.SECONDS,
-        ArrayBlockingQueue(64),
+        ArrayBlockingQueue(256),
         ThreadFactory { task -> Thread(task, "unbound-native-image").apply { isDaemon = true } },
-        ThreadPoolExecutor.DiscardPolicy(),
+        ThreadPoolExecutor.AbortPolicy(),
     )
 
     fun load(view: ImageView, source: String) {
@@ -47,42 +66,43 @@ internal object NativeImageLoader {
         }
         require(isSupportedSource(source))
 
-        val request = synchronized(lock) {
+        val request: Request?
+        val cached: Bitmap?
+        synchronized(lock) {
             val identifier = ++nextRequest
             requests[view] = identifier
-            identifier
+            cancelPending(view)
+            cached = cache[source]
+            if (cached != null) {
+                request = null
+            } else {
+                check(pending.size < MAX_PENDING_REQUESTS) {
+                    "The Android native image request limit has been reached"
+                }
+                val created = Request(
+                    identifier,
+                    source,
+                    view.context.applicationContext.contentResolver,
+                    WeakReference(view),
+                )
+                created.task = FutureTask { load(created) }
+                pending[view] = created
+                request = created
+            }
         }
-        val cached = synchronized(lock) { cache[source] }
         if (cached != null) {
             view.setImageBitmap(cached)
             return
         }
 
         view.setImageDrawable(null)
-        val imageReference = WeakReference(view)
-        val resolver = view.context.applicationContext.contentResolver
-        executor.execute {
-            val bitmap = try {
-                readBitmap(resolver, Uri.parse(source))
-            } catch (_: Exception) {
-                null
-            } ?: return@execute
-            synchronized(lock) {
-                cache.put(source, bitmap)?.let { cachedBytes -= it.byteCount }
-                cachedBytes += bitmap.byteCount
-                trimCache()
-            }
-            imageReference.get()?.post {
-                val image = imageReference.get() ?: return@post
-                val current = synchronized(lock) { requests[image] == request }
-                if (current) image.setImageBitmap(bitmap)
-            }
-        }
+        submit(request ?: return)
     }
 
     fun clear(view: ImageView) {
         synchronized(lock) {
             requests[view] = ++nextRequest
+            cancelPending(view)
         }
         view.setImageDrawable(null)
     }
@@ -95,15 +115,85 @@ internal object NativeImageLoader {
             "file" -> !uri.path.isNullOrEmpty()
             "https" -> {
                 val host = uri.host?.lowercase() ?: return false
-                val trustedHost = host == "discord.com" ||
-                    host.endsWith(".discord.com") ||
-                    host == "discordapp.com" ||
-                    host.endsWith(".discordapp.com") ||
-                    host == "discordapp.net" ||
-                    host.endsWith(".discordapp.net")
-                trustedHost && (uri.port == -1 || uri.port == 443)
+                isTrustedDiscordHost(host) && (uri.port == -1 || uri.port == 443)
             }
             else -> false
+        }
+    }
+
+    private fun isTrustedDiscordHost(host: String): Boolean =
+        trustedDiscordDomains.any { host == it || host.endsWith(".$it") }
+
+    private fun cancelPending(view: ImageView) {
+        val request = pending.remove(view) ?: return
+        request.task?.let {
+            it.cancel(false)
+            executor.remove(it)
+        }
+    }
+
+    private fun submit(request: Request) {
+        val image = request.imageReference.get() ?: run {
+            finish(request)
+            return
+        }
+        val task = request.task ?: return
+        val shouldSubmit = synchronized(lock) {
+            pending[image] === request && !request.submitted
+        }
+        if (!shouldSubmit) return
+
+        try {
+            executor.execute(task)
+            synchronized(lock) {
+                if (pending[image] === request) request.submitted = true
+            }
+        } catch (_: RejectedExecutionException) {
+            scheduleRetry()
+        }
+    }
+
+    private fun scheduleRetry() {
+        synchronized(lock) {
+            if (retryScheduled) return
+            retryScheduled = true
+        }
+        retryHandler.postDelayed({
+            val requests = synchronized(lock) {
+                retryScheduled = false
+                pending.values.filter { !it.submitted }
+            }
+            requests.forEach(::submit)
+        }, REQUEST_RETRY_DELAY_MILLISECONDS)
+    }
+
+    private fun load(request: Request) {
+        val bitmap = try {
+            readBitmap(request.resolver, Uri.parse(request.source))
+        } catch (_: Exception) {
+            null
+        }
+        if (bitmap != null) {
+            synchronized(lock) {
+                cache.put(request.source, bitmap)?.let { cachedBytes -= it.byteCount }
+                cachedBytes += bitmap.byteCount
+                trimCache()
+            }
+        }
+        finish(request)
+        if (bitmap == null) return
+
+        request.imageReference.get()?.post {
+            val image = request.imageReference.get() ?: return@post
+            val current = synchronized(lock) { requests[image] == request.identifier }
+            if (current) image.setImageBitmap(bitmap)
+        }
+    }
+
+    private fun finish(request: Request) {
+        val image = request.imageReference.get() ?: return
+        synchronized(lock) {
+            if (pending[image] === request) pending.remove(image)
         }
     }
 
