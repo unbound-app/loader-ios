@@ -35,6 +35,14 @@ type httpStatusError struct {
 	body   []byte
 }
 
+type requestTransportError struct{ err error }
+
+func (e *requestTransportError) Error() string {
+	return fmt.Sprintf("could not reach dkrypt: %s", safeMessage(e.err))
+}
+
+func (e *requestTransportError) Unwrap() error { return e.err }
+
 func (e *httpStatusError) Error() string {
 	return fmt.Sprintf("dkrypt request failed with HTTP %d", e.status)
 }
@@ -183,18 +191,30 @@ func fetchIPAWith(baseURL, bundleID, version, apiKey, output string, timeout tim
 }
 
 func requestWithRetries(endpoint, apiKey, method string, body map[string]any) (map[string]any, error) {
+	return requestWithRetriesUsing(endpoint, apiKey, method, body, requestJSON, time.Sleep)
+}
+
+func requestWithRetriesUsing(
+	endpoint, apiKey, method string,
+	body map[string]any,
+	request func(string, string, string, map[string]any) (map[string]any, error),
+	sleep func(time.Duration),
+) (map[string]any, error) {
 	var last error
 	for attempt := 1; attempt <= 3; attempt++ {
-		result, err := requestJSON(endpoint, apiKey, method, body)
+		result, err := request(endpoint, apiKey, method, body)
 		if err == nil {
 			return result, nil
 		}
 		last = err
 		statusErr, ok := err.(*httpStatusError)
-		if !ok || !retryableStatuses[statusErr.status] || attempt == 3 {
+		var transportErr *requestTransportError
+		retryable := ok && retryableStatuses[statusErr.status]
+		retryable = retryable || method == http.MethodGet && errors.As(err, &transportErr)
+		if !retryable || attempt == 3 {
 			return nil, err
 		}
-		time.Sleep(time.Duration(1<<(attempt-1)) * time.Second)
+		sleep(time.Duration(1<<(attempt-1)) * time.Second)
 	}
 	return nil, last
 }
@@ -220,12 +240,12 @@ func requestJSON(endpoint, apiKey, method string, body map[string]any) (map[stri
 	}
 	response, err := (&http.Client{Timeout: 60 * time.Second}).Do(request)
 	if err != nil {
-		return nil, &DkryptError{fmt.Sprintf("could not reach dkrypt: %s", safeMessage(err))}
+		return nil, &requestTransportError{err}
 	}
 	defer response.Body.Close()
 	raw, readErr := io.ReadAll(response.Body)
 	if readErr != nil {
-		return nil, readErr
+		return nil, &requestTransportError{readErr}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, &httpStatusError{status: response.StatusCode, body: raw}

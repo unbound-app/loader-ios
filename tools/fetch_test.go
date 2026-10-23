@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -128,6 +129,54 @@ func TestDownloadAndVerifyRetriesInterruptedBody(t *testing.T) {
 	}
 	if string(actual) != string(data) {
 		t.Fatalf("downloaded artifact = %q", actual)
+	}
+}
+
+func TestRequestWithRetriesRetriesInterruptedGetResponse(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			writer.Header().Set("Content-Length", "100")
+			_, _ = writer.Write([]byte(`{"status":`))
+			return
+		}
+		_ = json.NewEncoder(writer).Encode(map[string]string{"status": "done"})
+	}))
+	defer server.Close()
+
+	result, err := requestWithRetriesUsing(
+		server.URL,
+		"secret",
+		http.MethodGet,
+		nil,
+		requestJSON,
+		func(time.Duration) {},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 || result["status"] != "done" {
+		t.Fatalf("requests = %d, result = %#v", requests, result)
+	}
+}
+
+func TestRequestWithRetriesDoesNotRetryPostTransportError(t *testing.T) {
+	requests := 0
+	request := func(string, string, string, map[string]any) (map[string]any, error) {
+		requests++
+		return nil, &requestTransportError{errors.New("connection reset")}
+	}
+	_, err := requestWithRetriesUsing(
+		"https://example.com",
+		"secret",
+		http.MethodPost,
+		nil,
+		request,
+		func(time.Duration) {},
+	)
+	if err == nil || requests != 1 {
+		t.Fatalf("requests = %d, error = %v", requests, err)
 	}
 }
 
