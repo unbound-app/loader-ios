@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -88,6 +89,45 @@ func TestFetchIPAChecksumMismatchRemovesOutput(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("output exists after failed download: %v", err)
+	}
+}
+
+func TestDownloadAndVerifyRetriesInterruptedBody(t *testing.T) {
+	data := []byte("complete ipa bytes after retry")
+	digest := sha256.Sum256(data)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests++
+		if requests == 1 {
+			writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
+			_, _ = writer.Write(data[:len(data)/2])
+			return
+		}
+		_, _ = writer.Write(data)
+	}))
+	defer server.Close()
+	path := filepath.Join(t.TempDir(), "discord.ipa")
+	err := downloadAndVerifyWith(
+		server.URL,
+		"secret",
+		path,
+		int64(len(data)),
+		hex.EncodeToString(digest[:]),
+		3,
+		func(time.Duration) {},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 {
+		t.Fatalf("download attempts = %d, want 2", requests)
+	}
+	actual, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(actual) != string(data) {
+		t.Fatalf("downloaded artifact = %q", actual)
 	}
 }
 

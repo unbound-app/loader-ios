@@ -234,34 +234,61 @@ func requestJSON(endpoint, apiKey, method string, body map[string]any) (map[stri
 }
 
 func downloadAndVerify(endpoint, apiKey, output string, expectedSize int64, expectedSHA string) error {
-	request, err := http.NewRequest(http.MethodGet, endpoint, nil)
-	if err != nil {
-		return err
+	return downloadAndVerifyWith(endpoint, apiKey, output, expectedSize, expectedSHA, 5, time.Sleep)
+}
+
+func downloadAndVerifyWith(endpoint, apiKey, output string, expectedSize int64, expectedSHA string, attempts int, sleep func(time.Duration)) error {
+	if attempts < 1 {
+		return errors.New("download retry count must be positive")
 	}
-	request.Header.Set("Authorization", "Bearer "+apiKey)
-	request.Header.Set("Accept", "application/octet-stream")
-	request.Header.Set("User-Agent", fetchUserAgent)
-	var response *http.Response
-	for attempt := 1; attempt <= 3; attempt++ {
-		response, err = (&http.Client{}).Do(request)
-		if err == nil && response.StatusCode >= 200 && response.StatusCode < 300 {
-			break
+
+	client := &http.Client{Timeout: 60 * time.Minute}
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		request, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err != nil {
+			return err
 		}
-		if response != nil {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+		request.Header.Set("Accept", "application/octet-stream")
+		request.Header.Set("User-Agent", fetchUserAgent)
+
+		response, err := client.Do(request)
+		if err != nil {
+			lastErr = &DkryptError{fmt.Sprintf("could not download the IPA from dkrypt: %s", safeMessage(err))}
+			if attempt < attempts {
+				sleep(time.Duration(1<<(attempt-1)) * time.Second)
+				continue
+			}
+			return lastErr
+		}
+
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			raw, _ := io.ReadAll(response.Body)
 			response.Body.Close()
-			if attempt == 3 || !retryableStatuses[response.StatusCode] {
-				return &DkryptError{fmt.Sprintf("could not download the IPA from dkrypt: HTTP %d %s", response.StatusCode, safeMessage(string(raw)))}
+			lastErr = &DkryptError{fmt.Sprintf("could not download the IPA from dkrypt: HTTP %d %s", response.StatusCode, safeMessage(string(raw)))}
+			if attempt == attempts || !retryableStatuses[response.StatusCode] {
+				return lastErr
 			}
-		} else if attempt == 3 {
-			return &DkryptError{fmt.Sprintf("could not download the IPA from dkrypt: %s", safeMessage(err))}
+			sleep(time.Duration(1<<(attempt-1)) * time.Second)
+			continue
 		}
-		time.Sleep(time.Duration(1<<(attempt-1)) * time.Second)
+
+		err = saveVerifiedDownload(response.Body, output, expectedSize, expectedSHA)
+		response.Body.Close()
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if attempt < attempts {
+			sleep(time.Duration(1<<(attempt-1)) * time.Second)
+		}
 	}
-	if response == nil {
-		return &DkryptError{"dkrypt did not return an IPA"}
-	}
-	defer response.Body.Close()
+
+	return lastErr
+}
+
+func saveVerifiedDownload(body io.Reader, output string, expectedSize int64, expectedSHA string) error {
 	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
 		return err
 	}
@@ -272,7 +299,7 @@ func downloadAndVerify(endpoint, apiKey, output string, expectedSize int64, expe
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
 	digest := sha256.New()
-	size, err := io.Copy(io.MultiWriter(temporary, digest), response.Body)
+	size, err := io.Copy(io.MultiWriter(temporary, digest), body)
 	if closeErr := temporary.Close(); err == nil {
 		err = closeErr
 	}
