@@ -180,11 +180,10 @@ func discoverStableCandidate(ctx context.Context, config releasePollConfig, itun
 	if err != nil {
 		return "", err
 	}
-	if androidCode > iosCode {
-		fmt.Printf("::notice title=release poll::Android stable %d is newer than iOS stable %s; no common release is available\n", androidCode, itunesVersion)
-		return "", nil
-	}
 	candidateCode := androidCode
+	if iosCode < candidateCode {
+		candidateCode = iosCode
+	}
 	version, err := discordVersionForAndroidCode(candidateCode)
 	if err != nil {
 		return "", err

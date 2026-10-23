@@ -49,13 +49,16 @@ func TestDiscoverStableCandidateSelectsLatestSharedAndroidVersion(t *testing.T) 
 	}
 }
 
-func TestDiscoverStableCandidateSkipsAndroidVersionAheadOfAppStore(t *testing.T) {
+func TestDiscoverStableCandidateSelectsLatestSharedVersionWhenAndroidIsAhead(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/lookup":
 			fmt.Fprint(writer, `{"resultCount":1,"results":[{"bundleId":"com.hammerandchisel.discord","trackId":985746746,"version":"350.8"}]}`)
 		case "/tracker/index":
 			fmt.Fprint(writer, `{"latest":{"stable":"350009"}}`)
+		case "/tracker/download/350008/base":
+			writer.WriteHeader(http.StatusPartialContent)
+			fmt.Fprint(writer, "x")
 		default:
 			t.Fatalf("unexpected request path %q", request.URL.Path)
 		}
@@ -73,8 +76,8 @@ func TestDiscoverStableCandidateSkipsAndroidVersionAheadOfAppStore(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != "" {
-		t.Fatalf("selected version %q, want no candidate", version)
+	if version != "350.8" {
+		t.Fatalf("selected version %q, want 350.8", version)
 	}
 }
 
