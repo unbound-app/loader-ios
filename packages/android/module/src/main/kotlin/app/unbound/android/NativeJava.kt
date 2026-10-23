@@ -130,7 +130,10 @@ object NativeJava {
 
     private fun findMethod(target: Any, name: String, arguments: List<Argument>): Method {
         val owner = if (target is Class<*>) target else target.javaClass
-        val candidates = methods(owner).filter { it.name == name && it.parameterCount == arguments.size }
+        val searched = if (target is Class<*>) listOf(owner, Class::class.java) else listOf(owner)
+        val candidates = searched
+            .flatMap(::methods)
+            .filter { it.name == name && it.parameterCount == arguments.size }
         require(candidates.isNotEmpty()) { "No method $name on ${owner.name} takes ${arguments.size} arguments" }
 
         return candidates.filter { matches(it.parameterTypes, arguments) }

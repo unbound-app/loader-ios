@@ -81,6 +81,16 @@ class NativeJavaTest {
     }
 
     @Test
+    fun invokeReachesClassInstanceMethodsOnAClassHandle() {
+        val handle = NativeJava.getClass("java.lang.Integer")
+
+        assertEquals(
+            "java.lang.Integer",
+            value(NativeJava.invoke(handle, "getName", "[]")).getString("value"),
+        )
+    }
+
+    @Test
     fun invokeRejectsAMethodThatDoesNotExist() {
         val builder = NativeJava.construct("java.lang.StringBuilder", "[]")
 

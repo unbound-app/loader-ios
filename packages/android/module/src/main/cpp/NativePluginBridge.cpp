@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -652,6 +653,41 @@ namespace unbound::android
     static constexpr size_t kMaximumJavaArgumentBytes  = 16384;
     static constexpr size_t kMaximumJavaArgumentCount  = 16;
 
+    static jsi::Value javaFailure(jsi::Runtime &runtime, const char *code, const std::string &message)
+    {
+        jsi::Object failure(runtime);
+        failure.setProperty(runtime, "code", jsi::String::createFromUtf8(runtime, code));
+        failure.setProperty(runtime, "message", jsi::String::createFromUtf8(runtime, message));
+
+        jsi::Object wrapper(runtime);
+        wrapper.setProperty(runtime, "__nativeFailure", std::move(failure));
+        return wrapper;
+    }
+
+    static jsi::Value guardJava(jsi::Runtime &runtime, const std::function<jsi::Value()> &body)
+    {
+        try
+        {
+            return body();
+        }
+        catch (const loader::native::NativeCodedError &error)
+        {
+            return javaFailure(runtime, error.code().c_str(), error.what());
+        }
+        catch (const jsi::JSError &error)
+        {
+            return javaFailure(runtime, "NATIVE_BRIDGE_ERROR", error.getMessage());
+        }
+        catch (const std::exception &error)
+        {
+            return javaFailure(runtime, "NATIVE_BRIDGE_ERROR", error.what());
+        }
+        catch (...)
+        {
+            return javaFailure(runtime, "NATIVE_BRIDGE_ERROR", "The Java operation failed");
+        }
+    }
+
     static std::string takeJavaFailure(JNIEnv *env, const char *fallback)
     {
         jthrowable thrown = env->ExceptionOccurred();
@@ -811,6 +847,17 @@ namespace unbound::android
         }
 
         jsi::Value id = handle.getProperty(runtime, "id");
+        if (!id.isString())
+        {
+            jsi::Value tag = handle.getProperty(runtime, "type");
+            jsi::Value tagged = handle.getProperty(runtime, "value");
+            if (tag.isString() && tag.getString(runtime).utf8(runtime) == "handle" &&
+                tagged.isString())
+            {
+                id = std::move(tagged);
+            }
+        }
+
         if (!id.isString())
         {
             throw std::invalid_argument("a Java handle must contain a string id");
@@ -979,13 +1026,15 @@ namespace unbound::android
                 runtime, "getClass", 1,
                 [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
                             size_t count) -> jsi::Value {
-                    if (count < 1)
-                    {
-                        loader::native::throwCoded(rt, "NATIVE_BRIDGE_ERROR",
-                                                   "Java class lookup requires a class name");
-                    }
-                    return javaSynchronously(rt, callbacks, callbacks.javaGetClass,
-                                             {javaName(rt, args[0])});
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            loader::native::throwCoded(rt, "NATIVE_BRIDGE_ERROR",
+                                                       "Java class lookup requires a class name");
+                        }
+                        return javaSynchronously(rt, callbacks, callbacks.javaGetClass,
+                                                 {javaName(rt, args[0])});
+                    });
                 }));
         java.setProperty(
             runtime, "className",
@@ -993,13 +1042,15 @@ namespace unbound::android
                 runtime, "className", 1,
                 [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
                             size_t count) -> jsi::Value {
-                    if (count < 1)
-                    {
-                        loader::native::throwCoded(rt, "NATIVE_BRIDGE_ERROR",
-                                                   "Java class names require a handle");
-                    }
-                    return javaSynchronously(rt, callbacks, callbacks.javaClassName,
-                                             {serializeJavaHandle(rt, args[0])});
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            loader::native::throwCoded(rt, "NATIVE_BRIDGE_ERROR",
+                                                       "Java class names require a handle");
+                        }
+                        return javaSynchronously(rt, callbacks, callbacks.javaClassName,
+                                                 {serializeJavaHandle(rt, args[0])});
+                    });
                 }));
         java.setProperty(
             runtime, "construct",
@@ -1007,14 +1058,16 @@ namespace unbound::android
                 runtime, "construct", 2,
                 [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
                             size_t count) -> jsi::Value {
-                    if (count < 1)
-                    {
-                        loader::native::throwCoded(rt, "NATIVE_BRIDGE_ERROR",
-                                                   "Java construction requires a class name");
-                    }
-                    return javaSynchronously(
-                        rt, callbacks, callbacks.javaConstruct,
-                        {javaName(rt, args[0]), serializeJavaArguments(rt, args, count, 1)});
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            loader::native::throwCoded(rt, "NATIVE_BRIDGE_ERROR",
+                                                       "Java construction requires a class name");
+                        }
+                        return javaSynchronously(
+                            rt, callbacks, callbacks.javaConstruct,
+                            {javaName(rt, args[0]), serializeJavaArguments(rt, args, count, 1)});
+                    });
                 }));
         java.setProperty(
             runtime, "respondsTo",
@@ -1022,16 +1075,18 @@ namespace unbound::android
                 runtime, "respondsTo", 3,
                 [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
                             size_t count) -> jsi::Value {
-                    if (count < 2)
-                    {
-                        loader::native::throwCoded(
-                            rt, "NATIVE_BRIDGE_ERROR",
-                            "Java method probes require a handle and a method name");
-                    }
-                    return javaSynchronously(rt, callbacks, callbacks.javaRespondsTo,
-                                             {serializeJavaHandle(rt, args[0]),
-                                              javaName(rt, args[1]),
-                                              serializeJavaArguments(rt, args, count, 2)});
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 2)
+                        {
+                            loader::native::throwCoded(
+                                rt, "NATIVE_BRIDGE_ERROR",
+                                "Java method probes require a handle and a method name");
+                        }
+                        return javaSynchronously(rt, callbacks, callbacks.javaRespondsTo,
+                                                 {serializeJavaHandle(rt, args[0]),
+                                                  javaName(rt, args[1]),
+                                                  serializeJavaArguments(rt, args, count, 2)});
+                    });
                 }));
         java.setProperty(
             runtime, "invoke",
@@ -1039,16 +1094,18 @@ namespace unbound::android
                 runtime, "invoke", 3,
                 [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
                             size_t count) -> jsi::Value {
-                    if (count < 2)
-                    {
-                        loader::native::throwCoded(
-                            rt, "NATIVE_BRIDGE_ERROR",
-                            "Java invocation requires a handle and a method name");
-                    }
-                    return javaSynchronously(rt, callbacks, callbacks.javaInvoke,
-                                             {serializeJavaHandle(rt, args[0]),
-                                              javaName(rt, args[1]),
-                                              serializeJavaArguments(rt, args, count, 2)});
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 2)
+                        {
+                            loader::native::throwCoded(
+                                rt, "NATIVE_BRIDGE_ERROR",
+                                "Java invocation requires a handle and a method name");
+                        }
+                        return javaSynchronously(rt, callbacks, callbacks.javaInvoke,
+                                                 {serializeJavaHandle(rt, args[0]),
+                                                  javaName(rt, args[1]),
+                                                  serializeJavaArguments(rt, args, count, 2)});
+                    });
                 }));
         java.setProperty(
             runtime, "invokeAsync",
@@ -1056,26 +1113,28 @@ namespace unbound::android
                 runtime, "invokeAsync", 3,
                 [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
                             size_t count) -> jsi::Value {
-                    if (count < 2)
-                    {
-                        loader::native::throwCoded(
-                            rt, "NATIVE_BRIDGE_ERROR",
-                            "Java invocation requires a handle and a method name");
-                    }
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 2)
+                        {
+                            loader::native::throwCoded(
+                                rt, "NATIVE_BRIDGE_ERROR",
+                                "Java invocation requires a handle and a method name");
+                        }
 
-                    std::vector<std::string> arguments{serializeJavaHandle(rt, args[0]),
-                                                       javaName(rt, args[1]),
-                                                       serializeJavaArguments(rt, args, count, 2)};
-                    auto                     response = std::make_shared<std::string>();
-                    return loader::native::executeMainAsynchronously(
-                        rt,
-                        [callbacks, arguments = std::move(arguments), response]() {
-                            *response =
-                                callJavaString(callbacks, callbacks.javaInvoke, arguments);
-                        },
-                        [response](jsi::Runtime &completion) -> jsi::Value {
-                            return parseJavaResult(completion, *response);
-                        });
+                        std::vector<std::string> arguments{serializeJavaHandle(rt, args[0]),
+                                                           javaName(rt, args[1]),
+                                                           serializeJavaArguments(rt, args, count, 2)};
+                        auto                     response = std::make_shared<std::string>();
+                        return loader::native::executeMainAsynchronously(
+                            rt,
+                            [callbacks, arguments = std::move(arguments), response]() {
+                                *response =
+                                    callJavaString(callbacks, callbacks.javaInvoke, arguments);
+                            },
+                            [response](jsi::Runtime &completion) -> jsi::Value {
+                                return parseJavaResult(completion, *response);
+                            });
+                    });
                 }));
         java.setProperty(
             runtime, "getField",
@@ -1083,15 +1142,17 @@ namespace unbound::android
                 runtime, "getField", 2,
                 [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
                             size_t count) -> jsi::Value {
-                    if (count < 2)
-                    {
-                        loader::native::throwCoded(
-                            rt, "NATIVE_BRIDGE_ERROR",
-                            "Java field reads require a handle and a field name");
-                    }
-                    return javaSynchronously(
-                        rt, callbacks, callbacks.javaGetField,
-                        {serializeJavaHandle(rt, args[0]), javaName(rt, args[1])});
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 2)
+                        {
+                            loader::native::throwCoded(
+                                rt, "NATIVE_BRIDGE_ERROR",
+                                "Java field reads require a handle and a field name");
+                        }
+                        return javaSynchronously(
+                            rt, callbacks, callbacks.javaGetField,
+                            {serializeJavaHandle(rt, args[0]), javaName(rt, args[1])});
+                    });
                 }));
         java.setProperty(
             runtime, "setField",
@@ -1099,16 +1160,18 @@ namespace unbound::android
                 runtime, "setField", 3,
                 [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
                             size_t count) -> jsi::Value {
-                    if (count < 3)
-                    {
-                        loader::native::throwCoded(
-                            rt, "NATIVE_BRIDGE_ERROR",
-                            "Java field writes require a handle, a field name and a value");
-                    }
-                    callJavaVoid(callbacks, callbacks.javaSetField,
-                                 {serializeJavaHandle(rt, args[0]), javaName(rt, args[1]),
-                                  serializeJavaValue(rt, args[2])});
-                    return jsi::Value::undefined();
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 3)
+                        {
+                            loader::native::throwCoded(
+                                rt, "NATIVE_BRIDGE_ERROR",
+                                "Java field writes require a handle, a field name and a value");
+                        }
+                        callJavaVoid(callbacks, callbacks.javaSetField,
+                                     {serializeJavaHandle(rt, args[0]), javaName(rt, args[1]),
+                                      serializeJavaValue(rt, args[2])});
+                        return jsi::Value::undefined();
+                    });
                 }));
         java.setProperty(
             runtime, "release",
@@ -1116,14 +1179,16 @@ namespace unbound::android
                 runtime, "release", 1,
                 [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
                             size_t count) -> jsi::Value {
-                    if (count < 1)
-                    {
-                        loader::native::throwCoded(rt, "NATIVE_BRIDGE_ERROR",
-                                                   "Java handle release requires a handle");
-                    }
-                    callJavaVoid(callbacks, callbacks.javaRelease,
-                                 {serializeJavaHandle(rt, args[0])});
-                    return jsi::Value::undefined();
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            loader::native::throwCoded(rt, "NATIVE_BRIDGE_ERROR",
+                                                       "Java handle release requires a handle");
+                        }
+                        callJavaVoid(callbacks, callbacks.javaRelease,
+                                     {serializeJavaHandle(rt, args[0])});
+                        return jsi::Value::undefined();
+                    });
                 }));
         bridge.setProperty(runtime, "java", std::move(java));
 
