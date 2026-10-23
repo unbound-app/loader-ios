@@ -270,11 +270,17 @@ static const NSTimeInterval kReconnectMaxDelay = 30.0;
     [self handleReloadEtag:incoming];
 }
 
+static NSString *normalizedEtag(NSString *etag)
+{
+    NSString *value = [etag hasPrefix:@"W/"] ? [etag substringFromIndex:2] : etag;
+    return [value stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"\""]];
+}
+
 - (void)handleReloadEtag:(NSString *)incoming
 {
     NSString *stored = [Settings getString:@"unbound" key:@"loader.update.etag" def:@""];
 
-    if (stored.length > 0 && [stored isEqualToString:incoming])
+    if (stored.length > 0 && [normalizedEtag(stored) isEqualToString:normalizedEtag(incoming)])
     {
         [Logger info:LOG_CATEGORY_UPDATER
               format:@"Hot-reload: etag unchanged (%@); skipping reload.", incoming];

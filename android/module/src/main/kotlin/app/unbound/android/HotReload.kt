@@ -79,6 +79,8 @@ object HotReload {
         }
     }
 
+    private fun normalizeEtag(etag: String): String = etag.removePrefix("W/").trim('"')
+
     private fun handleEvent(lines: List<String>) {
         val name = lines.firstOrNull { it.startsWith("event:") }?.removePrefix("event:")?.trim()
         val data = lines.firstOrNull { it.startsWith("data:") }?.removePrefix("data:")?.trim()
@@ -90,7 +92,7 @@ object HotReload {
             ?.let { runCatching { JSONObject("{\"etag\":$it}").optString("etag") }.getOrNull() }
             .orEmpty()
 
-        if (stored.isNotEmpty() && stored == incoming) {
+        if (stored.isNotEmpty() && normalizeEtag(stored) == normalizeEtag(incoming)) {
             Logger.info("updater", "Hot-reload: etag unchanged ($incoming); skipping reload.")
             return
         }
