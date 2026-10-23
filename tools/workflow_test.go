@@ -191,6 +191,8 @@ func TestBuildWorkflowCoordinatesBothPlatforms(t *testing.T) {
 		"go run ./tools release-candidate --channel testflight",
 		"uses: ./.github/workflows/build.yml",
 		"is_testflight: true",
+		"needs: [testflight-candidate, stable-release]",
+		"if: always() && needs.testflight-candidate.outputs.version != ''",
 	} {
 		if !strings.Contains(string(pollWorkflow), required) {
 			t.Fatalf("scheduled release polling is missing %q", required)
