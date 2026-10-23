@@ -3,14 +3,15 @@ name: Build Android
 on:
     push:
         branches: [main, feat/monorepo]
-    pull_request:
-        types: [opened, synchronize, reopened, ready_for_review]
     workflow_dispatch:
     workflow_call:
         outputs:
             module_filename:
                 description: "Filename of the LSPosed module APK"
                 value: ${{ jobs.build-module.outputs.module_filename }}
+            patched_filename:
+                description: "Filename of the LSPatch-patched Discord split APKs"
+                value: ${{ jobs.patch-discord.outputs.patched_filename }}
 
 permissions:
     contents: read
@@ -85,6 +86,8 @@ jobs:
         name: Build patched Discord APK
         needs: build-module
         runs-on: ubuntu-latest
+        outputs:
+            patched_filename: ${{ steps.patch.outputs.patched_filename }}
         env:
             LSPATCH_VERSION: v1.2
             LSPATCH_JAR: lspatch-v1.2-487-release.jar

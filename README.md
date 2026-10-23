@@ -44,7 +44,7 @@ Builds are in the [Releases](https://github.com/unbound-app/loader-ios/releases/
 
 **Not rooted:** install the pre-patched `Unbound-Discord-<version>.apks`, which is Discord with the module embedded through LSPatch. Use a split-APK installer such as SAI. It replaces an existing Play Store Discord because the signature differs.
 
-Both artifacts are produced by the [Build Android](https://github.com/unbound-app/loader-ios/actions/workflows/android.yml) workflow.
+Both are attached to the same [GitHub release](https://github.com/unbound-app/loader-ios/releases/latest) as the iOS `.deb`, IPA and simulator build. The [Build Unbound](https://github.com/unbound-app/loader-ios/actions/workflows/build.yml) workflow builds every platform in one run.
 
 ## Feature parity
 

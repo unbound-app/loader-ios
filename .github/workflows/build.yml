@@ -368,13 +368,19 @@ jobs:
         id: set-simulator-filename
         run: echo "filename=unbound-ios-simulator.zip" >> $GITHUB_OUTPUT
 
+  build-android:
+    if: inputs.only_app_repo != true && inputs.only_apt_repo != true
+    permissions:
+      contents: read
+    uses: ./.github/workflows/android.yml
+
   release-app:
     if: inputs.caller_workflow != 'ci' && inputs.release == true && inputs.only_app_repo != true && inputs.only_apt_repo != true
     runs-on: macos-15
     timeout-minutes: 15
     permissions:
       contents: write
-    needs: [build-tweak, build-ipa, build-simulator, resolve-source-ipa]
+    needs: [build-tweak, build-ipa, build-simulator, build-android, resolve-source-ipa]
 
     steps:
       - name: checkout code
@@ -415,6 +421,8 @@ jobs:
             ${{ needs.build-tweak.outputs.deb_filename }}
             ${{ needs.build-simulator.outputs.simulator_filename }}
             ${{ needs.build-ipa.outputs.ipa_filename }}
+            ${{ needs.build-android.outputs.module_filename }}
+            ${{ needs.build-android.outputs.patched_filename }}
           generate_release_notes: true
           prerelease: ${{ needs.resolve-source-ipa.outputs.is_testflight == 'true' }}
           fail_on_unmatched_files: true
