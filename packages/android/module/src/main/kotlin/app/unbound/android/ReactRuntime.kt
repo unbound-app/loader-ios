@@ -12,6 +12,7 @@ object ReactRuntime {
     private var queueConfigurationMethod: Method? = null
 
     fun attach(reactInstance: Any) {
+        ActivityTracker.install(Platform.application())
         val queued: List<(Long) -> Unit>
         synchronized(lock) {
             instance = WeakReference(reactInstance)

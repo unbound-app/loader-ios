@@ -26,6 +26,7 @@ class Unbound : XposedModule() {
     private fun initialize(param: PackageReadyParam) {
         val moduleInfo = moduleApplicationInfo
         val appInfo = param.applicationInfo
+        ActivityTracker.install(Platform.application())
         System.load(nativeLibraryPath(moduleInfo, appInfo))
 
         val documents = File(appInfo.dataDir, "files/Unbound").absolutePath

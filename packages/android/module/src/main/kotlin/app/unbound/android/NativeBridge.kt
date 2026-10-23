@@ -69,6 +69,12 @@ object NativeBridge {
     fun isMainThread(): Boolean = Looper.myLooper() == Looper.getMainLooper()
 
     @JvmStatic
+    fun lookupViews(queryJSON: String): String = NativeUI.lookup(queryJSON)
+
+    @JvmStatic
+    fun snapshotViews(queryJSON: String): String = NativeUI.snapshot(queryJSON)
+
+    @JvmStatic
     fun fetchText(url: String, timeoutMs: Int): String? = runCatching {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = timeoutMs

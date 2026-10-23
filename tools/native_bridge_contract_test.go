@@ -14,7 +14,7 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 		t.Fatal("could not locate test source")
 	}
 	root := filepath.Dir(filepath.Dir(filename))
-	header, err := os.ReadFile(filepath.Join(root, "packages", "ios", "headers", "NativePluginBridge.h"))
+	header, err := os.ReadFile(filepath.Join(root, "packages", "core", "include", "NativePluginVersion.h"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,10 +29,10 @@ func TestNativeBridgeContractIsSynchronized(t *testing.T) {
 	headerText := string(header)
 	sourceText := string(source)
 	typeText := string(types)
-	if !strings.Contains(headerText, `kNativePluginApiVersion = "1.0.0"`) {
+	if !strings.Contains(headerText, `kNativePluginApiVersion[] = "1.0.0"`) {
 		t.Fatal("native plugin API version is not v1")
 	}
-	if !strings.Contains(headerText, `kNativePluginAbiVersion = "1.0.0"`) {
+	if !strings.Contains(headerText, `kNativePluginAbiVersion[] = "1.0.0"`) {
 		t.Fatal("native plugin ABI version is not v1")
 	}
 	for _, capability := range []string{

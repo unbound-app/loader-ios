@@ -24,6 +24,8 @@ namespace unbound::android
         jmethodID scheduleRuntime    = nullptr;
         jmethodID scheduleMain       = nullptr;
         jmethodID isMainThread       = nullptr;
+        jmethodID lookupViews        = nullptr;
+        jmethodID snapshotViews      = nullptr;
         jmethodID fetchText          = nullptr;
         jmethodID download           = nullptr;
         jmethodID devServerURL       = nullptr;

@@ -76,6 +76,10 @@ android {
 
     sourceSets["main"].assets.srcDirs(layout.buildDirectory.dir("generated/unbound-assets"))
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -110,4 +114,6 @@ kotlin {
 
 dependencies {
     compileOnly("io.github.libxposed:api:102.0.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
 }

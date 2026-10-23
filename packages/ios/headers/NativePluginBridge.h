@@ -3,10 +3,9 @@
 #import <Foundation/Foundation.h>
 #import <jsi/jsi.h>
 
-namespace loader {
+#include "NativePluginVersion.h"
 
-constexpr const char *kNativePluginApiVersion = "1.0.0";
-constexpr const char *kNativePluginAbiVersion = "1.0.0";
+namespace loader {
 
 void registerNativePluginBridge(facebook::jsi::Runtime &runtime);
 void setNativePluginRuntimeExecutor(id instance);

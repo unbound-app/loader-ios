@@ -6,6 +6,7 @@
 #include "LoaderFiles.h"
 #include "LoaderLog.h"
 #include "NativePlatformBridge.h"
+#include "NativePluginBridge.h"
 
 #include <chrono>
 #include <thread>
@@ -312,6 +313,7 @@ namespace unbound::android
         provider->entitlementsAsPlist = []() { return std::string(); };
         provider->appSource           = text("appSource");
         loader::installNativePlatform(runtime, provider);
+        registerNativePluginBridge(runtime, callbacks_);
     }
 
     void AndroidLoader::onAddonsPrepared()
