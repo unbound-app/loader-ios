@@ -311,9 +311,9 @@ jobs:
           release_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION"
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$RELEASE_VERSION" --jq '.body // ""' > release-assets/generated-release-notes.md
           {
-            printf 'Discord client updated to version %s.\n' "$RELEASE_VERSION"
+            printf 'Loader version %s.\n' "$loader_version"
             if [ -s release-assets/generated-release-notes.md ]; then
-              printf '\nLoader changes since the previous release:\n\n'
+              printf '\nSemantic loader changes:\n\n'
               cat release-assets/generated-release-notes.md
             else
               printf '\nNo categorized loader changes are listed in the generated release notes.\n'

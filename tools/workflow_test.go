@@ -359,7 +359,7 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 		"--api-url \"$api_url\"",
 		"dpkg-deb -f \"$deb_path\" Version",
 		"gh api \"repos/$GITHUB_REPOSITORY/releases/tags/v$RELEASE_VERSION\"",
-		"Discord client updated to version %s",
+		"Loader version %s",
 		"--changelog-file release-assets/loader-changelog.md",
 		"go run ./tools publish-loader-release",
 		"--platform ios",
@@ -368,6 +368,41 @@ func TestStableReleasePublishesLoaderUpdateRecords(t *testing.T) {
 	} {
 		if !strings.Contains(contents, required) {
 			t.Fatalf("stable release workflow is missing loader update publishing detail %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"loader_version=$(go run ./tools loader-version",
+		"IOS_BUILD:",
+		"LOADER_VERSION:",
+		"resolve.outputs.loader_version",
+		"targets Discord",
+	} {
+		if strings.Contains(contents, forbidden) {
+			t.Fatalf("loader release version or changelog must not be tied to the Discord build: %q", forbidden)
+		}
+	}
+	for _, workflowName := range []string{"ios.yml", "android.yml"} {
+		workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", workflowName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(workflow), "loader_version") || strings.Contains(string(workflow), "LOADER_PACKAGE_VERSION") {
+			t.Fatalf("%s must read the loader package semver instead of a Discord-derived override", workflowName)
+		}
+	}
+	publisher, err := os.ReadFile(filepath.Join(root, "tools", "loader_release.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"/updates",
+		"query.Set(\"platform\", platform)",
+		"query.Set(\"version\", \"0.0.0\")",
+		"comparison == 0",
+		"older than published",
+	} {
+		if !strings.Contains(string(publisher), required) {
+			t.Fatalf("loader release semver gate is missing %q", required)
 		}
 	}
 	releaseConfig, err := os.ReadFile(filepath.Join(root, ".github", "release.yml"))

@@ -40,6 +40,12 @@ type loaderReleasePublishResponse struct {
 	URL      string `json:"url"`
 }
 
+type loaderLatestUpdateResponse struct {
+	Update *struct {
+		Version string `json:"version"`
+	} `json:"update"`
+}
+
 func runPublishLoaderRelease(args []string) error {
 	set := flag.NewFlagSet("publish-loader-release", flag.ContinueOnError)
 	endpoint := set.String("api-url", envOr("UNBOUND_API_URL", defaultLoaderReleaseEndpoint), "loader release publication endpoint")
@@ -68,29 +74,59 @@ func runPublishLoaderRelease(args []string) error {
 		changelog: *changelog,
 		client:    &http.Client{Timeout: 30 * time.Second},
 	}
-	if err := publishLoaderRelease(context.Background(), config); err != nil {
+	published, err := publishLoaderRelease(context.Background(), config)
+	if err != nil {
 		return err
+	}
+
+	if !published {
+		fmt.Printf("Skipped %s loader release %s because that semver is already published\n", config.platform, config.version)
+		return nil
 	}
 
 	fmt.Printf("Published %s loader release %s\n", config.platform, config.version)
 	return nil
 }
 
-func publishLoaderRelease(ctx context.Context, config loaderReleasePublishConfig) error {
+func publishLoaderRelease(ctx context.Context, config loaderReleasePublishConfig) (bool, error) {
 	if config.apiKey == "" {
-		return errors.New("UNBOUND_API_KEY is required")
+		return false, errors.New("UNBOUND_API_KEY is required")
 	}
 	if config.platform != "ios" && config.platform != "android" {
-		return errors.New("loader release platform must be ios or android")
+		return false, errors.New("loader release platform must be ios or android")
 	}
 	if config.version == "" {
-		return errors.New("loader release version is required")
+		return false, errors.New("loader release version is required")
+	}
+	if _, err := parseSemanticVersion(config.version); err != nil {
+		return false, fmt.Errorf("invalid loader release version: %w", err)
 	}
 	if err := validateHTTPURL(config.endpoint); err != nil {
-		return fmt.Errorf("invalid loader release API URL: %w", err)
+		return false, fmt.Errorf("invalid loader release API URL: %w", err)
 	}
 	if err := validateHTTPURL(config.url); err != nil {
-		return fmt.Errorf("invalid loader release asset URL: %w", err)
+		return false, fmt.Errorf("invalid loader release asset URL: %w", err)
+	}
+
+	client := config.client
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	latest, exists, err := latestLoaderReleaseVersion(ctx, config.endpoint, config.platform, client)
+	if err != nil {
+		return false, err
+	}
+	if exists {
+		comparison, err := compareSemanticVersions(config.version, latest)
+		if err != nil {
+			return false, fmt.Errorf("invalid published loader version %q: %w", latest, err)
+		}
+		if comparison == 0 {
+			return false, nil
+		}
+		if comparison < 0 {
+			return false, fmt.Errorf("loader release %s is older than published %s for %s", config.version, latest, config.platform)
+		}
 	}
 
 	requestBody := loaderReleasePublishRequest{
@@ -103,41 +139,81 @@ func publishLoaderRelease(ctx context.Context, config loaderReleasePublishConfig
 	}
 	encodedBody, err := json.Marshal(requestBody)
 	if err != nil {
-		return fmt.Errorf("encode loader release request: %w", err)
+		return false, fmt.Errorf("encode loader release request: %w", err)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, config.endpoint, bytes.NewReader(encodedBody))
 	if err != nil {
-		return fmt.Errorf("create loader release request: %w", err)
+		return false, fmt.Errorf("create loader release request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("User-Agent", "unbound-loader-release-publisher/1.0")
 	request.Header.Set("X-API-Key", config.apiKey)
 
-	client := config.client
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("publish %s loader release %s: %w", config.platform, config.version, err)
+		return false, fmt.Errorf("publish %s loader release %s: %w", config.platform, config.version, err)
 	}
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 16*1024))
 	if err != nil {
-		return fmt.Errorf("read loader release API response: %w", err)
+		return false, fmt.Errorf("read loader release API response: %w", err)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("loader release API returned HTTP %d", response.StatusCode)
+		return false, fmt.Errorf("loader release API returned HTTP %d", response.StatusCode)
 	}
 
 	var published loaderReleasePublishResponse
 	if err := json.Unmarshal(responseBody, &published); err != nil {
-		return fmt.Errorf("decode loader release API response: %w", err)
+		return false, fmt.Errorf("decode loader release API response: %w", err)
 	}
 	if published.Platform != config.platform || published.Version != config.version || published.URL != config.url {
-		return errors.New("loader release API response does not match the published release")
+		return false, errors.New("loader release API response does not match the published release")
 	}
-	return nil
+	return true, nil
+}
+
+func latestLoaderReleaseVersion(ctx context.Context, endpoint string, platform string, client *http.Client) (string, bool, error) {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return "", false, fmt.Errorf("parse loader release API URL: %w", err)
+	}
+	if !strings.HasSuffix(parsed.Path, "/releases") {
+		return "", false, errors.New("loader release API URL must end in /releases")
+	}
+	parsed.Path = strings.TrimSuffix(parsed.Path, "/releases") + "/updates"
+	parsed.RawPath = ""
+	query := parsed.Query()
+	query.Set("platform", platform)
+	query.Set("version", "0.0.0")
+	parsed.RawQuery = query.Encode()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return "", false, fmt.Errorf("create latest loader release request: %w", err)
+	}
+	request.Header.Set("User-Agent", "unbound-loader-release-publisher/1.0")
+	response, err := client.Do(request)
+	if err != nil {
+		return "", false, fmt.Errorf("read latest %s loader release: %w", platform, err)
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 16*1024))
+	if err != nil {
+		return "", false, fmt.Errorf("read latest loader release response: %w", err)
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return "", false, fmt.Errorf("latest loader release API returned HTTP %d", response.StatusCode)
+	}
+	var latest loaderLatestUpdateResponse
+	if err := json.Unmarshal(responseBody, &latest); err != nil {
+		return "", false, fmt.Errorf("decode latest loader release response: %w", err)
+	}
+	if latest.Update == nil {
+		return "", false, nil
+	}
+	if latest.Update.Version == "" {
+		return "", false, errors.New("latest loader release response omitted its version")
+	}
+	return latest.Update.Version, true, nil
 }
 
 func validateHTTPURL(value string) error {
