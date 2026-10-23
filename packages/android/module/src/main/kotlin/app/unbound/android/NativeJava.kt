@@ -108,6 +108,23 @@ object NativeJava {
         }
     }
 
+    fun loadHostClass(name: String): Class<*> = loadClass(name)
+
+    fun resolveType(name: String): Class<*> = primitive(name) ?: loadClass(name)
+
+    fun describe(value: Any?): String = serialize(value)
+
+    fun describeAll(values: List<Any?>): String =
+        values.joinToString(",", "[", "]") { serialize(it) }
+
+    fun decode(valueJSON: String): Any? = when (val argument = parseValue(JSONObject(valueJSON))) {
+        is Absent -> null
+        is Reference -> argument.target
+        is Scalar -> argument.value
+    }
+
+    fun coerceTo(type: Class<*>, value: Any?): Any? = coerce(type, value)
+
     private fun loadClass(name: String): Class<*> {
         require(name.isNotEmpty() && name.length <= MAX_CLASS_NAME_LENGTH) {
             "The Java class name is out of bounds"

@@ -3,6 +3,7 @@
 #include "LoaderLog.h"
 #include "LoaderPreload.h"
 #include "LoaderJSI.h"
+#include "NativePluginBridge.h"
 
 #include <android/log.h>
 #include <jni.h>
@@ -98,6 +99,17 @@ static void nativeDrainRuntimeWork(JNIEnv *, jclass, jlong runtimePointer)
 
     auto *runtime = reinterpret_cast<facebook::jsi::Runtime *>(runtimePointer);
     loader->drainRuntimeWork(*runtime);
+}
+
+static void nativeDispatchHookEvent(JNIEnv *env, jclass, jstring token, jstring payload)
+{
+    if (!token || !payload)
+    {
+        return;
+    }
+
+    unbound::android::dispatchHookEvent(unbound::android::toStdString(env, token),
+                                        unbound::android::toStdString(env, payload));
 }
 
 static void nativeDrainMainWork(JNIEnv *, jclass)
@@ -200,6 +212,20 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
         bridge, "javaSetField", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     gCallbacks.javaRelease =
         env->GetStaticMethodID(bridge, "javaRelease", "(Ljava/lang/String;)V");
+    gCallbacks.hooksInstall = env->GetStaticMethodID(
+        bridge, "hooksInstall",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/"
+        "String;");
+    gCallbacks.hooksRemove =
+        env->GetStaticMethodID(bridge, "hooksRemove", "(Ljava/lang/String;)V");
+    gCallbacks.hooksSetReturnValue = env->GetStaticMethodID(
+        bridge, "hooksSetReturnValue",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    gCallbacks.hooksRemoveReturnValue = env->GetStaticMethodID(
+        bridge, "hooksRemoveReturnValue",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    gCallbacks.hooksClearReturnValues =
+        env->GetStaticMethodID(bridge, "hooksClearReturnValues", "(Ljava/lang/String;)V");
     gCallbacks.fetchText =
         env->GetStaticMethodID(bridge, "fetchText", "(Ljava/lang/String;I)Ljava/lang/String;");
     gCallbacks.download = env->GetStaticMethodID(
@@ -218,7 +244,9 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
            gCallbacks.updateView && gCallbacks.unmountView && gCallbacks.javaGetClass &&
            gCallbacks.javaClassName && gCallbacks.javaConstruct && gCallbacks.javaRespondsTo &&
            gCallbacks.javaInvoke && gCallbacks.javaGetField && gCallbacks.javaSetField &&
-           gCallbacks.javaRelease && gCallbacks.fetchText &&
+           gCallbacks.javaRelease && gCallbacks.hooksInstall && gCallbacks.hooksRemove &&
+           gCallbacks.hooksSetReturnValue && gCallbacks.hooksRemoveReturnValue &&
+           gCallbacks.hooksClearReturnValues && gCallbacks.fetchText &&
            gCallbacks.download && gCallbacks.devServerURL && gCallbacks.availableFonts &&
            gCallbacks.alert && gCallbacks.onBundleExecuted;
 }
@@ -251,6 +279,8 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *)
          reinterpret_cast<void *>(nativeInstallMetroModuleCapture)},
         {"nativeDrainRuntimeWork", "(J)V", reinterpret_cast<void *>(nativeDrainRuntimeWork)},
         {"nativeDrainMainWork", "()V", reinterpret_cast<void *>(nativeDrainMainWork)},
+        {"nativeDispatchHookEvent", "(Ljava/lang/String;Ljava/lang/String;)V",
+         reinterpret_cast<void *>(nativeDispatchHookEvent)},
         {"nativeGetBoolean", "(Ljava/lang/String;Ljava/lang/String;Z)Z",
          reinterpret_cast<void *>(nativeGetBoolean)},
         {"nativeSetBoolean", "(Ljava/lang/String;Ljava/lang/String;Z)V",

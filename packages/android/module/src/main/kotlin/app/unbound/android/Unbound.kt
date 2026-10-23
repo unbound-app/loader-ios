@@ -29,6 +29,7 @@ class Unbound : XposedModule() {
         val appInfo = param.applicationInfo
         ActivityTracker.install(Platform.application())
         NativeJava.useClassLoader(param.classLoader)
+        installHookBridge()
         System.load(nativeLibraryPath(moduleInfo, appInfo))
 
         val documents = File(appInfo.dataDir, "files/Unbound").absolutePath
@@ -52,6 +53,36 @@ class Unbound : XposedModule() {
             .onFailure { Logger.error("themes", "Failed to apply the theme", it) }
         runCatching { Recovery.install(this) }
             .onFailure { Logger.error("default", "Failed to install the Safe Mode shortcut", it) }
+    }
+
+    private fun installHookBridge() {
+        NativeHooks.useInstaller(object : NativeHooks.Installer {
+            override fun install(
+                method: java.lang.reflect.Executable,
+                hook: NativeHooks.Hook,
+            ): NativeHooks.Removable {
+                val unhook = hook(method)
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        hook.intercept(object : NativeHooks.Chain {
+                            override fun target(): Any? = chain.thisObject
+                            override fun argument(index: Int): Any? = chain.getArg(index)
+                            override fun argumentCount(): Int = chain.args.size
+                            override fun proceed(): Any? = chain.proceed()
+                        })
+                    }
+
+                return object : NativeHooks.Removable {
+                    override fun remove() = unhook.unhook()
+                }
+            }
+        })
+
+        NativeHooks.useDispatcher(object : NativeHooks.Dispatcher {
+            override fun dispatch(token: String, payloadJSON: String) {
+                NativeBridge.nativeDispatchHookEvent(token, payloadJSON)
+            }
+        })
     }
 
     private fun hookActivityLifecycle() {

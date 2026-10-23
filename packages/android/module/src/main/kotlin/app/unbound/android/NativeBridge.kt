@@ -104,6 +104,35 @@ object NativeBridge {
     fun unmountView(handleJSON: String) = NativeUI.unmountView(handleJSON)
 
     @JvmStatic
+    external fun nativeDispatchHookEvent(token: String, payloadJSON: String)
+
+    @JvmStatic
+    fun hooksInstall(
+        className: String,
+        methodName: String,
+        parametersJSON: String,
+        optionsJSON: String,
+    ): String = NativeHooks.hook(className, methodName, parametersJSON, optionsJSON)
+
+    @JvmStatic
+    fun hooksRemove(tokenJSON: String) = NativeHooks.remove(tokenJSON)
+
+    @JvmStatic
+    fun hooksSetReturnValue(
+        tokenJSON: String,
+        selfJSON: String,
+        argumentsJSON: String,
+        valueJSON: String,
+    ) = NativeHooks.setReturnValue(tokenJSON, selfJSON, argumentsJSON, valueJSON)
+
+    @JvmStatic
+    fun hooksRemoveReturnValue(tokenJSON: String, selfJSON: String, argumentsJSON: String) =
+        NativeHooks.removeReturnValue(tokenJSON, selfJSON, argumentsJSON)
+
+    @JvmStatic
+    fun hooksClearReturnValues(tokenJSON: String) = NativeHooks.clearReturnValues(tokenJSON)
+
+    @JvmStatic
     fun javaGetClass(name: String): String = NativeJava.getClass(name)
 
     @JvmStatic

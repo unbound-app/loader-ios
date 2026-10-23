@@ -10,6 +10,9 @@
 #include <iterator>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <mutex>
 #include <vector>
 
 namespace unbound::android
@@ -729,6 +732,11 @@ namespace unbound::android
             throw std::runtime_error("The Android Java adapter is unavailable");
         }
 
+        if (arguments.empty() || arguments.size() > 4)
+        {
+            throw std::invalid_argument("unsupported Java adapter arity");
+        }
+
         std::vector<jstring> inputs;
         inputs.reserve(arguments.size());
         for (const std::string &argument : arguments)
@@ -750,6 +758,11 @@ namespace unbound::android
         {
             output = env->CallStaticObjectMethod(callbacks.bridgeClass, method, inputs[0],
                                                  inputs[1], inputs[2]);
+        }
+        else if (inputs.size() == 4)
+        {
+            output = env->CallStaticObjectMethod(callbacks.bridgeClass, method, inputs[0],
+                                                 inputs[1], inputs[2], inputs[3]);
         }
 
         std::string failure =
@@ -783,6 +796,11 @@ namespace unbound::android
             throw std::runtime_error("The Android Java adapter is unavailable");
         }
 
+        if (arguments.empty() || arguments.size() > 4)
+        {
+            throw std::invalid_argument("unsupported Java adapter arity");
+        }
+
         std::vector<jstring> inputs;
         inputs.reserve(arguments.size());
         for (const std::string &argument : arguments)
@@ -802,6 +820,11 @@ namespace unbound::android
         {
             env->CallStaticVoidMethod(callbacks.bridgeClass, method, inputs[0], inputs[1],
                                       inputs[2]);
+        }
+        else if (inputs.size() == 4)
+        {
+            env->CallStaticVoidMethod(callbacks.bridgeClass, method, inputs[0], inputs[1],
+                                      inputs[2], inputs[3]);
         }
 
         std::string failure =
@@ -937,6 +960,70 @@ namespace unbound::android
         return parseJavaResult(runtime, callJavaString(callbacks, method, arguments));
     }
 
+    static std::mutex                                            gHookMutex;
+    static std::unordered_map<std::string, std::shared_ptr<jsi::Function>> gHookListeners;
+
+    void dispatchHookEvent(const std::string &token, const std::string &payload)
+    {
+        std::shared_ptr<jsi::Function> listener;
+        {
+            std::lock_guard<std::mutex> lock(gHookMutex);
+            auto                        found = gHookListeners.find(token);
+            if (found == gHookListeners.end())
+            {
+                return;
+            }
+            listener = found->second;
+        }
+
+        loader::native::executeRuntimeAsynchronously(
+            [listener, payload](jsi::Runtime &runtime) {
+                nlohmann::json parsed = nlohmann::json::parse(payload, nullptr, false);
+                if (parsed.is_discarded())
+                {
+                    return;
+                }
+
+                listener->call(runtime, loader::toJSIValue(runtime, parsed));
+            });
+    }
+
+    static void rememberHookListener(jsi::Runtime &runtime, const std::string &token,
+                                     const jsi::Value &listener)
+    {
+        if (!listener.isObject() || !listener.asObject(runtime).isFunction(runtime))
+        {
+            return;
+        }
+
+        auto stored = std::make_shared<jsi::Function>(
+            listener.asObject(runtime).asFunction(runtime));
+        std::lock_guard<std::mutex> lock(gHookMutex);
+        gHookListeners[token] = std::move(stored);
+    }
+
+    static void forgetHookListener(const std::string &token)
+    {
+        std::lock_guard<std::mutex> lock(gHookMutex);
+        gHookListeners.erase(token);
+    }
+
+    static std::string hookTokenId(jsi::Runtime &runtime, const jsi::Value &value)
+    {
+        if (!value.isObject())
+        {
+            throw std::invalid_argument("a hook token is required");
+        }
+
+        jsi::Value id = value.asObject(runtime).getProperty(runtime, "id");
+        if (!id.isString())
+        {
+            throw std::invalid_argument("a hook token must contain a string id");
+        }
+
+        return id.getString(runtime).utf8(runtime);
+    }
+
     void registerNativePluginBridge(jsi::Runtime &runtime, const JavaCallbacks &callbacks)
     {
         jsi::Object bridge(runtime);
@@ -949,6 +1036,7 @@ namespace unbound::android
             "native.ui.lookup",       "native.ui.layout",      "native.ui.mount",
             "native.runtime.events",  "native.java.classes",   "native.java.invoke",
             "native.java.invokeAsync", "native.java.fields",   "native.java.construct",
+            "native.java.hooks",
         };
         jsi::Array capabilities(runtime, std::size(capabilityNames));
         for (size_t index = 0; index < std::size(capabilityNames); index++)
@@ -1191,6 +1279,123 @@ namespace unbound::android
                     });
                 }));
         bridge.setProperty(runtime, "java", std::move(java));
+
+        jsi::Object hooks(runtime);
+        hooks.setProperty(
+            runtime, "hook",
+            loader::native::makeFunction(
+                runtime, "hook", 5,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 3)
+                        {
+                            throw std::invalid_argument(
+                                "hooks require a class name, a method name and parameter types");
+                        }
+
+                        std::string parameters = serializeJavaArguments(rt, args, count, 2);
+                        std::string options = count > 3 && args[3].isObject()
+                                                  ? serializeJavaValue(rt, args[3])
+                                                  : std::string("{}");
+                        std::string token = callJavaString(
+                            callbacks, callbacks.hooksInstall,
+                            {javaName(rt, args[0]), javaName(rt, args[1]), parameters, options});
+
+                        nlohmann::json parsed = nlohmann::json::parse(token, nullptr, false);
+                        if (parsed.is_discarded() || !parsed.contains("id"))
+                        {
+                            throw std::runtime_error("The Android hook adapter returned no token");
+                        }
+
+                        if (count > 4)
+                        {
+                            rememberHookListener(rt, parsed["id"].get<std::string>(), args[4]);
+                        }
+
+                        return loader::toJSIValue(rt, parsed);
+                    });
+                }));
+        hooks.setProperty(
+            runtime, "remove",
+            loader::native::makeFunction(
+                runtime, "remove", 1,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            throw std::invalid_argument("removing a hook requires its token");
+                        }
+
+                        forgetHookListener(hookTokenId(rt, args[0]));
+                        callJavaVoid(callbacks, callbacks.hooksRemove,
+                                     {serializeJavaHandle(rt, args[0])});
+                        return jsi::Value::undefined();
+                    });
+                }));
+        hooks.setProperty(
+            runtime, "setReturnValue",
+            loader::native::makeFunction(
+                runtime, "setReturnValue", 4,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 4)
+                        {
+                            throw std::invalid_argument(
+                                "a cached hook result requires a token, a receiver, arguments and "
+                                "a value");
+                        }
+
+                        callJavaVoid(callbacks, callbacks.hooksSetReturnValue,
+                                     {serializeJavaHandle(rt, args[0]),
+                                      serializeJavaValue(rt, args[1]),
+                                      serializeJavaArguments(rt, args, count, 2),
+                                      serializeJavaValue(rt, args[3])});
+                        return jsi::Value::undefined();
+                    });
+                }));
+        hooks.setProperty(
+            runtime, "removeReturnValue",
+            loader::native::makeFunction(
+                runtime, "removeReturnValue", 3,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 3)
+                        {
+                            throw std::invalid_argument(
+                                "removing a cached hook result requires a token, a receiver and "
+                                "arguments");
+                        }
+
+                        callJavaVoid(callbacks, callbacks.hooksRemoveReturnValue,
+                                     {serializeJavaHandle(rt, args[0]),
+                                      serializeJavaValue(rt, args[1]),
+                                      serializeJavaArguments(rt, args, count, 2)});
+                        return jsi::Value::undefined();
+                    });
+                }));
+        hooks.setProperty(
+            runtime, "clearReturnValues",
+            loader::native::makeFunction(
+                runtime, "clearReturnValues", 1,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            throw std::invalid_argument(
+                                "clearing cached hook results requires a token");
+                        }
+
+                        callJavaVoid(callbacks, callbacks.hooksClearReturnValues,
+                                     {serializeJavaHandle(rt, args[0])});
+                        return jsi::Value::undefined();
+                    });
+                }));
+        bridge.setProperty(runtime, "hooks", std::move(hooks));
 
         runtime.global().setProperty(runtime, "NativePlugin", std::move(bridge));
     }

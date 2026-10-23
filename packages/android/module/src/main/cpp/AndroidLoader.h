@@ -39,6 +39,11 @@ namespace unbound::android
         jmethodID javaGetField       = nullptr;
         jmethodID javaSetField       = nullptr;
         jmethodID javaRelease        = nullptr;
+        jmethodID hooksInstall       = nullptr;
+        jmethodID hooksRemove        = nullptr;
+        jmethodID hooksSetReturnValue = nullptr;
+        jmethodID hooksRemoveReturnValue = nullptr;
+        jmethodID hooksClearReturnValues = nullptr;
         jmethodID fetchText          = nullptr;
         jmethodID download           = nullptr;
         jmethodID devServerURL       = nullptr;
