@@ -16,7 +16,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = Unbound
 REPO_ROOT := $(abspath $(THEOS_PROJECT_DIR)/../..)
 CORE_DIR := $(REPO_ROOT)/packages/core
-RESOURCES_DIR := $(REPO_ROOT)/packages/resources
+RESOURCES_DIR := $(REPO_ROOT)/packages/bootstrap
 ATTESTATION_ENABLED := $(if $(filter 1,$(DEBUG)),0,1)
 COMMON_FLAGS = -fobjc-arc -DATTESTATION_ENABLED=$(ATTESTATION_ENABLED) -DPACKAGE_VERSION='@"$(THEOS_PACKAGE_BASE_VERSION)"' -DCOMMIT_HASH='@"$(COMMIT_HASH)"' -DCOMMIT_SHORT_HASH='@"$(COMMIT_SHORT_HASH)"' -DCOMMIT_SUBJECT='@"$(COMMIT_SUBJECT)"' -DCOMMIT_BRANCH='@"$(COMMIT_BRANCH)"' -DBUILD_TIMESTAMP='@"$(BUILD_TIMESTAMP)"' -I$(THEOS_PROJECT_DIR)/headers -I$(CORE_DIR)/include -I$(CORE_DIR)/third_party/react
 LIBFFI_OUTPUT := $(THEOS_PROJECT_DIR)/.theos/libffi
@@ -46,10 +46,6 @@ endif
 
 before-all::
 	@$(MAKE) clean
-
-	@if [ ! -d "$(RESOURCES_DIR)" ] || [ -z "$$(ls -A "$(RESOURCES_DIR)" 2>/dev/null)" ]; then \
-		git submodule update --init --recursive || exit 1; \
-	fi
 
 	@$(TOOLS) libffi-build --root "$(REPO_ROOT)" --archive "$(LIBFFI_ARCHIVE)" --include "$(LIBFFI_HEADERS)"
 

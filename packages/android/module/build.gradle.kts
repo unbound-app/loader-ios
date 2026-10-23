@@ -96,7 +96,7 @@ android {
 }
 
 val copyBootstrapResources by tasks.registering(Copy::class) {
-    from(repositoryRoot.resolve("packages/resources")) {
+    from(repositoryRoot.resolve("packages/bootstrap")) {
         include("*.js")
     }
     into(layout.buildDirectory.dir("generated/unbound-assets/js"))

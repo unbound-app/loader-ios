@@ -12,7 +12,7 @@
 			"kind": "platform-runtime",
 			"dependencies": [
 				"loader-core",
-				"loader-resources",
+				"loader-bootstrap",
 				"libffi",
 				"open-in-discord",
 				"share-to-discord"
@@ -24,13 +24,13 @@
 			"kind": "platform-runtime",
 			"dependencies": [
 				"loader-core",
-				"loader-resources"
+				"loader-bootstrap"
 			]
 		},
 		{
-			"name": "loader-resources",
-			"path": "packages/resources",
-			"kind": "shared-resources"
+			"name": "loader-bootstrap",
+			"path": "packages/bootstrap",
+			"kind": "shared-bootstrap"
 		},
 		{
 			"name": "libffi",

@@ -43,7 +43,6 @@ namespace loader
                        BundleUpdater &updater);
 
         void prepare();
-        void injectModulesPatch(facebook::jsi::Runtime &runtime);
         void enqueueBundle();
 
         bool isBundleReady() const;

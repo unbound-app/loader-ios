@@ -116,16 +116,6 @@ namespace loader
         });
     }
 
-    void LoaderPipeline::injectModulesPatch(jsi::Runtime &runtime)
-    {
-        std::optional<std::string> modules = host_->resource("modules");
-        if (modules && !modules->empty())
-        {
-            log(LogLevel::Info, "default", "Executing modules patch...");
-            evaluateScript(runtime, *modules, "unbound:modules");
-        }
-    }
-
     void LoaderPipeline::injectPreBundle(jsi::Runtime &runtime)
     {
         host_->installNativeModules(runtime);
@@ -202,7 +192,6 @@ namespace loader
                 return;
             }
 
-            injectModulesPatch(runtime);
             if (!runtimeHasRequiredModules(runtime))
             {
                 if (attempt >= kMaximumReadinessAttempts)
@@ -226,7 +215,6 @@ namespace loader
             }
 
             global.setProperty(runtime, "__loaderBundleInstalled", jsi::Value(true));
-            injectModulesPatch(runtime);
             injectPreBundle(runtime);
 
             log(LogLevel::Info, "default", "Attempting to execute bundle...");

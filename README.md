@@ -13,7 +13,7 @@ Unbound Loader injects [Unbound](https://github.com/unbound-app/client) into Dis
 | `packages/core/`        | Shared C++20 core: settings store, addon scanning, preload script, bundle updater, load pipeline, `NativePlatform` JSI bridge, native plugin async runtime |
 | `packages/ios/`         | The Theos tweak (ElleKit, rootless) and its iOS app-extension submodules                             |
 | `packages/android/`     | The LSPosed module (modern libxposed API) and its NDK library, built with Gradle                     |
-| `packages/resources/`   | The shared bootstrap scripts (`modules.js`, `devtools.js`) used by both platforms                    |
+| `packages/bootstrap/`   | The shared optional React DevTools bundle (`devtools.js`) for both platforms                          |
 | `packages/libffi/`      | Pinned libffi source used to build the iOS static archive                                             |
 | `packages/apt-repo/`    | Debian package and SideStore-compatible iOS distribution feeds                                       |
 | `tools/`                | Go build, test, validation and packaging commands for the monorepo                                   |
@@ -55,7 +55,7 @@ Both Android packages are attached to the same [GitHub release](https://github.c
 
 ## Release pipeline
 
-The dkrypt scheduler dispatches an iOS build through `remote-deploy.yml`. For automatic non-TestFlight releases, the [Build](https://github.com/unbound-app/loader/actions/workflows/build.yml) workflow selects the latest stable Android version available from the current split-package tracker, asks dkrypt to decrypt that exact iOS version on demand, and builds both platforms in parallel. It verifies the Android APK's embedded version code and fails rather than publishing mismatched app versions. Explicit IPA sources are held to the same version check. TestFlight and non-release development builds retain their separate source behavior. A final job collects both platform outputs into one GitHub release; Android release builds require a persistent signing key so Obtainium updates retain the same signer.
+GitHub Actions polls the App Store, Android stable package source, and dkrypt's TestFlight catalog on a schedule. Stable releases select the latest Android version also resolvable from dkrypt, decrypt that exact iOS version on demand, and build both platforms in parallel. The pipeline validates the Android APK's embedded version code and fails rather than publishing mismatched app versions. TestFlight releases use the exact latest available TestFlight build and publish as prereleases; they do not attach a stable Android package as if it matched the beta. Android stable releases require a persistent signing key so Obtainium updates retain the same signer.
 
 The platform workflows can also be run independently for development builds. The shared release coordinator is the only workflow that publishes the combined iOS and Android release.
 
@@ -112,7 +112,7 @@ go run ./tools build all
 
 `go run ./tools doctor` checks host dependencies. Pass `--ipa /path/to/Discord.ipa` when building IPAs, and `--simulator` for the simulator archive. The tweak can also be built with `make package` inside `packages/ios/`. Packages are written to `packages/ios/packages/`.
 
-Repository-dispatched builds use the `DKRYPT_API_KEY` Actions secret to fetch decrypted IPAs. The remote-deploy workflow defaults to `https://ipa.dylib.dev`; set `DKRYPT_BASE_URL` to use another dkrypt deployment.
+Scheduled and manual builds use the `DKRYPT_API_KEY` Actions secret to fetch decrypted IPAs. The build workflow defaults to `https://ipa.dylib.dev`; set `DKRYPT_BASE_URL` to use another dkrypt deployment.
 
 </details>
 

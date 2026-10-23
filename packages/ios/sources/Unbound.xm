@@ -100,16 +100,6 @@ void CompleteBrowserLogin(NSString *token)
     applyPendingBrowserLogin();
 }
 
-static void injectModulesPatch(jsi::Runtime &runtime)
-{
-    NSData *modules = [Utilities getResource:@"modules" data:true ext:@"js"];
-    if (modules.length)
-    {
-        [Logger info:LOG_CATEGORY_DEFAULT format:@"Executing modules patch..."];
-        [JSI evaluate:modules tag:@"unbound:modules" runtime:runtime];
-    }
-}
-
 static void injectPreBundle(jsi::Runtime &runtime)
 {
     loader::setNativePluginRuntimeExecutor(gInstance);
@@ -259,7 +249,6 @@ static void executeBundle(id instance,
         {
             return;
         }
-        injectModulesPatch(runtime);
         if (!runtimeHasRequiredModules(runtime))
         {
             if (attempt >= 200)
@@ -283,7 +272,6 @@ static void executeBundle(id instance,
             return;
         }
         global.setProperty(runtime, "__loaderBundleInstalled", jsi::Value(true));
-        injectModulesPatch(runtime);
         injectPreBundle(runtime);
         [Logger info:LOG_CATEGORY_DEFAULT format:@"Attempting to execute bundle..."];
         BOOL didLoadBundle = [JSI evaluate:bundle tag:@"unbound" runtime:runtime];
@@ -361,7 +349,6 @@ static void enqueueBundle(id self)
     loader::setNativePluginFabricHost(self);
     id hostInstance = instance;
     prepareLoading(hostInstance);
-    injectModulesPatch(runtime);
     %orig;
     if ([hostInstance respondsToSelector:@selector(callFunctionOnBufferedRuntimeExecutor:)])
     {
@@ -410,10 +397,6 @@ static void loadJSBundle(id self, SEL selector, NSURL *sourceURL)
 
 static void loadScriptFromSource(id self, SEL selector, id source)
 {
-    [self callFunctionOnBufferedRuntimeExecutor:[](jsi::Runtime &runtime) {
-        injectModulesPatch(runtime);
-    }];
-
     if (gOriginalLoadScriptFromSource)
     {
         gOriginalLoadScriptFromSource(self, selector, source);
