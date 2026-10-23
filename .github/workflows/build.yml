@@ -296,7 +296,7 @@ jobs:
         if: needs.resolve-source.outputs.is_testflight != 'true'
         env:
           UNBOUND_API_KEY: ${{ secrets.UNBOUND_API_KEY }}
-          UNBOUND_API_URL: ${{ vars.UNBOUND_API_URL || 'https://unbound.rip/api/v1/loader/releases' }}
+          UNBOUND_API_URL: ${{ vars.UNBOUND_API_URL || 'https://unbound.rip' }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.resolve-source.outputs.release_version }}
           IOS_DEB_FILENAME: ${{ needs.ios.outputs.deb_filename }}
@@ -304,6 +304,7 @@ jobs:
         run: |
           set -euo pipefail
           : "${UNBOUND_API_KEY:?UNBOUND_API_KEY is required for stable release publication}"
+          api_url="${UNBOUND_API_URL%/}/api/v1/loader/releases"
           deb_path="release-assets/$IOS_DEB_FILENAME"
           loader_version=$(dpkg-deb -f "$deb_path" Version)
           release_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION"
@@ -318,13 +319,13 @@ jobs:
             fi
           } > release-assets/loader-changelog.md
           go run ./tools publish-loader-release \
-            --api-url "$UNBOUND_API_URL" \
+            --api-url "$api_url" \
             --platform ios \
             --version "$loader_version" \
             --url "$release_url/$IOS_DEB_FILENAME" \
             --changelog-file release-assets/loader-changelog.md
           go run ./tools publish-loader-release \
-            --api-url "$UNBOUND_API_URL" \
+            --api-url "$api_url" \
             --platform android \
             --version "$loader_version" \
             --url "$release_url/$ANDROID_MODULE_FILENAME" \
