@@ -9,6 +9,10 @@ run-name: >-
 on:
   push:
     branches: [main, feat/monorepo]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
+      - '.github/resources/**'
   workflow_dispatch:
     inputs:
       version:

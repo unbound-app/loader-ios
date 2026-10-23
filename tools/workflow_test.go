@@ -104,6 +104,30 @@ func TestBuildWorkflowAllowsManualIPAInput(t *testing.T) {
 	}
 }
 
+func TestBuildWorkflowSkipsDocumentationOnlyPushes(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate test source")
+	}
+	root := filepath.Dir(filepath.Dir(filename))
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "build.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(workflow)
+	pushStart := strings.Index(contents, "  push:\n")
+	dispatchStart := strings.Index(contents, "  workflow_dispatch:\n")
+	if pushStart < 0 || dispatchStart <= pushStart {
+		t.Fatal("push trigger could not be located")
+	}
+	pushTrigger := contents[pushStart:dispatchStart]
+	for _, ignoredPath := range []string{"paths-ignore:", "'**/*.md'", "'**/*.mdx'", "'.github/resources/**'"} {
+		if !strings.Contains(pushTrigger, ignoredPath) {
+			t.Fatalf("build workflow push trigger does not ignore %q", ignoredPath)
+		}
+	}
+}
+
 func TestBuildWorkflowCoordinatesBothPlatforms(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
