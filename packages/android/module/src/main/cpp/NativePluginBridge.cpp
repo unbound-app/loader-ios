@@ -654,13 +654,15 @@ namespace unbound::android
         bridge.setProperty(runtime, "abiVersion",
                            jsi::String::createFromUtf8(runtime, loader::kNativePluginAbiVersion));
 
-        jsi::Array capabilities(runtime, 3);
+        jsi::Array capabilities(runtime, 4);
         capabilities.setValueAtIndex(runtime, 0,
                                      jsi::String::createFromUtf8(runtime, "native.ui.lookup"));
         capabilities.setValueAtIndex(runtime, 1,
                                      jsi::String::createFromUtf8(runtime, "native.ui.layout"));
         capabilities.setValueAtIndex(runtime, 2,
                                      jsi::String::createFromUtf8(runtime, "native.ui.mount"));
+        capabilities.setValueAtIndex(runtime, 3,
+                                     jsi::String::createFromUtf8(runtime, "native.runtime.events"));
         bridge.setProperty(runtime, "capabilities", std::move(capabilities));
 
         jsi::Object ui(runtime);

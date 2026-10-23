@@ -6330,6 +6330,7 @@ void registerNativePluginBridge(Runtime &runtime)
         "native.ffi.call",
         "native.fabric.mount",
         "native.fabric.async",
+        "native.runtime.events",
         "native.debug.evaluations",
         "native.debug.environment",
     };
