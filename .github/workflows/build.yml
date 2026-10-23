@@ -250,9 +250,11 @@ jobs:
     if: inputs.release == true && inputs.only_app_repo != true && inputs.only_apt_repo != true
     needs: [resolve-source, ios, android, release]
     permissions:
-      contents: read
-      pages: write
+      contents: write
       id-token: write
+      attestations: write
+      artifact-metadata: write
+      pages: write
     uses: ./.github/workflows/ios.yml
     with:
       version: ${{ needs.resolve-source.outputs.release_version }}

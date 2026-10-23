@@ -129,8 +129,8 @@ jobs:
                   COMMIT_HASH=$(git rev-parse --short HEAD)
                   BUILD_TIME=$(date "+%Y-%m-%d %H:%M:%S")
 
-                  echo "hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
-                  echo "time=$BUILD_TIME" >> $GITHUB_OUTPUT
+                  echo "hash=$COMMIT_HASH" >> "$GITHUB_OUTPUT"
+                  echo "time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
 
             - name: Comment on current PR
               uses: thollander/actions-comment-pull-request@e4a76dd2b0a3c2027c3fd84147a67c22ee4c90fa
