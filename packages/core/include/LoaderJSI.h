@@ -25,5 +25,7 @@ namespace loader
                                         const std::string &tag);
     facebook::jsi::Value evaluateBytecode(facebook::jsi::Runtime &runtime, std::string bytecode,
                                           const std::string &tag);
+    bool installMetroModuleCapture(facebook::jsi::Runtime &runtime);
     bool runtimeHasRequiredModules(facebook::jsi::Runtime &runtime);
+    std::string runtimeModuleDiagnostics(facebook::jsi::Runtime &runtime);
 }

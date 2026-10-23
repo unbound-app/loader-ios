@@ -2,6 +2,7 @@
 #include "JniEnvironment.h"
 #include "LoaderLog.h"
 #include "LoaderPreload.h"
+#include "LoaderJSI.h"
 
 #include <android/log.h>
 #include <jni.h>
@@ -70,6 +71,21 @@ static void nativeOnJSBundleLoaded(JNIEnv *, jclass)
     {
         loader->onJSBundleLoaded();
     }
+}
+
+static jboolean nativeInstallMetroModuleCapture(JNIEnv *, jclass, jlong runtimePointer)
+{
+    if (runtimePointer == 0)
+    {
+        return JNI_FALSE;
+    }
+
+    auto *runtime = reinterpret_cast<facebook::jsi::Runtime *>(runtimePointer);
+    bool installed = loader::installMetroModuleCapture(*runtime);
+    loader::log(installed ? loader::LogLevel::Info : loader::LogLevel::Error, "runtime",
+                installed ? "Metro module capture installed before Discord bundle."
+                          : "Metro module capture could not be installed.");
+    return installed ? JNI_TRUE : JNI_FALSE;
 }
 
 static void nativeDrainRuntimeWork(JNIEnv *, jclass, jlong runtimePointer)
@@ -210,6 +226,8 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *)
          reinterpret_cast<void *>(nativeInitialize)},
         {"nativeOnLoadJSBundle", "()V", reinterpret_cast<void *>(nativeOnLoadJSBundle)},
         {"nativeOnJSBundleLoaded", "()V", reinterpret_cast<void *>(nativeOnJSBundleLoaded)},
+        {"nativeInstallMetroModuleCapture", "(J)Z",
+         reinterpret_cast<void *>(nativeInstallMetroModuleCapture)},
         {"nativeDrainRuntimeWork", "(J)V", reinterpret_cast<void *>(nativeDrainRuntimeWork)},
         {"nativeDrainMainWork", "()V", reinterpret_cast<void *>(nativeDrainMainWork)},
         {"nativeGetBoolean", "(Ljava/lang/String;Ljava/lang/String;Z)Z",

@@ -31,6 +31,9 @@ object NativeBridge {
     external fun nativeOnJSBundleLoaded()
 
     @JvmStatic
+    external fun nativeInstallMetroModuleCapture(runtimePointer: Long): Boolean
+
+    @JvmStatic
     external fun nativeDrainRuntimeWork(runtimePointer: Long)
 
     @JvmStatic
@@ -57,6 +60,15 @@ object NativeBridge {
     @JvmStatic
     fun scheduleRuntimeWork() {
         ReactRuntime.post { runtimePointer -> nativeDrainRuntimeWork(runtimePointer) }
+    }
+
+    @JvmStatic
+    fun installMetroModuleCaptureBeforeBundle() {
+        ReactRuntime.runBeforeBundle { runtimePointer ->
+            if (!nativeInstallMetroModuleCapture(runtimePointer)) {
+                Logger.error("runtime", "Metro module capture could not be installed")
+            }
+        }
     }
 
     @JvmStatic

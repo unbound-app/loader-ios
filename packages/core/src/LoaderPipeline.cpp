@@ -130,9 +130,6 @@ namespace loader
             }
         }
 
-        evaluateScript(runtime, "globalThis.modules \x3f\x3f= globalThis.__c?.();",
-                       "unbound:modules-bootstrap");
-
         log(LogLevel::Info, "default", "Pre-loading settings, plugins, fonts and themes...");
         evaluateScript(runtime, buildPreloadScript(host_->preloadPayload()), "unbound:preload");
     }
@@ -194,6 +191,12 @@ namespace loader
 
             if (!runtimeHasRequiredModules(runtime))
             {
+                if (attempt == 0)
+                {
+                    log(LogLevel::Info, "default",
+                        "React Native module readiness state: " + runtimeModuleDiagnostics(runtime));
+                }
+
                 if (attempt >= kMaximumReadinessAttempts)
                 {
                     log(LogLevel::Error, "default",

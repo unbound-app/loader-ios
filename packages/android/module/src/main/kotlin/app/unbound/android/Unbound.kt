@@ -81,10 +81,19 @@ class Unbound : XposedModule() {
         hook(loadJSBundle)
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
+                Logger.info(
+                    "runtime",
+                    "Loading ReactInstance ${System.identityHashCode(chain.thisObject)}",
+                )
                 ReactRuntime.attach(chain.thisObject)
                 NativeBridge.nativeOnLoadJSBundle()
+                NativeBridge.installMetroModuleCaptureBeforeBundle()
                 val result = chain.proceed()
                 NativeBridge.nativeOnJSBundleLoaded()
+                Logger.info(
+                    "runtime",
+                    "ReactInstance ${System.identityHashCode(chain.thisObject)} loadJSBundle returned",
+                )
                 result
             }
 

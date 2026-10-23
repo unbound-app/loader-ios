@@ -7,13 +7,29 @@ namespace loader
 {
     namespace jsi = facebook::jsi;
 
+    static const char *const kMetroModuleCaptureSource =
+        "(()=>{if(globalThis.__unboundModuleCaptureInstalled)return true;let define=globalThis.__d;"
+        "Object.defineProperty(globalThis,'__d',{configurable:true,get(){if(!globalThis.modules&&"
+        "typeof globalThis.__c==='function'){const modules=globalThis.__c();if(modules&&typeof "
+        "modules.values==='function')globalThis.modules=modules;}return define;},set(value){define="
+        "value;}});globalThis.__unboundModuleCaptureInstalled=true;return true;})()";
+
     static const char *const kRuntimeReadinessSource =
-        "(()=>{const map=globalThis.modules??globalThis.__c?.();if(!globalThis.modules&&map)"
-        "globalThis.modules=map;if(!map||typeof map.values!=='function')return false;let rn=false;"
+        "(()=>{const map=globalThis.modules;if(!map||typeof map.values!=='function')"
+        "return false;let rn=false;"
         "let react=false;for(const m of map.values()){const e=m?.publicModule?.exports??m?.exports??m;"
         "const values=[e,e?.default,e?.default?.default];for(const value of values){if(!value)"
         "continue;if(!rn&&value.AppState&&value.NativeModules)rn=true;if(!react&&typeof "
         "value.createElement==='function')react=true;}}return rn&&react;})()";
+
+    static const char *const kRuntimeDiagnosticsSource =
+        "(()=>{const map=globalThis.modules;const names=['modules','__c','__d','__r','React',"
+        "'NativeModules','__fbBatchedBridge'];const globals={};for(const name of names)"
+        "globals[name]=typeof globalThis[name];return JSON.stringify({globals,"
+        "moduleMap:!!map&&typeof map.values==='function',moduleCount:map?.size??null,"
+        "defineName:globalThis.__d?.name??null,"
+        "requireName:globalThis.__r?.name??null,registryKeys:map&&typeof map.keys==='function'?"
+        "[...map.keys()].slice(0,10):[]})})()";
 
     OwnedBuffer::OwnedBuffer(std::string data) : data_(std::move(data)) {}
 
@@ -112,9 +128,23 @@ namespace loader
         return runtime.evaluatePreparedJavaScript(prepared);
     }
 
+    bool installMetroModuleCapture(jsi::Runtime &runtime)
+    {
+        jsi::Value result = evaluateSource(runtime, kMetroModuleCaptureSource,
+                                           "unbound:metro-module-capture");
+        return result.isBool() && result.getBool();
+    }
+
     bool runtimeHasRequiredModules(jsi::Runtime &runtime)
     {
         jsi::Value result = evaluateSource(runtime, kRuntimeReadinessSource, "unbound:runtime-readiness");
         return result.isBool() && result.getBool();
+    }
+
+    std::string runtimeModuleDiagnostics(jsi::Runtime &runtime)
+    {
+        jsi::Value result = evaluateSource(runtime, kRuntimeDiagnosticsSource,
+                                           "unbound:runtime-diagnostics");
+        return result.isString() ? result.getString(runtime).utf8(runtime) : "unavailable";
     }
 }

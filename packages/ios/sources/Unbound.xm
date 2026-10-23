@@ -3,6 +3,7 @@
 #import "Discord.h"
 #import "HotReload.h"
 #import "JSI.h"
+#import "LoaderJSI.h"
 #import "LoaderShared.h"
 #import "NativePluginBridge.h"
 #import "RCTHost.h"
@@ -116,10 +117,6 @@ static void injectPreBundle(jsi::Runtime &runtime)
         }
     }
 
-    NSData *moduleBootstrap = [@"globalThis.modules \x3f\x3f= globalThis.__c?.();"
-        dataUsingEncoding:NSUTF8StringEncoding];
-    [JSI evaluate:moduleBootstrap tag:@"unbound:modules-bootstrap" runtime:runtime];
-
     {
         NSData *preloadData = [LoaderShared buildPreloadScriptData];
         [Logger info:LOG_CATEGORY_DEFAULT
@@ -223,14 +220,6 @@ static void prefetchBundle(void)
     });
 }
 
-static BOOL runtimeHasRequiredModules(jsi::Runtime &runtime)
-{
-    NSString *source =
-        @"(()=>{const map=globalThis.modules??globalThis.__c?.();if(!globalThis.modules&&map)globalThis.modules=map;if(!map||typeof map.values!=='function')return false;let rn=false;let react=false;for(const m of map.values()){const e=m?.publicModule?.exports??m?.exports??m;const values=[e,e?.default,e?.default?.default];for(const value of values){if(!value)continue;if(!rn&&value.AppState&&value.NativeModules)rn=true;if(!react&&typeof value.createElement==='function')react=true;}}return rn&&react;})()";
-    jsi::Value result = [JSI evaluateSource:source tag:@"unbound:runtime-readiness" runtime:runtime];
-    return [JSI toBool:result runtime:runtime fallback:NO];
-}
-
 static void executeBundle(id instance,
                                  NSData *bundle,
                                  NSString *bundlePath,
@@ -249,7 +238,7 @@ static void executeBundle(id instance,
         {
             return;
         }
-        if (!runtimeHasRequiredModules(runtime))
+        if (!loader::runtimeHasRequiredModules(runtime))
         {
             if (attempt >= 200)
             {
@@ -257,6 +246,13 @@ static void executeBundle(id instance,
                        format:@"React Native modules were not ready after %lu attempts.",
                               (unsigned long)attempt];
                 return;
+            }
+
+            if (attempt == 0)
+            {
+                std::string diagnostic = loader::runtimeModuleDiagnostics(runtime);
+                [Logger info:LOG_CATEGORY_DEFAULT
+                      format:@"React Native module readiness state: %s.", diagnostic.c_str()];
             }
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC),
@@ -346,6 +342,10 @@ static void enqueueBundle(id self)
 {
     gRuntime = &runtime;
     [Logger info:LOG_CATEGORY_DEFAULT format:@"RCTHost didInitializeRuntime reached."];
+    if (!loader::installMetroModuleCapture(runtime))
+    {
+        [Logger error:LOG_CATEGORY_DEFAULT format:@"Metro module capture could not be installed."];
+    }
     loader::setNativePluginFabricHost(self);
     id hostInstance = instance;
     prepareLoading(hostInstance);
