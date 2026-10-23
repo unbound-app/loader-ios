@@ -49,9 +49,9 @@ Builds are in the [Releases](https://github.com/unbound-app/loader/releases/late
 
 [Add the Unbound LSPosed module to Obtainium](obtainium://app/%7B%22id%22%3A%22app.unbound.android%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Funbound-app%2Floader%22%2C%22author%22%3A%22unbound-app%22%2C%22name%22%3A%22Unbound%20Loader%20(LSPosed)%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eapp%5C%5C%5C%5C.unbound%5C%5C%5C%5C.android%5C%5C%5C%5C.lsposed%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D) to receive updates from GitHub Releases. This tracks the standalone module APK; it does not update the patched Discord split package. The release workflow requires a persistent Android signing key so installed copies can be updated safely.
 
-**Not rooted:** install the pre-patched `Unbound-Discord-<version>.apks`, which is Discord with the module embedded through LSPatch. Use a split-APK installer such as SAI. It replaces an existing Play Store Discord because the signature differs.
+**Not rooted:** install the pre-patched `Unbound.apks`, which is Discord with the module embedded through LSPatch. It contains Android split APKs, so use a split-APK installer such as SAI. It replaces an existing Play Store Discord because the signature differs.
 
-Both Android packages are attached to the same [GitHub release](https://github.com/unbound-app/loader/releases/latest) as the iOS Debian package, `Unbound.ipa` and iOS simulator archive. The release includes `app.unbound.android.lsposed.apk` for rooted installs and `Unbound-Discord-<version>.apks` for non-rooted installs.
+Both Android packages are attached to the same [GitHub release](https://github.com/unbound-app/loader/releases/latest) as the iOS Debian package, `Unbound.ipa` and iOS simulator archive. The release includes `app.unbound.android.lsposed.apk` for rooted installs and `Unbound.apks` for non-rooted installs.
 
 ## Release pipeline
 

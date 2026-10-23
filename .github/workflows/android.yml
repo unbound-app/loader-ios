@@ -188,7 +188,7 @@ jobs:
                   set -euo pipefail
                   mkdir patched
                   java -jar "$LSPATCH_JAR" discord/*.apk -m module/*.apk -l 2 -o patched -f
-                  name="Unbound-Discord-${{ steps.discord.outputs.version }}.apks"
+                  name="Unbound.apks"
                   (cd patched && zip -q "../$name" ./*.apk)
                   echo "patched_filename=$name" >> "$GITHUB_OUTPUT"
 
