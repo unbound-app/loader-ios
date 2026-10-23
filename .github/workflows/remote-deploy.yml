@@ -15,7 +15,7 @@ jobs:
   trigger-deploy:
     uses: ./.github/workflows/build.yml
     with:
-      ipa_url: ${{ github.event.client_payload.ipa_url }}
+      ipa_url: ${{ github.event.client_payload.is_testflight == true && github.event.client_payload.ipa_url || '' }}
       is_testflight: ${{ github.event.client_payload.is_testflight }}
       authenticated_source: true
       release: true

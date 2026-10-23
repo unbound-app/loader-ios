@@ -4,9 +4,14 @@ on:
     workflow_dispatch:
         inputs:
             ios_version:
-                description: "iOS Discord version to match when available"
+                description: "Discord app version to match"
                 required: false
                 type: string
+            require_matching_version:
+                description: "Fail instead of using a different Android version"
+                required: false
+                default: false
+                type: boolean
             release:
                 description: "Require persistent Android release signing"
                 required: false
@@ -15,9 +20,14 @@ on:
     workflow_call:
         inputs:
             ios_version:
-                description: "iOS Discord version to match when available"
+                description: "Discord app version to match"
                 required: false
                 type: string
+            require_matching_version:
+                description: "Fail instead of using a different Android version"
+                required: false
+                default: false
+                type: boolean
             release:
                 description: "Require persistent Android release signing"
                 required: false
@@ -133,6 +143,7 @@ jobs:
             DISCORD_CERT_SHA256: 3c39d23cf9367849a5c699395647fe0e5bfea5a1f1f40d8c717ddc70f8bfa113
             DISCORD_TRACKER: https://tracker.vendetta.rocks/tracker
             IOS_VERSION: ${{ inputs.ios_version }}
+            REQUIRE_MATCHING_VERSION: ${{ inputs.require_matching_version }}
         steps:
             - name: Setup Java
               uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
@@ -162,9 +173,15 @@ jobs:
                   version=""
                   if [[ "$IOS_VERSION" =~ ^([0-9]+)\.([0-9]+)(\.|_|$) ]]; then
                       candidate="${BASH_REMATCH[1]}$(printf '%03d' "${BASH_REMATCH[2]}")"
-                      if curl -fsSL --range 0-0 --max-time 15 -o /dev/null "$DISCORD_TRACKER/download/$candidate/base"; then
+                      if [ "$REQUIRE_MATCHING_VERSION" = true ]; then
+                          version="$candidate"
+                      elif curl -fsSL --range 0-0 --max-time 15 -o /dev/null "$DISCORD_TRACKER/download/$candidate/base"; then
                           version="$candidate"
                       fi
+                  fi
+                  if [ "$REQUIRE_MATCHING_VERSION" = true ] && [ -z "$version" ]; then
+                      echo "::error::Cannot derive an Android version matching iOS version $IOS_VERSION"
+                      exit 1
                   fi
                   version="${version:-$latest_version}"
                   mkdir discord
@@ -172,6 +189,11 @@ jobs:
                       curl -fsSL -o "discord/$split.apk" "$DISCORD_TRACKER/download/$version/$split"
                   done
                   build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+                  apk_version_code=$("$build_tools/aapt" dump badging discord/base.apk | sed -n "s/^package: name='com.discord' versionCode='\\([^']*\\)'.*/\\1/p")
+                  if [ -z "$apk_version_code" ] || [ "$apk_version_code" != "$version" ]; then
+                      echo "::error::Android source version code $apk_version_code does not match selected version code $version"
+                      exit 1
+                  fi
                   apksigner="$build_tools/apksigner"
                   for apk in discord/*.apk; do
                       certificates=$("$apksigner" verify --print-certs "$apk")

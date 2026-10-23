@@ -55,7 +55,7 @@ Both Android packages are attached to the same [GitHub release](https://github.c
 
 ## Release pipeline
 
-The dkrypt scheduler dispatches an iOS build through `remote-deploy.yml`. The [Build](https://github.com/unbound-app/loader/actions/workflows/build.yml) workflow resolves the source Discord version, then runs the iOS and Android workflows in parallel. Android selects the matching Discord version when it is available and otherwise uses the latest stable Android release. A final job collects both platform outputs into one GitHub release; Android release builds require a persistent signing key so Obtainium updates retain the same signer.
+The dkrypt scheduler dispatches an iOS build through `remote-deploy.yml`. For automatic non-TestFlight releases, the [Build](https://github.com/unbound-app/loader/actions/workflows/build.yml) workflow selects the latest stable Android version available from the current split-package tracker, asks dkrypt to decrypt that exact iOS version on demand, and builds both platforms in parallel. It verifies the Android APK's embedded version code and fails rather than publishing mismatched app versions. Explicit IPA sources are held to the same version check. TestFlight and non-release development builds retain their separate source behavior. A final job collects both platform outputs into one GitHub release; Android release builds require a persistent signing key so Obtainium updates retain the same signer.
 
 The platform workflows can also be run independently for development builds. The shared release coordinator is the only workflow that publishes the combined iOS and Android release.
 

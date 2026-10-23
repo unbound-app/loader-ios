@@ -121,6 +121,11 @@ func TestBuildWorkflowCoordinatesBothPlatforms(t *testing.T) {
 		"needs: resolve-source",
 		"needs: [resolve-source, ios, android]",
 		"ios_version: ${{ needs.resolve-source.outputs.version }}",
+		"require_matching_version: ${{ inputs.release == true && inputs.is_testflight != true }}",
+		"version: ${{ needs.resolve-source.outputs.version || inputs.version }}",
+		"android_code=$(curl -fsSL \"$INPUT_ANDROID_TRACKER/index\" | jq -er '.latest.stable | tonumber')",
+		"go run ./tools discord-version --android-code \"$android_code\"",
+		"The iOS IPA is $version but the requested matching release is $requested_version",
 		"secrets: inherit",
 		"value: ${{ jobs.android.outputs.module_filename }}",
 		"value: ${{ jobs.android.outputs.patched_filename }}",
@@ -129,6 +134,18 @@ func TestBuildWorkflowCoordinatesBothPlatforms(t *testing.T) {
 	} {
 		if !strings.Contains(contents, required) {
 			t.Fatalf("build workflow is missing platform orchestration detail %q", required)
+		}
+	}
+	iosWorkflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ios.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"INPUT_RELEASE: ${{ inputs.release }}",
+		"The source IPA is $source_version but the selected combined release is $INPUT_VERSION",
+	} {
+		if !strings.Contains(string(iosWorkflow), required) {
+			t.Fatalf("iOS workflow is missing exact-version validation %q", required)
 		}
 	}
 	androidStart := strings.Index(contents, "  android:\n")
@@ -152,7 +169,10 @@ func TestBuildWorkflowCoordinatesBothPlatforms(t *testing.T) {
 		`if [[ "$IOS_VERSION" =~ ^([0-9]+)\.([0-9]+)(\.|_|$) ]]; then`,
 		"candidate=\"${BASH_REMATCH[1]}$(printf '%03d' \"${BASH_REMATCH[2]}\")\"",
 		"version=\"${version:-$latest_version}\"",
-		"Unbound-Discord-${{ steps.discord.outputs.version }}.apks",
+		"REQUIRE_MATCHING_VERSION: ${{ inputs.require_matching_version }}",
+		`apk_version_code=$("$build_tools/aapt" dump badging discord/base.apk`,
+		`"$apk_version_code" != "$version"`,
+		"name=\"Unbound.apks\"",
 	} {
 		if !strings.Contains(string(android), required) {
 			t.Fatalf("Android workflow is missing matching version or artifact detail %q", required)
@@ -162,8 +182,13 @@ func TestBuildWorkflowCoordinatesBothPlatforms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(remoteDeploy), "release: true") {
-		t.Fatal("dkrypt-scheduled builds must publish the combined iOS and Android release")
+	for _, required := range []string{
+		"release: true",
+		"ipa_url: ${{ github.event.client_payload.is_testflight == true && github.event.client_payload.ipa_url || '' }}",
+	} {
+		if !strings.Contains(string(remoteDeploy), required) {
+			t.Fatalf("dkrypt-scheduled builds are missing matched source behavior %q", required)
+		}
 	}
 }
 

@@ -199,9 +199,11 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_IPA_URL: ${{ inputs.ipa_url }}
           INPUT_IS_TESTFLIGHT: ${{ inputs.is_testflight }}
+          INPUT_RELEASE: ${{ inputs.release }}
           INPUT_AUTHENTICATED_SOURCE: ${{ inputs.authenticated_source }}
           INPUT_DKRYPT_BASE_URL: ${{ inputs.dkrypt_base_url }}
         run: |
+          set -euo pipefail
           if [ -z "$INPUT_IPA_URL" ]; then
             go run ./tools fetch \
               --base-url "$INPUT_DKRYPT_BASE_URL" \
@@ -215,6 +217,16 @@ jobs:
             if [ "$INPUT_AUTHENTICATED_SOURCE" = true ]; then fetch_args+=(--authenticated-source); fi
             fetch_args+=(--channel "$channel" --version "$INPUT_VERSION" --output discord.ipa)
             go run ./tools fetch "${fetch_args[@]}"
+          fi
+          if [ "$INPUT_RELEASE" = true ] && [ "$INPUT_IS_TESTFLIGHT" != true ] && [ -n "$INPUT_VERSION" ]; then
+            ipa_info=$(go run ./tools ipa-info --ipa discord.ipa)
+            source_version=$(jq -r '.version' <<< "$ipa_info")
+            expected_android_code=$(go run ./tools discord-version --version "$INPUT_VERSION")
+            source_android_code=$(go run ./tools discord-version --version "$source_version")
+            if [ "$source_android_code" != "$expected_android_code" ]; then
+              echo "::error::The source IPA is $source_version but the selected combined release is $INPUT_VERSION"
+              exit 1
+            fi
           fi
 
       - name: upload source ipa
