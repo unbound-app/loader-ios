@@ -124,14 +124,13 @@ Scheduled and manual builds use the `DKRYPT_API_KEY` Actions secret to fetch dec
 Requires JDK 17+, the Android SDK with platform 36, NDK `27.3.13750724` and CMake `3.22.1`.
 
 ```bash
-cd packages/android
-./gradlew :module:assembleRelease
+./packages/android/gradlew -p packages/android :module:assembleRelease
 ```
 
 The module APK is written to `packages/android/module/build/outputs/apk/release/`. To produce a non-root build, embed it into Discord's split APKs with [LSPatch](https://github.com/JingMatrix/LSPatch):
 
 ```bash
-java -jar lspatch.jar base.apk config.*.apk -m module-release.apk -l 2 -o patched
+java -jar lspatch.jar base.apk config.*.apk -m packages/android/module/build/outputs/apk/release/module-release.apk -l 2 -o patched
 ```
 
 </details>
@@ -155,7 +154,7 @@ The rooted Android profile is tracked at `packages/android/dev-environment/avd.j
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 sdkmanager --licenses
-sdkmanager --install "platform-tools" "emulator" "cmdline-tools;latest" "system-images;android-35;google_apis;arm64-v8a"
+sdkmanager --install "platform-tools" "emulator" "cmdline-tools;latest" "platforms;android-36" "ndk;27.3.13750724" "cmake;3.22.1" "system-images;android-35;google_apis;arm64-v8a"
 ```
 
 Then create or inspect the AVD:
