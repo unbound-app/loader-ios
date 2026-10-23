@@ -180,16 +180,22 @@ func discoverStableCandidate(ctx context.Context, config releasePollConfig, itun
 	if err != nil {
 		return "", err
 	}
-	candidateCode := androidCode
 	if androidCode > iosCode {
-		candidateCode = iosCode
+		fmt.Printf("::notice title=release poll::Android stable %d is newer than iOS stable %s; no common release is available\n", androidCode, itunesVersion)
+		return "", nil
 	}
+	candidateCode := androidCode
 	version, err := discordVersionForAndroidCode(candidateCode)
 	if err != nil {
 		return "", err
 	}
-	if err := verifyAndroidBasePackage(ctx, config.httpClient, config.androidTrackerURL, candidateCode); err != nil {
+	available, err := verifyAndroidBasePackage(ctx, config.httpClient, config.androidTrackerURL, candidateCode)
+	if err != nil {
 		return "", err
+	}
+	if !available {
+		fmt.Printf("::notice title=release poll::Android version %d is not downloadable; no common release is available\n", candidateCode)
+		return "", nil
 	}
 	fmt.Printf("::notice title=release poll::iTunes stable %s, Android stable %d, selecting common version %s\n", itunesVersion, androidCode, version)
 	return version, nil
@@ -233,27 +239,30 @@ func parseAndroidCode(value json.RawMessage) (int, error) {
 	return code, nil
 }
 
-func verifyAndroidBasePackage(ctx context.Context, client *http.Client, trackerURL string, code int) error {
+func verifyAndroidBasePackage(ctx context.Context, client *http.Client, trackerURL string, code int) (bool, error) {
 	endpoint := fmt.Sprintf("%s/download/%d/base", strings.TrimRight(trackerURL, "/"), code)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	request.Header.Set("Range", "bytes=0-0")
 	request.Header.Set("User-Agent", releasePollUserAgent)
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("check Android version %d availability: %w", code, err)
+		return false, fmt.Errorf("check Android version %d availability: %w", code, err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
 	if response.StatusCode != http.StatusPartialContent && response.StatusCode != http.StatusOK {
-		return fmt.Errorf("Android version %d is unavailable from the tracker (HTTP %d)", code, response.StatusCode)
+		return false, fmt.Errorf("Android version %d is unavailable from the tracker (HTTP %d)", code, response.StatusCode)
 	}
 	_, err = io.Copy(io.Discard, io.LimitReader(response.Body, 1))
 	if err != nil {
-		return fmt.Errorf("read Android version %d availability response: %w", code, err)
+		return false, fmt.Errorf("read Android version %d availability response: %w", code, err)
 	}
-	return nil
+	return true, nil
 }
 
 func discoverTestflightCandidate(ctx context.Context, config releasePollConfig, appID int) (string, error) {
