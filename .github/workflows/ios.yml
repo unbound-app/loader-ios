@@ -53,7 +53,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+  group: ios-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
