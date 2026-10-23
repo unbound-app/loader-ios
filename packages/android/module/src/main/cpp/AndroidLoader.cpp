@@ -113,7 +113,6 @@ namespace unbound::android
     {
         settings_.load();
         pipeline_->prepare();
-        runOnRuntime([this](jsi::Runtime &runtime) { pipeline_->injectModulesPatch(runtime); });
     }
 
     void AndroidLoader::onJSBundleLoaded()
@@ -233,10 +232,6 @@ namespace unbound::android
 
     std::optional<std::string> AndroidLoader::resource(const std::string &name)
     {
-        if (name == "modules")
-        {
-            return configuration_.modulesScript;
-        }
         if (name == "devtools")
         {
             return configuration_.devtoolsScript;

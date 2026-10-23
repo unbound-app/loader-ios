@@ -28,6 +28,9 @@ namespace unbound::android
         jmethodID snapshotViews      = nullptr;
         jmethodID measureView        = nullptr;
         jmethodID setViewFrame       = nullptr;
+        jmethodID mountView          = nullptr;
+        jmethodID updateView         = nullptr;
+        jmethodID unmountView        = nullptr;
         jmethodID fetchText          = nullptr;
         jmethodID download           = nullptr;
         jmethodID devServerURL       = nullptr;
@@ -39,7 +42,6 @@ namespace unbound::android
     struct LoaderConfiguration
     {
         std::string                documents;
-        std::optional<std::string> modulesScript;
         std::optional<std::string> devtoolsScript;
         std::string                origin;
         uint32_t                   bytecodeVersion = 0;

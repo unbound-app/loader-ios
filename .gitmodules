@@ -1,6 +1,3 @@
-[submodule "resources"]
-	path = packages/resources
-	url = https://github.com/unbound-app/bootstrap
 [submodule "extensions/OpenInDiscord"]
 	path = packages/ios/extensions/OpenInDiscord
 	url = https://github.com/castdrian/OpenInDiscord

@@ -1,6 +1,7 @@
 package app.unbound.android
 
 import android.app.Activity
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONArray
@@ -115,6 +116,45 @@ class NativeUITest {
         assertEquals(24, label.layoutParams.height)
         assertThrows(IllegalArgumentException::class.java) {
             NativeUI.setViewFrame(handle.toString(), """{"x":0,"y":0,"width":0,"height":24}""")
+        }
+    }
+
+    @Test
+    fun mountUpdateAndUnmountManageNativeViewsWithinTheirContainer() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        activity.setContentView(FrameLayout(activity))
+        ActivityTracker.onActivityResumed(activity)
+
+        val container = JSONObject(NativeUI.mountView("", "View", "{}"))
+        val text = JSONObject(
+            NativeUI.mountView(container.toString(), "Text", """{"text":"Before"}"""),
+        )
+        NativeUI.updateView(text.toString(), """{"text":"After","textColor":"#FFFFFF"}""")
+
+        val matching = JSONArray(
+            NativeUI.lookup("""{"role":"text","attributes":{"text":"After"}}"""),
+        )
+
+        assertEquals(1, matching.length())
+        NativeUI.unmountView(text.toString())
+        assertEquals(
+            0,
+            JSONArray(NativeUI.lookup("""{"role":"text","attributes":{"text":"After"}}""")).length(),
+        )
+        NativeUI.unmountView(container.toString())
+    }
+
+    @Test
+    fun mountRejectsUnsupportedModulesAndProperties() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        activity.setContentView(FrameLayout(activity))
+        ActivityTracker.onActivityResumed(activity)
+
+        assertThrows(IllegalArgumentException::class.java) {
+            NativeUI.mountView("", "Unknown", "{}")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            NativeUI.mountView("", "Text", """{"unknown":true}""")
         }
     }
 

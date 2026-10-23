@@ -34,13 +34,12 @@ static void writeLog(loader::LogLevel level, const std::string &category, const 
                         message.c_str());
 }
 
-static void nativeInitialize(JNIEnv *env, jclass, jstring documents, jstring modulesScript,
-                             jstring devtoolsScript, jstring origin, jint bytecodeVersion,
+static void nativeInitialize(JNIEnv *env, jclass, jstring documents, jstring devtoolsScript,
+                             jstring origin, jint bytecodeVersion,
                              jstring platformInfo)
 {
     LoaderConfiguration configuration;
     configuration.documents       = toStdString(env, documents);
-    configuration.modulesScript   = toOptionalString(env, modulesScript);
     configuration.devtoolsScript  = toOptionalString(env, devtoolsScript);
     configuration.origin          = toStdString(env, origin);
     configuration.bytecodeVersion = static_cast<uint32_t>(bytecodeVersion);
@@ -160,6 +159,13 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
         bridge, "measureView", "(Ljava/lang/String;)Ljava/lang/String;");
     gCallbacks.setViewFrame = env->GetStaticMethodID(
         bridge, "setViewFrame", "(Ljava/lang/String;Ljava/lang/String;)V");
+    gCallbacks.mountView = env->GetStaticMethodID(
+        bridge, "mountView",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.updateView = env->GetStaticMethodID(
+        bridge, "updateView", "(Ljava/lang/String;Ljava/lang/String;)V");
+    gCallbacks.unmountView = env->GetStaticMethodID(
+        bridge, "unmountView", "(Ljava/lang/String;)V");
     gCallbacks.fetchText =
         env->GetStaticMethodID(bridge, "fetchText", "(Ljava/lang/String;I)Ljava/lang/String;");
     gCallbacks.download = env->GetStaticMethodID(
@@ -174,7 +180,8 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
 
     return !clearPendingException(env) && gCallbacks.scheduleRuntime && gCallbacks.scheduleMain &&
            gCallbacks.isMainThread && gCallbacks.lookupViews && gCallbacks.snapshotViews &&
-           gCallbacks.measureView && gCallbacks.setViewFrame && gCallbacks.fetchText &&
+           gCallbacks.measureView && gCallbacks.setViewFrame && gCallbacks.mountView &&
+           gCallbacks.updateView && gCallbacks.unmountView && gCallbacks.fetchText &&
            gCallbacks.download && gCallbacks.devServerURL && gCallbacks.availableFonts &&
            gCallbacks.alert && gCallbacks.onBundleExecuted;
 }
@@ -199,7 +206,7 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *)
 
     static const JNINativeMethod methods[] = {
         {"nativeInitialize",
-         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;)V",
+         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;)V",
          reinterpret_cast<void *>(nativeInitialize)},
         {"nativeOnLoadJSBundle", "()V", reinterpret_cast<void *>(nativeOnLoadJSBundle)},
         {"nativeOnJSBundleLoaded", "()V", reinterpret_cast<void *>(nativeOnJSBundleLoaded)},

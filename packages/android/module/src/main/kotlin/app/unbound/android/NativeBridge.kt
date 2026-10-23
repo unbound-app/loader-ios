@@ -18,7 +18,6 @@ object NativeBridge {
     @JvmStatic
     external fun nativeInitialize(
         documents: String,
-        modulesScript: String?,
         devtoolsScript: String?,
         origin: String,
         bytecodeVersion: Int,
@@ -80,6 +79,17 @@ object NativeBridge {
     @JvmStatic
     fun setViewFrame(handleJSON: String, frameJSON: String) =
         NativeUI.setViewFrame(handleJSON, frameJSON)
+
+    @JvmStatic
+    fun mountView(containerHandleJSON: String, moduleName: String, propertiesJSON: String): String =
+        NativeUI.mountView(containerHandleJSON, moduleName, propertiesJSON)
+
+    @JvmStatic
+    fun updateView(handleJSON: String, propertiesJSON: String) =
+        NativeUI.updateView(handleJSON, propertiesJSON)
+
+    @JvmStatic
+    fun unmountView(handleJSON: String) = NativeUI.unmountView(handleJSON)
 
     @JvmStatic
     fun fetchText(url: String, timeoutMs: Int): String? = runCatching {

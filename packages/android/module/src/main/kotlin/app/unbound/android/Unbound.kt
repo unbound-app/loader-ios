@@ -35,7 +35,6 @@ class Unbound : XposedModule() {
 
         NativeBridge.nativeInitialize(
             documents,
-            readModuleAsset(moduleInfo.sourceDir, "assets/js/modules.js"),
             readModuleAsset(moduleInfo.sourceDir, "assets/js/devtools.js"),
             NATIVE_LIBRARY,
             bytecodeVersion,

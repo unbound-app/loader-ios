@@ -1,14 +1,19 @@
 package app.unbound.android
 
+import android.app.Activity
+import android.graphics.Color
 import android.graphics.Rect
 import android.os.Looper
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CompoundButton
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
@@ -82,6 +87,41 @@ object NativeUI {
         return measured.toString()
     }
 
+    fun mountView(containerHandleJSON: String, moduleName: String, propertiesJSON: String): String {
+        requireMainThread()
+        require(moduleName.length in 1..128)
+
+        val activity = ActivityTracker.currentActivity()
+            ?: throw IllegalStateException("No resumed Android activity is available")
+        val container = if (containerHandleJSON.isBlank()) {
+            activity.window?.decorView
+        } else {
+            resolve(parseHandle(containerHandleJSON))
+        } ?: throw IllegalStateException("The Android activity has no content view")
+        require(container is ViewGroup) { "The native UI container cannot contain child views" }
+
+        val view = createView(activity, moduleName)
+        applyProperties(view, JSONObject(propertiesJSON))
+        container.addView(view, layoutParams(container))
+        return JSONObject().put("id", handle(view)).toString()
+    }
+
+    fun updateView(handleJSON: String, propertiesJSON: String) {
+        requireMainThread()
+        val view = resolve(parseHandle(handleJSON))
+        applyProperties(view, JSONObject(propertiesJSON))
+        view.requestLayout()
+        view.invalidate()
+    }
+
+    fun unmountView(handleJSON: String) {
+        requireMainThread()
+        val view = resolve(parseHandle(handleJSON))
+        (view.parent as? ViewGroup)?.removeView(view)
+        viewsByObject.remove(view)
+        viewsByHandle.remove(parseHandle(handleJSON))
+    }
+
     fun setViewFrame(handleJSON: String, frameJSON: String) {
         requireMainThread()
         val view = resolve(parseHandle(handleJSON))
@@ -94,11 +134,12 @@ object NativeUI {
             ?: throw IllegalStateException("The Android native UI view has no layout parameters")
         val location = IntArray(2)
         view.getLocationOnScreen(location)
-        parameters.width = ceil(width).toInt()
-        parameters.height = ceil(height).toInt()
+        val density = view.resources.displayMetrics.density
+        parameters.width = ceil(width * density).toInt()
+        parameters.height = ceil(height * density).toInt()
         view.layoutParams = parameters
-        view.translationX += (x - location[0]).toFloat()
-        view.translationY += (y - location[1]).toFloat()
+        view.translationX += (x * density - location[0]).toFloat()
+        view.translationY += (y * density - location[1]).toFloat()
     }
 
     private fun parseQuery(queryJSON: String): Query {
@@ -238,11 +279,109 @@ object NativeUI {
         if (view.width <= 0 || view.height <= 0) return null
         val location = IntArray(2)
         view.getLocationOnScreen(location)
+        val density = view.resources.displayMetrics.density
         return JSONObject()
-            .put("x", location[0].toDouble())
-            .put("y", location[1].toDouble())
-            .put("width", view.width.toDouble())
-            .put("height", view.height.toDouble())
+            .put("x", location[0] / density)
+            .put("y", location[1] / density)
+            .put("width", view.width / density)
+            .put("height", view.height / density)
+    }
+
+    private fun createView(activity: Activity, moduleName: String): View = when (moduleName) {
+        "View" -> FrameLayout(activity)
+        "Text" -> TextView(activity)
+        "Button" -> Button(activity)
+        "LinearLayout" -> LinearLayout(activity)
+        else -> throw IllegalArgumentException("Unsupported Android native UI module: $moduleName")
+    }
+
+    private fun layoutParams(container: ViewGroup): ViewGroup.LayoutParams = when (container) {
+        is FrameLayout -> FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+        is LinearLayout -> LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+        else -> ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+    }
+
+    private fun applyProperties(view: View, properties: JSONObject) {
+        val keys = properties.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            when (key) {
+                "text" -> {
+                    require(view is TextView) { "The Android native UI view does not support text" }
+                    val value = properties.optString(key)
+                    require(value.length <= 4096)
+                    view.text = value
+                }
+                "textColor" -> {
+                    require(view is TextView) { "The Android native UI view does not support textColor" }
+                    view.setTextColor(parseColor(properties, key))
+                }
+                "textSize" -> {
+                    require(view is TextView) { "The Android native UI view does not support textSize" }
+                    val value = boundedNumber(properties, key, 1.0, 128.0)
+                    view.textSize = value.toFloat()
+                }
+                "backgroundColor" -> view.setBackgroundColor(parseColor(properties, key))
+                "contentDescription" -> {
+                    val value = properties.optString(key)
+                    require(value.length <= 256)
+                    view.contentDescription = value
+                }
+                "padding" -> {
+                    val value = boundedNumber(properties, key, 0.0, 128.0)
+                    val pixels = ceil(value * view.resources.displayMetrics.density).toInt()
+                    view.setPadding(pixels, pixels, pixels, pixels)
+                }
+                "enabled" -> view.isEnabled = properties.getBoolean(key)
+                "alpha" -> view.alpha = boundedNumber(properties, key, 0.0, 1.0).toFloat()
+                "visible" -> view.visibility = if (properties.getBoolean(key)) View.VISIBLE else View.GONE
+                "orientation" -> {
+                    require(view is LinearLayout) { "The Android native UI view does not support orientation" }
+                    view.orientation = when (properties.getString(key)) {
+                        "horizontal" -> LinearLayout.HORIZONTAL
+                        "vertical" -> LinearLayout.VERTICAL
+                        else -> throw IllegalArgumentException("The Android native UI orientation is invalid")
+                    }
+                }
+                "gravity" -> {
+                    val gravity = when (properties.getString(key)) {
+                        "start" -> Gravity.START
+                        "center" -> Gravity.CENTER
+                        "end" -> Gravity.END
+                        "top" -> Gravity.TOP
+                        "bottom" -> Gravity.BOTTOM
+                        else -> throw IllegalArgumentException("The Android native UI gravity is invalid")
+                    }
+                    when (view) {
+                        is TextView -> view.gravity = gravity
+                        is LinearLayout -> view.gravity = gravity
+                        else -> throw IllegalArgumentException("The Android native UI view does not support gravity")
+                    }
+                }
+                else -> throw IllegalArgumentException("Unsupported Android native UI property: $key")
+            }
+        }
+    }
+
+    private fun boundedNumber(properties: JSONObject, name: String, minimum: Double, maximum: Double): Double {
+        val value = properties.optDouble(name, Double.NaN)
+        require(value.isFinite() && value in minimum..maximum)
+        return value
+    }
+
+    private fun parseColor(properties: JSONObject, name: String): Int {
+        val value = properties.getString(name)
+        require(value.length <= 32)
+        return Color.parseColor(value)
     }
 
     private fun requireMainThread() {
