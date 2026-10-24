@@ -1,5 +1,6 @@
 package app.unbound.android
 
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -189,6 +190,93 @@ class NativeJavaTest {
         assertThrows(IllegalArgumentException::class.java) {
             NativeJava.invoke(builder, "append", arguments)
         }
+    }
+
+    @Test
+    fun batchRunsEveryOperationAndReportsResultsInOrder() {
+        val builder = NativeJava.construct("java.lang.StringBuilder", "[]")
+        val handle = JSONObject(builder)
+        val operations = JSONArray()
+        operations.put(
+            JSONObject()
+                .put("op", "invoke")
+                .put("handle", handle)
+                .put("name", "append")
+                .put("args", JSONArray().put(JSONObject().put("type", "string").put("value", "a"))),
+        )
+        operations.put(JSONObject().put("op", "invoke").put("handle", handle).put("name", "toString"))
+        operations.put(
+            JSONObject().put("op", "respondsTo").put("handle", handle).put("name", "toString"),
+        )
+
+        val results = JSONArray(NativeJava.batch(operations.toString()))
+
+        assertEquals(3, results.length())
+        assertEquals("handle", results.getJSONObject(0).getString("type"))
+        assertEquals("a", results.getJSONObject(1).getString("value"))
+        assertEquals(true, results.getJSONObject(2).getBoolean("value"))
+    }
+
+    @Test
+    fun batchReportsAFailingOperationWithoutStopping() {
+        val builder = NativeJava.construct("java.lang.StringBuilder", "[]")
+        val handle = JSONObject(builder)
+        val operations = JSONArray()
+        operations.put(JSONObject().put("op", "invoke").put("handle", handle).put("name", "noSuchMethod"))
+        operations.put(JSONObject().put("op", "invoke").put("handle", handle).put("name", "toString"))
+
+        val results = JSONArray(NativeJava.batch(operations.toString()))
+
+        assertTrue(results.getJSONObject(0).has("__nativeFailure"))
+        assertEquals("string", results.getJSONObject(1).getString("type"))
+    }
+
+    @Test
+    fun batchRejectsAnUnsupportedOperation() {
+        val builder = NativeJava.construct("java.lang.StringBuilder", "[]")
+        val operations = JSONArray().put(
+            JSONObject().put("op", "explode").put("handle", JSONObject(builder)).put("name", "x"),
+        )
+
+        val results = JSONArray(NativeJava.batch(operations.toString()))
+
+        assertTrue(
+            results.getJSONObject(0).getJSONObject("__nativeFailure")
+                .getString("message").contains("explode"),
+        )
+    }
+
+    @Test
+    fun associationsRoundTripAndAreScopedToTheirKey() {
+        val builder = NativeJava.construct("java.lang.StringBuilder", "[]")
+        val first = NativeJava.createAssociationKey()
+        val second = NativeJava.createAssociationKey()
+
+        assertEquals("null", value(NativeJava.getAssociatedObject(builder, first)).getString("type"))
+
+        NativeJava.setAssociatedObject(builder, first, """{"type":"string","value":"kept"}""")
+
+        assertEquals("kept", value(NativeJava.getAssociatedObject(builder, first)).getString("value"))
+        assertEquals("null", value(NativeJava.getAssociatedObject(builder, second)).getString("type"))
+    }
+
+    @Test
+    fun writingANullAssociationRemovesIt() {
+        val builder = NativeJava.construct("java.lang.StringBuilder", "[]")
+        val key = NativeJava.createAssociationKey()
+        NativeJava.setAssociatedObject(builder, key, """{"type":"string","value":"kept"}""")
+
+        NativeJava.setAssociatedObject(builder, key, """{"type":"null"}""")
+
+        assertEquals("null", value(NativeJava.getAssociatedObject(builder, key)).getString("type"))
+    }
+
+    @Test
+    fun associationKeysAreDistinct() {
+        assertNotEquals(
+            JSONObject(NativeJava.createAssociationKey()).getString("id"),
+            JSONObject(NativeJava.createAssociationKey()).getString("id"),
+        )
     }
 
     @Test

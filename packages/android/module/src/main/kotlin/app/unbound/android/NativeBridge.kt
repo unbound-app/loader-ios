@@ -118,6 +118,12 @@ object NativeBridge {
     fun hooksRemove(tokenJSON: String) = NativeHooks.remove(tokenJSON)
 
     @JvmStatic
+    fun debugRecordEvaluation(recordJSON: String): Boolean = NativeEvaluations.record(recordJSON)
+
+    @JvmStatic
+    fun debugEnvironment(): String = NativeEvaluations.environment()
+
+    @JvmStatic
     fun hooksSetReturnValue(
         tokenJSON: String,
         selfJSON: String,
@@ -160,6 +166,20 @@ object NativeBridge {
 
     @JvmStatic
     fun javaRelease(handleJSON: String) = NativeJava.release(handleJSON)
+
+    @JvmStatic
+    fun javaBatch(operationsJSON: String): String = NativeJava.batch(operationsJSON)
+
+    @JvmStatic
+    fun javaCreateAssociationKey(): String = NativeJava.createAssociationKey()
+
+    @JvmStatic
+    fun javaGetAssociatedObject(handleJSON: String, keyJSON: String): String =
+        NativeJava.getAssociatedObject(handleJSON, keyJSON)
+
+    @JvmStatic
+    fun javaSetAssociatedObject(handleJSON: String, keyJSON: String, valueJSON: String) =
+        NativeJava.setAssociatedObject(handleJSON, keyJSON, valueJSON)
 
     @JvmStatic
     fun fetchText(url: String, timeoutMs: Int): String? = runCatching {
@@ -211,7 +231,7 @@ object NativeBridge {
 
     @JvmStatic
     fun devServerURL(): String? {
-        if (!isEmulator()) return null
+        if (!Platform.isEmulator()) return null
 
         val url = "http://$EMULATOR_HOST:$DEV_SERVER_PORT/"
         val serving = runCatching {
@@ -260,9 +280,5 @@ object NativeBridge {
         HotReload.observe()
     }
 
-    private fun isEmulator(): Boolean =
-        Build.HARDWARE.contains("ranchu") ||
-            Build.HARDWARE.contains("goldfish") ||
-            Build.FINGERPRINT.contains("generic") ||
-            Build.PRODUCT.contains("sdk")
+
 }

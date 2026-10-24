@@ -13,6 +13,11 @@ object NativeJava {
     private const val MAX_ARRAY_LENGTH = 4096
     private const val MAX_STRING_LENGTH = 1 shl 20
 
+    private const val MAX_BATCH_OPERATIONS = 64
+    private const val MAX_ASSOCIATIONS_PER_OBJECT = 64
+
+    private val associations = java.util.WeakHashMap<Any, HashMap<String, Any?>>()
+    private var nextAssociation = 1L
     private val objectsByHandle = HashMap<String, Any>()
     private val handlesByIdentity = HashMap<IdentityKey, String>()
     private var nextHandle = 1L
@@ -92,6 +97,82 @@ object NativeJava {
         )
     }
 
+    fun batch(operationsJSON: String): String {
+        val operations = JSONArray(operationsJSON)
+        require(operations.length() <= MAX_BATCH_OPERATIONS) {
+            "The Java batch size is out of bounds"
+        }
+
+        val results = JSONArray()
+        for (index in 0 until operations.length()) {
+            val operation = operations.getJSONObject(index)
+            val kind = operation.optString("op")
+            val handle = operation.optJSONObject("handle")?.toString()
+                ?: throw IllegalArgumentException("A Java batch operation needs a handle")
+            val name = operation.optString("name")
+
+            val outcome = runCatching {
+                when (kind) {
+                    "invoke" -> invoke(handle, name, operation.optJSONArray("args")?.toString() ?: "[]")
+                    "getField" -> getField(handle, name)
+                    "setField" -> {
+                        val value = operation.optJSONObject("value")
+                            ?: throw IllegalArgumentException("A Java field write needs a value")
+                        setField(handle, name, value.toString())
+                        serialize(null)
+                    }
+                    "respondsTo" ->
+                        respondsTo(handle, name, operation.optJSONArray("args")?.toString() ?: "[]")
+                    else -> throw IllegalArgumentException("Unsupported Java batch operation: $kind")
+                }
+            }
+
+            results.put(
+                outcome.fold(
+                    { JSONObject(it) },
+                    {
+                        JSONObject().put(
+                            "__nativeFailure",
+                            JSONObject()
+                                .put("code", "NATIVE_BRIDGE_ERROR")
+                                .put("message", it.message ?: it.toString()),
+                        )
+                    },
+                ),
+            )
+        }
+
+        return results.toString()
+    }
+
+    fun createAssociationKey(): String {
+        val id = synchronized(this) { "assoc-${nextAssociation++}" }
+
+        return JSONObject().put("id", id).toString()
+    }
+
+    fun setAssociatedObject(handleJSON: String, keyJSON: String, valueJSON: String) {
+        val target = resolve(parseHandle(handleJSON))
+        val key = parseHandle(keyJSON)
+        val value = decode(valueJSON)
+
+        synchronized(this) {
+            val bucket = associations.getOrPut(target) { HashMap() }
+            require(bucket.size < MAX_ASSOCIATIONS_PER_OBJECT) {
+                "Too many Java associations on one object"
+            }
+            if (value == null) bucket.remove(key) else bucket[key] = value
+        }
+    }
+
+    fun getAssociatedObject(handleJSON: String, keyJSON: String): String {
+        val target = resolve(parseHandle(handleJSON))
+        val key = parseHandle(keyJSON)
+        val value = synchronized(this) { associations[target]?.get(key) }
+
+        return serialize(value)
+    }
+
     fun release(handleJSON: String) {
         val id = parseHandle(handleJSON)
         synchronized(this) {
@@ -104,7 +185,9 @@ object NativeJava {
         synchronized(this) {
             objectsByHandle.clear()
             handlesByIdentity.clear()
+            associations.clear()
             nextHandle = 1L
+            nextAssociation = 1L
         }
     }
 

@@ -226,6 +226,20 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     gCallbacks.hooksClearReturnValues =
         env->GetStaticMethodID(bridge, "hooksClearReturnValues", "(Ljava/lang/String;)V");
+    gCallbacks.debugRecordEvaluation =
+        env->GetStaticMethodID(bridge, "debugRecordEvaluation", "(Ljava/lang/String;)Z");
+    gCallbacks.debugEnvironment =
+        env->GetStaticMethodID(bridge, "debugEnvironment", "()Ljava/lang/String;");
+    gCallbacks.javaBatch = env->GetStaticMethodID(
+        bridge, "javaBatch", "(Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.javaCreateAssociationKey =
+        env->GetStaticMethodID(bridge, "javaCreateAssociationKey", "()Ljava/lang/String;");
+    gCallbacks.javaGetAssociatedObject = env->GetStaticMethodID(
+        bridge, "javaGetAssociatedObject",
+        "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.javaSetAssociatedObject = env->GetStaticMethodID(
+        bridge, "javaSetAssociatedObject",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     gCallbacks.fetchText =
         env->GetStaticMethodID(bridge, "fetchText", "(Ljava/lang/String;I)Ljava/lang/String;");
     gCallbacks.download = env->GetStaticMethodID(
@@ -246,7 +260,10 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
            gCallbacks.javaInvoke && gCallbacks.javaGetField && gCallbacks.javaSetField &&
            gCallbacks.javaRelease && gCallbacks.hooksInstall && gCallbacks.hooksRemove &&
            gCallbacks.hooksSetReturnValue && gCallbacks.hooksRemoveReturnValue &&
-           gCallbacks.hooksClearReturnValues && gCallbacks.fetchText &&
+           gCallbacks.hooksClearReturnValues && gCallbacks.debugRecordEvaluation &&
+           gCallbacks.debugEnvironment && gCallbacks.javaBatch &&
+           gCallbacks.javaCreateAssociationKey && gCallbacks.javaGetAssociatedObject &&
+           gCallbacks.javaSetAssociatedObject && gCallbacks.fetchText &&
            gCallbacks.download && gCallbacks.devServerURL && gCallbacks.availableFonts &&
            gCallbacks.alert && gCallbacks.onBundleExecuted;
 }

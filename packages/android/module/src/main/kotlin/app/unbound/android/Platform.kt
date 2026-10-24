@@ -27,6 +27,16 @@ object Platform {
         }.getOrNull()?.also { cachedApplication = it }
     }
 
+    private const val EMULATOR_HOST_ADDRESS = "10.0.2.2"
+
+    fun isEmulator(): Boolean =
+        Build.HARDWARE.contains("ranchu") ||
+            Build.HARDWARE.contains("goldfish") ||
+            Build.FINGERPRINT.contains("generic") ||
+            Build.PRODUCT.contains("sdk")
+
+    fun emulatorHostAddress(): String? = if (isEmulator()) EMULATOR_HOST_ADDRESS else null
+
     private const val RESTART_DELAY_MS = 800L
 
     fun restartApp() {

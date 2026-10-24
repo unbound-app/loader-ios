@@ -44,6 +44,12 @@ namespace unbound::android
         jmethodID hooksSetReturnValue = nullptr;
         jmethodID hooksRemoveReturnValue = nullptr;
         jmethodID hooksClearReturnValues = nullptr;
+        jmethodID debugRecordEvaluation = nullptr;
+        jmethodID debugEnvironment    = nullptr;
+        jmethodID javaBatch           = nullptr;
+        jmethodID javaCreateAssociationKey = nullptr;
+        jmethodID javaGetAssociatedObject  = nullptr;
+        jmethodID javaSetAssociatedObject  = nullptr;
         jmethodID fetchText          = nullptr;
         jmethodID download           = nullptr;
         jmethodID devServerURL       = nullptr;

@@ -840,6 +840,57 @@ namespace unbound::android
         }
     }
 
+    static bool callJavaBoolean(const JavaCallbacks &callbacks, jmethodID method,
+                                const std::string &argument)
+    {
+        JNIEnv *env = currentEnvironment();
+        if (!env || !callbacks.bridgeClass || !method)
+        {
+            throw std::runtime_error("The Android debug adapter is unavailable");
+        }
+
+        jstring  input = toJavaString(env, argument);
+        jboolean output = env->CallStaticBooleanMethod(callbacks.bridgeClass, method, input);
+        std::string failure =
+            env->ExceptionCheck() ? takeJavaFailure(env, "The Android debug operation failed") : "";
+        env->DeleteLocalRef(input);
+
+        if (!failure.empty())
+        {
+            throw std::runtime_error(failure);
+        }
+
+        return output == JNI_TRUE;
+    }
+
+    static std::string callJavaStringNoArguments(const JavaCallbacks &callbacks, jmethodID method)
+    {
+        JNIEnv *env = currentEnvironment();
+        if (!env || !callbacks.bridgeClass || !method)
+        {
+            throw std::runtime_error("The Android debug adapter is unavailable");
+        }
+
+        auto output =
+            static_cast<jstring>(env->CallStaticObjectMethod(callbacks.bridgeClass, method));
+        std::string failure =
+            env->ExceptionCheck() ? takeJavaFailure(env, "The Android debug operation failed") : "";
+
+        if (!failure.empty() || !output)
+        {
+            if (output)
+            {
+                env->DeleteLocalRef(output);
+            }
+            throw std::runtime_error(failure.empty() ? "The Android debug adapter returned nothing"
+                                                     : failure);
+        }
+
+        std::string result = toStdString(env, output);
+        env->DeleteLocalRef(output);
+        return result;
+    }
+
     static std::string javaName(jsi::Runtime &runtime, const jsi::Value &value)
     {
         if (!value.isString())
@@ -1036,7 +1087,8 @@ namespace unbound::android
             "native.ui.lookup",       "native.ui.layout",      "native.ui.mount",
             "native.runtime.events",  "native.java.classes",   "native.java.invoke",
             "native.java.invokeAsync", "native.java.fields",   "native.java.construct",
-            "native.java.hooks",
+            "native.java.hooks",     "native.java.batch",     "native.java.associations",
+            "native.debug.evaluations", "native.debug.environment",
         };
         jsi::Array capabilities(runtime, std::size(capabilityNames));
         for (size_t index = 0; index < std::size(capabilityNames); index++)
@@ -1278,6 +1330,73 @@ namespace unbound::android
                         return jsi::Value::undefined();
                     });
                 }));
+        java.setProperty(
+            runtime, "batch",
+            loader::native::makeFunction(
+                runtime, "batch", 1,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            throw std::invalid_argument("a Java batch requires an operation list");
+                        }
+
+                        return parseJavaResult(
+                            rt, callJavaString(callbacks, callbacks.javaBatch,
+                                               {serializeJavaArguments(rt, args, count, 0)}));
+                    });
+                }));
+        java.setProperty(
+            runtime, "createAssociationKey",
+            loader::native::makeFunction(
+                runtime, "createAssociationKey", 0,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *,
+                            size_t) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        return parseJavaResult(rt, callJavaStringNoArguments(
+                                                       callbacks, callbacks.javaCreateAssociationKey));
+                    });
+                }));
+        java.setProperty(
+            runtime, "getAssociatedObject",
+            loader::native::makeFunction(
+                runtime, "getAssociatedObject", 2,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 2)
+                        {
+                            throw std::invalid_argument(
+                                "reading an association requires a handle and a key");
+                        }
+
+                        return parseJavaResult(
+                            rt, callJavaString(callbacks, callbacks.javaGetAssociatedObject,
+                                               {serializeJavaHandle(rt, args[0]),
+                                                serializeJavaHandle(rt, args[1])}));
+                    });
+                }));
+        java.setProperty(
+            runtime, "setAssociatedObject",
+            loader::native::makeFunction(
+                runtime, "setAssociatedObject", 3,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 3)
+                        {
+                            throw std::invalid_argument(
+                                "writing an association requires a handle, a key and a value");
+                        }
+
+                        callJavaVoid(callbacks, callbacks.javaSetAssociatedObject,
+                                     {serializeJavaHandle(rt, args[0]),
+                                      serializeJavaHandle(rt, args[1]),
+                                      serializeJavaValue(rt, args[2])});
+                        return jsi::Value::undefined();
+                    });
+                }));
         bridge.setProperty(runtime, "java", std::move(java));
 
         jsi::Object hooks(runtime);
@@ -1396,6 +1515,36 @@ namespace unbound::android
                     });
                 }));
         bridge.setProperty(runtime, "hooks", std::move(hooks));
+
+        jsi::Object debug(runtime);
+        debug.setProperty(
+            runtime, "recordEvaluation",
+            loader::native::makeFunction(
+                runtime, "recordEvaluation", 1,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            throw std::invalid_argument("expected an evaluation record");
+                        }
+
+                        return jsi::Value(callJavaBoolean(callbacks, callbacks.debugRecordEvaluation,
+                                                          serializeJavaValue(rt, args[0])));
+                    });
+                }));
+        debug.setProperty(
+            runtime, "environment",
+            loader::native::makeFunction(
+                runtime, "environment", 0,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *,
+                            size_t) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        return parseJavaResult(
+                            rt, callJavaStringNoArguments(callbacks, callbacks.debugEnvironment));
+                    });
+                }));
+        bridge.setProperty(runtime, "debug", std::move(debug));
 
         runtime.global().setProperty(runtime, "NativePlugin", std::move(bridge));
     }
