@@ -283,6 +283,9 @@ object NativeJava {
 
     private fun parseValue(value: JSONObject): Argument {
         val type = value.optString("type")
+        if (type.isEmpty() && value.has("id")) {
+            return Reference(resolve(boundedHandle(value.optString("id"))))
+        }
         require(type.isNotEmpty()) { "The Java value has no type" }
 
         return when (type) {

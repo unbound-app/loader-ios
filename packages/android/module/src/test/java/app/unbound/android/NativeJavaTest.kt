@@ -53,6 +53,18 @@ class NativeJavaTest {
     }
 
     @Test
+    fun argumentsAcceptTheHandleShapeTheBridgeReturns() {
+        val element = NativeJava.construct("java.lang.StringBuilder", "[]")
+        val list = NativeJava.construct("java.util.ArrayList", "[]")
+
+        NativeJava.invoke(list, "add", "[$element]")
+
+        val stored = value(NativeJava.invoke(list, "get", """[{"type":"int","value":0}]"""))
+
+        assertEquals(handleId(element), stored.getString("value"))
+    }
+
+    @Test
     fun invokeResolvesPrimitiveOverloadsByDeclaredType() {
         val builder = NativeJava.construct("java.lang.StringBuilder", "[]")
 
