@@ -68,7 +68,6 @@ namespace loader
         std::mutex                     pendingMutex_;
         std::atomic_uint64_t           prefetchToken_{0};
         std::atomic_bool               executionScheduled_{false};
-        std::atomic_bool               addonsPrepared_{false};
         std::atomic_bool               bundleReady_{false};
     };
 }

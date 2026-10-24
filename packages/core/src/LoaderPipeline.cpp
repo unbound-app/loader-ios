@@ -39,10 +39,7 @@ namespace loader
             return;
         }
 
-        if (!addonsPrepared_.exchange(true))
-        {
-            host_->onAddonsPrepared();
-        }
+        host_->onAddonsPrepared();
 
         prefetchBundle();
     }

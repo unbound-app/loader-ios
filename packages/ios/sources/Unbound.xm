@@ -154,11 +154,12 @@ static void prepareLoading(id instance)
         return;
     }
 
+    [Plugins init];
+    [Themes init];
+    [Fonts init];
+
     if (!gLoaderPrepared.exchange(true))
     {
-        [Plugins init];
-        [Themes init];
-        [Fonts init];
         [HotReload observe];
     }
     prefetchBundle();
