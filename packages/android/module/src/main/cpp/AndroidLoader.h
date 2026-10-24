@@ -50,6 +50,11 @@ namespace unbound::android
         jmethodID javaCreateAssociationKey = nullptr;
         jmethodID javaGetAssociatedObject  = nullptr;
         jmethodID javaSetAssociatedObject  = nullptr;
+        jmethodID fabricMount         = nullptr;
+        jmethodID fabricUpdate        = nullptr;
+        jmethodID fabricUnmount       = nullptr;
+        jmethodID fabricIsRunning     = nullptr;
+        jmethodID fabricViewHandle    = nullptr;
         jmethodID fetchText          = nullptr;
         jmethodID download           = nullptr;
         jmethodID devServerURL       = nullptr;

@@ -240,6 +240,17 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
     gCallbacks.javaSetAssociatedObject = env->GetStaticMethodID(
         bridge, "javaSetAssociatedObject",
         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    gCallbacks.fabricMount = env->GetStaticMethodID(
+        bridge, "fabricMount",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.fabricUpdate = env->GetStaticMethodID(
+        bridge, "fabricUpdate", "(Ljava/lang/String;Ljava/lang/String;)V");
+    gCallbacks.fabricUnmount =
+        env->GetStaticMethodID(bridge, "fabricUnmount", "(Ljava/lang/String;)V");
+    gCallbacks.fabricIsRunning = env->GetStaticMethodID(
+        bridge, "fabricIsRunning", "(Ljava/lang/String;)Ljava/lang/String;");
+    gCallbacks.fabricViewHandle = env->GetStaticMethodID(
+        bridge, "fabricViewHandle", "(Ljava/lang/String;)Ljava/lang/String;");
     gCallbacks.fetchText =
         env->GetStaticMethodID(bridge, "fetchText", "(Ljava/lang/String;I)Ljava/lang/String;");
     gCallbacks.download = env->GetStaticMethodID(
@@ -263,7 +274,9 @@ static bool cacheCallbacks(JNIEnv *env, jclass bridge)
            gCallbacks.hooksClearReturnValues && gCallbacks.debugRecordEvaluation &&
            gCallbacks.debugEnvironment && gCallbacks.javaBatch &&
            gCallbacks.javaCreateAssociationKey && gCallbacks.javaGetAssociatedObject &&
-           gCallbacks.javaSetAssociatedObject && gCallbacks.fetchText &&
+           gCallbacks.javaSetAssociatedObject && gCallbacks.fabricMount &&
+           gCallbacks.fabricUpdate && gCallbacks.fabricUnmount && gCallbacks.fabricIsRunning &&
+           gCallbacks.fabricViewHandle && gCallbacks.fetchText &&
            gCallbacks.download && gCallbacks.devServerURL && gCallbacks.availableFonts &&
            gCallbacks.alert && gCallbacks.onBundleExecuted;
 }

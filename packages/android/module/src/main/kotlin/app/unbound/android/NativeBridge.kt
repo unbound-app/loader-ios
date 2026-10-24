@@ -118,6 +118,23 @@ object NativeBridge {
     fun hooksRemove(tokenJSON: String) = NativeHooks.remove(tokenJSON)
 
     @JvmStatic
+    fun fabricMount(containerHandleJSON: String, moduleName: String, propsJSON: String): String =
+        NativeFabric.mount(containerHandleJSON, moduleName, propsJSON)
+
+    @JvmStatic
+    fun fabricUpdate(handleJSON: String, propsJSON: String) =
+        NativeFabric.update(handleJSON, propsJSON)
+
+    @JvmStatic
+    fun fabricUnmount(handleJSON: String) = NativeFabric.unmount(handleJSON)
+
+    @JvmStatic
+    fun fabricIsRunning(handleJSON: String): String = NativeFabric.isRunning(handleJSON)
+
+    @JvmStatic
+    fun fabricViewHandle(handleJSON: String): String = NativeFabric.viewHandle(handleJSON)
+
+    @JvmStatic
     fun debugRecordEvaluation(recordJSON: String): Boolean = NativeEvaluations.record(recordJSON)
 
     @JvmStatic

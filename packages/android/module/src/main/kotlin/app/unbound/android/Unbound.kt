@@ -30,6 +30,7 @@ class Unbound : XposedModule() {
         ActivityTracker.install(Platform.application())
         NativeJava.useClassLoader(param.classLoader)
         installHookBridge()
+        ReactSurfaces.install(param.classLoader)
         System.load(nativeLibraryPath(moduleInfo, appInfo))
 
         val documents = File(appInfo.dataDir, "files/Unbound").absolutePath

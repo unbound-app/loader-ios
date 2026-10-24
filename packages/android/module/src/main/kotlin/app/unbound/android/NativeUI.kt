@@ -160,6 +160,15 @@ object NativeUI {
         )
     }
 
+    fun viewForHandle(handleJSON: String): View = resolve(parseHandle(handleJSON))
+
+    fun handleForView(view: View): String = JSONObject().put("id", handle(view)).toString()
+
+    fun decorView(context: android.content.Context): ViewGroup? =
+        (ActivityTracker.currentActivity() ?: context as? Activity)
+            ?.window
+            ?.decorView as? ViewGroup
+
     private fun parseHandle(handleJSON: String): String {
         val id = JSONObject(handleJSON).optString("id").trim()
         require(id.isNotEmpty() && id.length <= 128)

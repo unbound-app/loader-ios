@@ -1005,6 +1005,46 @@ namespace unbound::android
         return loader::toJSIValue(runtime, result);
     }
 
+    static jsi::Value guardedAsync(jsi::Runtime &runtime, std::function<std::string()> work)
+    {
+        auto response = std::make_shared<std::string>();
+        auto failure = std::make_shared<std::string>();
+
+        return loader::native::executeMainAsynchronously(
+            runtime,
+            [work = std::move(work), response, failure]() {
+                try
+                {
+                    *response = work();
+                }
+                catch (const loader::native::NativeCodedError &error)
+                {
+                    *failure = error.what();
+                }
+                catch (const std::exception &error)
+                {
+                    *failure = error.what();
+                }
+                catch (...)
+                {
+                    *failure = "The Android operation failed";
+                }
+            },
+            [response, failure](jsi::Runtime &completion) -> jsi::Value {
+                if (!failure->empty())
+                {
+                    return javaFailure(completion, "NATIVE_BRIDGE_ERROR", *failure);
+                }
+
+                if (response->empty())
+                {
+                    return jsi::Value::undefined();
+                }
+
+                return parseJavaResult(completion, *response);
+            });
+    }
+
     static jsi::Value javaSynchronously(jsi::Runtime &runtime, const JavaCallbacks &callbacks,
                                         jmethodID method, const std::vector<std::string> &arguments)
     {
@@ -1089,6 +1129,7 @@ namespace unbound::android
             "native.java.invokeAsync", "native.java.fields",   "native.java.construct",
             "native.java.hooks",     "native.java.batch",     "native.java.associations",
             "native.debug.evaluations", "native.debug.environment",
+            "native.fabric.mount",   "native.fabric.async",
         };
         jsi::Array capabilities(runtime, std::size(capabilityNames));
         for (size_t index = 0; index < std::size(capabilityNames); index++)
@@ -1545,6 +1586,124 @@ namespace unbound::android
                     });
                 }));
         bridge.setProperty(runtime, "debug", std::move(debug));
+
+        jsi::Object surfaces(runtime);
+        surfaces.setProperty(
+            runtime, "mount",
+            loader::native::makeFunction(
+                runtime, "mount", 3,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 2)
+                        {
+                            return javaFailure(
+                                rt, "NATIVE_BRIDGE_ERROR",
+                                "Mounting a React surface requires a container and a module name");
+                        }
+
+                        std::string container = std::string("{}");
+                        if (args[0].isObject())
+                        {
+                            jsi::Object candidate = args[0].asObject(rt);
+                            if (candidate.getProperty(rt, "id").isString() ||
+                                candidate.getProperty(rt, "value").isString())
+                            {
+                                container = serializeJavaHandle(rt, args[0]);
+                            }
+                        }
+                        std::string moduleName = javaName(rt, args[1]);
+                        std::string properties = count > 2 && args[2].isObject()
+                                                     ? serializeNativeProperties(rt, args[2])
+                                                     : std::string("{}");
+                        return guardedAsync(rt, [callbacks, container = std::move(container),
+                                                 moduleName = std::move(moduleName),
+                                                 properties = std::move(properties)]() {
+                            return callJavaString(callbacks, callbacks.fabricMount,
+                                                  {container, moduleName, properties});
+                        });
+                    });
+                }));
+        surfaces.setProperty(
+            runtime, "update",
+            loader::native::makeFunction(
+                runtime, "update", 2,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 2)
+                        {
+                            loader::native::throwCoded(
+                                rt, "NATIVE_BRIDGE_ERROR",
+                                "Updating a React surface requires a handle and properties");
+                        }
+
+                        std::string handle = serializeJavaHandle(rt, args[0]);
+                        std::string properties = serializeNativeProperties(rt, args[1]);
+                        return guardedAsync(rt, [callbacks, handle = std::move(handle),
+                                                 properties = std::move(properties)]() {
+                            callJavaVoid(callbacks, callbacks.fabricUpdate, {handle, properties});
+                            return std::string();
+                        });
+                    });
+                }));
+        surfaces.setProperty(
+            runtime, "unmount",
+            loader::native::makeFunction(
+                runtime, "unmount", 1,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            loader::native::throwCoded(rt, "NATIVE_BRIDGE_ERROR",
+                                                       "Unmounting a React surface requires a handle");
+                        }
+
+                        std::string handle = serializeJavaHandle(rt, args[0]);
+                        return guardedAsync(rt, [callbacks, handle = std::move(handle)]() {
+                            callJavaVoid(callbacks, callbacks.fabricUnmount, {handle});
+                            return std::string();
+                        });
+                    });
+                }));
+        surfaces.setProperty(
+            runtime, "isRunning",
+            loader::native::makeFunction(
+                runtime, "isRunning", 1,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            throw std::invalid_argument(
+                                "reading a React surface requires a handle");
+                        }
+
+                        return parseJavaResult(
+                            rt, callJavaString(callbacks, callbacks.fabricIsRunning,
+                                               {serializeJavaHandle(rt, args[0])}));
+                    });
+                }));
+        surfaces.setProperty(
+            runtime, "view",
+            loader::native::makeFunction(
+                runtime, "view", 1,
+                [callbacks](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args,
+                            size_t count) -> jsi::Value {
+                    return guardJava(rt, [&]() -> jsi::Value {
+                        if (count < 1)
+                        {
+                            throw std::invalid_argument(
+                                "reading a React surface view requires a handle");
+                        }
+
+                        return parseJavaResult(
+                            rt, callJavaString(callbacks, callbacks.fabricViewHandle,
+                                               {serializeJavaHandle(rt, args[0])}));
+                    });
+                }));
+        bridge.setProperty(runtime, "surfaces", std::move(surfaces));
 
         runtime.global().setProperty(runtime, "NativePlugin", std::move(bridge));
     }
